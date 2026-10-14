@@ -30,6 +30,7 @@ import {
 import { resFormSchema, type ResFormValues } from "@/features/reservations/components/res-form/schema";
 import { OfficeField } from "@/features/shared/office-field";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { LeaveGuard } from "@/features/shared/leave-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,6 +74,9 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
   const form = useForm<ResFormValues>({
     resolver: zodResolver(resFormSchema),
     mode: "onTouched",
+    // The date, the time slots and the office are not plain inputs, so the
+    // form finds the first error itself (focusFirstError) in page order.
+    shouldFocusError: false,
     defaultValues: initial
       ? {
           borrower: initial.borrower,
@@ -135,6 +139,27 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
     [bookings, facility, initial?.id],
   );
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  /**
+   * Scrolls to the first error message on the page and focuses the control it
+   * belongs to: the field, the first free time slot, or the office picker.
+   * Waits a frame so the messages from this submit have rendered.
+   */
+  const focusFirstError = () => {
+    requestAnimationFrame(() => {
+      const alert = formRef.current?.querySelector<HTMLElement>('[role="alert"]');
+      const box = alert?.parentElement;
+      if (!alert || !box) return;
+      const target = box.querySelector<HTMLElement>(
+        "input:not([disabled]), textarea:not([disabled]), button:not([disabled])",
+      );
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      (target ?? alert).scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+      target?.focus({ preventScroll: true });
+    });
+  };
+
   const submit = form.handleSubmit(async (values) => {
     const day = format(values.date, "yyyy-MM-dd");
     const clash = facilityBookings.find(
@@ -144,6 +169,7 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
       form.setError("startTime", {
         message: `This time overlaps ${clash.resNumber}. Pick a free time.`,
       });
+      focusFirstError();
       return;
     }
     await onSubmit({
@@ -165,12 +191,13 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
       // whatever the reservation already has (see updateReservation).
       attachments: [],
     });
-  });
+  }, focusFirstError);
 
   const err = form.formState.errors;
 
   return (
     <form
+      ref={formRef}
       onSubmit={submit}
       noValidate
       className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8"
@@ -268,6 +295,7 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
       </div>
 
       <SummaryPanel form={form} submitLabel={submitLabel} submitting={submitting} onCancel={onCancel} />
+      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }

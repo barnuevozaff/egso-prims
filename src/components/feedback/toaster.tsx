@@ -14,6 +14,9 @@ export function Toaster() {
             "rounded-xl border border-neutral-200 bg-white text-neutral-800 shadow-lg",
           title: "text-[12.5px] font-medium",
           description: "text-[11.5px] text-neutral-500",
+          // Undo and the like: a real target, not sonner's 24px chip.
+          actionButton:
+            "!h-9 !rounded-lg !bg-neutral-900 !px-3 !text-[13px] !font-medium !text-white",
         },
       }}
     />

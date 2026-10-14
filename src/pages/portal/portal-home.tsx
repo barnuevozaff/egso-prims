@@ -4,9 +4,14 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, Check, ChevronRight, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-import { Skeleton } from "@/components";
+import { Skeleton, toast } from "@/components";
 import { PORTAL_SERVICES, type PortalService } from "@/features/portal/data";
-import { clearFilings, useFiledRequests, type FiledRequest } from "@/features/portal/recent";
+import {
+  clearFilings,
+  restoreFilings,
+  useFiledRequests,
+  type FiledRequest,
+} from "@/features/portal/recent";
 import { standingOf, trackReference, type TrackResult } from "@/features/portal/track";
 import { cn } from "@/lib/utils";
 
@@ -236,7 +241,15 @@ function FiledOnThisComputer({ filed }: { filed: FiledRequest[] }) {
         {filed.length > 0 && (
           <button
             type="button"
-            onClick={clearFilings}
+            onClick={() => {
+              // Shared office PCs are why the list can be cleared; a slip of
+              // the mouse should not cost anyone their numbers, so it can be undone.
+              const cleared = clearFilings();
+              toast("List cleared", {
+                duration: 5000,
+                action: { label: "Undo", onClick: () => restoreFilings(cleared) },
+              });
+            }}
             className="h-11 shrink-0 rounded-lg px-2.5 text-[13px] text-[#5b606b] transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
           >
             Clear list

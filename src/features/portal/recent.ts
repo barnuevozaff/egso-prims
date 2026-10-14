@@ -51,8 +51,18 @@ export function rememberFiling(reference: string) {
   write([{ reference, filedAt: new Date().toISOString() }, ...rest].slice(0, LIMIT));
 }
 
-export function clearFilings() {
+/** Empties the list and returns what it held, so the caller can offer Undo. */
+export function clearFilings(): FiledRequest[] {
+  const before = read();
   write([]);
+  return before;
+}
+
+/** Puts back a cleared list, keeping anything filed since in front. */
+export function restoreFilings(list: FiledRequest[]) {
+  const now = read();
+  const kept = list.filter((r) => !now.some((n) => n.reference === r.reference));
+  write([...now, ...kept].slice(0, LIMIT));
 }
 
 /** The filed list, kept in step with other tabs and with "Clear list". */

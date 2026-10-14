@@ -10,6 +10,7 @@ import type { PRDraftInput } from "@/features/purchase-requests/api";
 import { FUNDING_SOURCES, type PurchaseRequest } from "@/features/purchase-requests/types";
 import { prFormSchema, type PRFormValues } from "@/features/purchase-requests/components/pr-form/schema";
 import { OfficeField } from "@/features/shared/office-field";
+import { LeaveGuard } from "@/features/shared/leave-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -174,6 +175,7 @@ export function PRForm({ initial, submitLabel, submitting, onSubmit, onCancel }:
         submitting={submitting}
         onCancel={onCancel}
       />
+      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }

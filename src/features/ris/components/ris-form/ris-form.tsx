@@ -17,6 +17,7 @@ import { risFormSchema, type RISFormValues } from "@/features/ris/components/ris
 import { reportLoadFailure } from "@/features/shared/load-guard";
 import { OfficeField } from "@/features/shared/office-field";
 import { StockNameInput } from "@/features/ris/components/ris-form/stock-name-input";
+import { LeaveGuard } from "@/features/shared/leave-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -330,6 +331,7 @@ export function RISForm({
         submitting={submitting}
         onCancel={onCancel}
       />
+      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }

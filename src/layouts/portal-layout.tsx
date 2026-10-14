@@ -40,7 +40,7 @@ function ServiceNav({ className }: { className?: string }) {
           <li key={s.to}>
             <NavLink
               to={s.to}
-              className="block rounded-md px-3 py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) aria-[current=page]:font-semibold aria-[current=page]:text-(--accent-text)"
+              className="flex h-10 items-center rounded-md px-3 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) aria-[current=page]:font-semibold aria-[current=page]:text-(--accent-text)"
             >
               {s.navLabel}
             </NavLink>

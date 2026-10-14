@@ -49,7 +49,8 @@ export function PortalPage({
         <div className={cn("mx-auto w-full pb-8 pt-6", gutter, measure)}>
           <Link
             to="/portal"
-            className="-ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)"
+            // 40px to hit; the negative margins keep it where the 22px link sat.
+            className="-mx-2 -my-2 inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-[13px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All services
