@@ -233,7 +233,9 @@ function ItemsSection({ form }: { form: FormApi }) {
     0,
   );
   const itemsError = formState.errors.items;
-  const cols = "sm:grid-cols-[minmax(0,1fr)_76px_104px_128px_112px_40px]";
+  // Description takes every spare pixel; the numeric columns are sized to
+  // their longest likely value.
+  const cols = "sm:grid-cols-[minmax(0,1fr)_64px_92px_112px_104px_40px]";
 
   return (
     <section
