@@ -54,6 +54,7 @@ export function SelectField({
         {...a11y}
         aria-label={ariaLabel}
         className={cn(
+          lg && "data-[size=default]:h-10",
           "h-auto w-full rounded-lg border-neutral-200 bg-white px-3 py-1.5 text-[12.5px] text-neutral-800 shadow-none transition focus-visible:ring-2 focus-visible:ring-(--accent-ring) data-[placeholder]:text-neutral-500 aria-invalid:border-red-400",
           className,
         )}
@@ -67,9 +68,10 @@ export function SelectField({
        */}
       <SelectContent
         position="popper"
+        align="start"
         sideOffset={4}
         className={cn(
-          "max-h-[min(var(--radix-select-content-available-height),26rem)] min-w-[max(var(--radix-select-trigger-width),8rem)]",
+          "max-h-[min(var(--radix-select-content-available-height),30rem)] min-w-[max(var(--radix-select-trigger-width),8rem)]",
           lg && "rounded-xl border-[#e4e4e1] bg-white shadow-[0_12px_32px_-8px_rgba(22,24,29,0.22)]",
         )}
       >
