@@ -33,7 +33,10 @@ import { cn } from "@/lib/utils";
  * which restated counts shown elsewhere on the page.
  */
 
+/** Document numbers only. Amounts and counts use Geist's tabular figures:
+ *  the mono face's slashed zero made ₱43,000 read like code. */
 const MONO = "font-['Geist_Mono',ui-monospace,monospace]";
+const FIG = "tabular-nums";
 
 interface DashboardData {
   prs: PurchaseRequest[];
@@ -134,7 +137,7 @@ function TaskRow({
       onClick={onOpen}
       className="group flex w-full items-center gap-4 border-t border-[#f0f0ee] px-5 py-3.5 text-left transition-colors hover:bg-[#f7f7f6] focus-visible:bg-[#f7f7f6] focus-visible:outline-none"
     >
-      <span className={cn("w-11 text-[22px] font-semibold tracking-[-0.02em]", MONO)}>{count}</span>
+      <span className={cn("w-11 text-[24px] font-semibold tracking-[-0.03em]", FIG)}>{count}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-[14.5px] font-medium text-neutral-900">{title}</span>
         <span className="mt-0.5 block truncate text-[13px] text-[#5b606b]">{detail}</span>
@@ -151,7 +154,7 @@ function Figure({ label, value, note }: { label: string; value: string; note: st
   return (
     <div className="border-b border-[#f0f0ee] px-5 py-[18px] sm:border-b-0 sm:border-r last:border-0">
       <p className="text-[13px] text-[#5b606b]">{label}</p>
-      <p className={cn("mt-2 text-[24px] font-semibold tracking-[-0.02em] text-neutral-900", MONO)}>
+      <p className={cn("mt-2 text-[26px] font-semibold tracking-[-0.03em] text-neutral-900", FIG)}>
         {value}
       </p>
       <p className="mt-1 text-[12.5px] text-[#5b606b]">{note}</p>
@@ -230,7 +233,7 @@ export function DashboardPage() {
     pendingRes.length > 0 && {
       count: pendingRes.length,
       title: `${plural(pendingRes.length, "Facility reservation", "Facility reservations")} to confirm`,
-      detail: `Next: ${format(parseISO(pendingRes[0].date), "EEE d MMM")}, ${clock(pendingRes[0].startTime)}`,
+      detail: `Earliest for ${format(parseISO(pendingRes[0].date), "EEE d MMM")}, ${clock(pendingRes[0].startTime)}`,
       to: "/reservations",
     },
   ].filter(Boolean) as { count: number; title: string; detail: string; to: string }[];
@@ -374,7 +377,7 @@ export function DashboardPage() {
                     {pr.purpose} · {pr.requester}
                   </span>
                 </span>
-                <span className={cn("shrink-0 text-[13.5px] text-neutral-900", MONO)}>
+                <span className={cn("shrink-0 text-[13.5px] font-medium text-neutral-900", FIG)}>
                   {formatPHP(prTotal(pr))}
                 </span>
                 <PRStatus status={pr.status} />
@@ -412,7 +415,7 @@ export function DashboardPage() {
                   <div className="text-[11.5px] uppercase text-[#5b606b]">
                     {format(parseISO(day), "EEE")}
                   </div>
-                  <div className={cn("text-[18px] font-semibold text-neutral-900", MONO)}>
+                  <div className={cn("text-[18px] font-semibold text-neutral-900", FIG)}>
                     {format(parseISO(day), "d")}
                   </div>
                 </div>

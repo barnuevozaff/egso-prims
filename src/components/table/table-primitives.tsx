@@ -47,7 +47,7 @@ export function TableHeaderRow({
         // literals here, so the header can be restyled in one place. They
         // resolve to the values this table has always used: a neutral-50 band
         // with uppercase, wide-tracked neutral-400 labels.
-        "bg-(--thead-bg) text-[11px]",
+        "bg-(--thead-bg) text-[12.5px]",
         "[text-transform:var(--thead-transform)] tracking-(--thead-tracking)",
         "text-(--thead-fg)",
         className,
@@ -81,7 +81,7 @@ export function TableBody({
   className,
   ...props
 }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={cn("text-[13px] text-neutral-700", className)} {...props} />;
+  return <tbody className={cn("text-[13.5px] text-neutral-800", className)} {...props} />;
 }
 
 /**
@@ -120,7 +120,7 @@ export function TableRow({
   return (
     <tr
       className={cn(
-        "border-t border-neutral-100 transition hover:bg-neutral-50/70",
+        "border-t border-[#f0f0ee] transition-colors hover:bg-[#fafaf9]",
         interactive &&
           "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) focus-visible:ring-inset",
         className,

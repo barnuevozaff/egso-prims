@@ -38,7 +38,7 @@ function createText<D extends React.ElementType>(
 /** 20px semibold — one per page (e.g. "Welcome back, Administrator"). */
 export const PageTitle = createText(
   "h1",
-  "text-[20px] font-semibold tracking-tight text-neutral-900",
+  "text-[26px] font-semibold leading-[1.15] tracking-[-0.025em] text-neutral-900",
   "PageTitle",
 );
 
@@ -52,7 +52,7 @@ export const SectionTitle = createText(
 /** 13px muted — descriptive line under a page title. */
 export const Subtitle = createText(
   "p",
-  "text-[13px] text-neutral-500",
+  "text-[14px] text-[#5b606b]",
   "Subtitle",
 );
 

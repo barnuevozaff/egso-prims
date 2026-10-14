@@ -68,7 +68,7 @@ export function SidebarBrand({
       )}
       <div className="flex min-w-0 flex-col leading-tight group-data-[collapsed=true]:hidden">
         <span className="truncate text-[14px] font-semibold tracking-[-0.01em] text-neutral-900">{title}</span>
-        {subtitle && <span className="truncate text-[12px] text-[#5b606b]">{subtitle}</span>}
+        {subtitle && <span className="line-clamp-2 text-[12px] text-[#5b606b]">{subtitle}</span>}
       </div>
     </div>
   );

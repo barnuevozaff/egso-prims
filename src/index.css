@@ -133,7 +133,7 @@
   --radius-step-4xl: 26px;
 
   /* ---- Density --------------------------------------------------------- */
-  --row-py: 0.75rem;
+  --row-py: 0.875rem;
   --row-px: 1rem;
   --row-px-first: 1.25rem;
   --head-py: 0.625rem;
@@ -162,11 +162,13 @@
    * on the same band, the same cold grey one step down. The band, case,
    * tracking and weight are untouched, so the table still reads quiet.
    */
-  --thead-transform: uppercase;
-  --thead-tracking: 0.05em;
+  /* 15 Oct 2026 (approved admin design): no band, no capitals. A 12.5px
+     label in #6b707a, 4.9:1 on white. */
+  --thead-transform: none;
+  --thead-tracking: 0;
   --thead-weight: 500;
-  --thead-fg: oklch(0.556 0 0);
-  --thead-bg: oklch(0.985 0 0);
+  --thead-fg: #6b707a;
+  --thead-bg: #ffffff;
 
   /* ---- Elevation: cards are flat ---------------------------------------- */
   --elev-card: none;

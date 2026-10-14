@@ -8,14 +8,12 @@ import {
   CurrencyDisplay,
   DeleteModal,
   DepartmentChip,
-  DocumentNumber,
   DropdownFilter,
   EnterpriseTable,
   ExportButton,
   FilterBar,
   PageHeader,
   PageTransition,
-  PrintButton,
   SearchBar,
   StatusBadge,
   TableCard,
@@ -47,16 +45,28 @@ export function PRListPage() {
   const [department, setDepartment] = React.useState(ALL);
   const [status, setStatus] = React.useState(ALL);
 
+  // Status is a tab, filtered here, so each tab can show its own count.
   const filters = React.useMemo(
     () => ({
       search: search || undefined,
       departmentCode: department === ALL ? undefined : department,
-      status: status === ALL ? undefined : (status as PRStatus),
     }),
-    [search, department, status],
+    [search, department],
   );
 
-  const { data, loading, refresh } = usePurchaseRequests(filters);
+  const { data: allRows, loading, refresh } = usePurchaseRequests(filters);
+  const data = React.useMemo(
+    () => (status === ALL ? allRows : allRows.filter((r) => r.status === status)),
+    [allRows, status],
+  );
+  const tabs = [
+    { value: ALL, label: "All", count: allRows.length },
+    ...PR_STATUSES.map((s) => ({
+      value: s,
+      label: s,
+      count: allRows.filter((r) => r.status === s).length,
+    })).filter((t) => t.count > 0 || t.value === status),
+  ];
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseRequest[]>([]);
@@ -100,13 +110,17 @@ export function PRListPage() {
   const columns = React.useMemo<ColumnDef<PurchaseRequest, unknown>[]>(
     () => [
       {
-        header: "PR Number",
-        accessorKey: "prNumber",
+        header: "Request",
+        accessorKey: "purpose",
         cell: ({ row }) => (
-          <DocumentNumber
-            value={row.original.prNumber}
-            chipColor={departmentByCode(row.original.departmentCode).color}
-          />
+          <div className="min-w-0 max-w-[420px]">
+            <div className="truncate font-medium text-neutral-900">{row.original.purpose}</div>
+            <div className="mt-0.5 truncate text-[12.5px] text-[#5b606b]">
+              <span className="font-['Geist_Mono',ui-monospace,monospace]">{row.original.prNumber}</span>
+              {" · "}
+              {row.original.requester}
+            </div>
+          </div>
         ),
       },
       {
@@ -114,32 +128,18 @@ export function PRListPage() {
         accessorKey: "departmentCode",
         cell: ({ row }) => {
           const dept = departmentByCode(row.original.departmentCode);
-          // No swatch here: the control number already carries the office colour.
           return <DepartmentChip code={dept.code} name={dept.name} />;
         },
       },
       {
-        header: "Requester",
-        accessorKey: "requester",
-        meta: { className: "text-neutral-600" },
-      },
-      {
-        header: "Purpose",
-        accessorKey: "purpose",
-        cell: ({ getValue }) => (
-          <span className="block max-w-[260px] truncate">{getValue<string>()}</span>
-        ),
-        meta: { className: "text-neutral-600" },
-      },
-      {
-        header: "Total Amount",
+        header: "Amount",
         id: "total",
         accessorFn: (pr) => prTotal(pr),
         cell: ({ row }) => <CurrencyDisplay amount={prTotal(row.original)} />,
         meta: { align: "right" },
       },
       {
-        header: "Created",
+        header: "Filed",
         accessorKey: "createdAt",
         cell: ({ getValue }) => (
           <span className="whitespace-nowrap text-neutral-500">{formatDate(getValue<string>())}</span>
@@ -158,13 +158,16 @@ export function PRListPage() {
   return (
     <PageTransition className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
-        title="Purchase Requests"
-        description="Create, track, and process procurement requests across all municipal offices."
+        title="Purchase requests"
+        description="Review what the offices filed and move it to a purchase order."
         actions={
-          <Button onClick={() => navigate("/purchase-requests/new")}>
-            <Plus />
-            New Purchase Request
-          </Button>
+          <>
+            <ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />
+            <Button onClick={() => navigate("/purchase-requests/new")}>
+              <Plus />
+              New purchase request
+            </Button>
+          </>
         }
       />
 
@@ -174,13 +177,27 @@ export function PRListPage() {
           toolbar={
             <FilterBar
               className="shrink-0"
-              end={
-                <>
-                  <ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />
-                  <PrintButton onClick={() => window.print()} />
-                </>
-              }
             >
+              <div role="tablist" aria-label="Filter by status" className="flex flex-wrap gap-1">
+                {tabs.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={status === t.value}
+                    onClick={() => setStatus(t.value)}
+                    className={
+                      "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-[13.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 " +
+                      (status === t.value
+                        ? "bg-[#f1f1ef] font-medium text-neutral-900"
+                        : "text-[#5b606b] hover:bg-[#f4f4f2] hover:text-neutral-900")
+                    }
+                  >
+                    {t.label}
+                    <span className="text-[12px] tabular-nums text-[#6b707a]">{t.count}</span>
+                  </button>
+                ))}
+              </div>
               <SearchBar
                 placeholder="Search PR number, requester, purpose…"
                 widthClassName="w-64"
@@ -194,15 +211,6 @@ export function PRListPage() {
                 options={[
                   { value: ALL, label: "All Offices" },
                   ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
-                ]}
-              />
-              <DropdownFilter
-                label="Status"
-                value={status}
-                onChange={setStatus}
-                options={[
-                  { value: ALL, label: "All Statuses" },
-                  ...PR_STATUSES.map((s) => ({ value: s, label: s })),
                 ]}
               />
             </FilterBar>

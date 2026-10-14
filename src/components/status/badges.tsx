@@ -129,6 +129,11 @@ const statusTone: Record<DocumentStatus, Tone> = {
   Returned: "orange",
 };
 
+/**
+ * A status is a coloured dot and the word, not a tinted pill (approved admin
+ * design, 15 Oct 2026). The hue still carries the meaning; the word carries
+ * it for anyone who cannot tell the hues apart.
+ */
 export function StatusBadge({
   status,
   className,
@@ -137,9 +142,15 @@ export function StatusBadge({
   className?: string;
 }) {
   return (
-    <Pill tone={statusTone[status]} className={className}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 whitespace-nowrap text-[13px] text-neutral-800",
+        className,
+      )}
+    >
+      <span aria-hidden="true" className={cn("h-[7px] w-[7px] shrink-0 rounded-full", dotTone[statusTone[status] ?? "neutral"])} />
       {status}
-    </Pill>
+    </span>
   );
 }
 
