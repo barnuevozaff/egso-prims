@@ -31,21 +31,17 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { PageFallback } from "@/components/feedback/page-fallback";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/navigation/breadcrumb";
-import { OfficeSwitcher } from "@/components/navigation/office-switcher";
 import { ProfileMenu } from "@/components/navigation/profile-menu";
-import { SidebarUser } from "@/components/navigation/sidebar-user";
 import { NotificationBell, TopBar } from "@/components/navigation/top-bar";
 import {
   Sidebar,
   SidebarBrand,
   SidebarContent,
   SidebarDivider,
-  SidebarFooter,
   SidebarGroup,
   SidebarItem,
 } from "@/components/navigation/sidebar";
 import { ConfirmationModal } from "@/components/modal/modals";
-import { SearchBar } from "@/components/toolbar/search-bar";
 import { toast } from "@/components/feedback/toaster";
 import { useAuth } from "@/features/auth/auth-context";
 import { useNotifications } from "@/features/notifications/hooks";
@@ -298,12 +294,10 @@ function initialsOf(name: string): string {
 
 function AppSidebar({
   collapsed,
-  onRequestSignOut,
   className,
   onNavigate,
 }: {
   collapsed: boolean;
-  onRequestSignOut: () => void;
   /** Overrides the rail's `hidden md:flex` when rendered inside the mobile drawer. */
   className?: string;
   /** Called after any navigation, so the mobile drawer can close itself. */
@@ -311,7 +305,6 @@ function AppSidebar({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { user } = useAuth();
   const branding = useBranding();
   const { expanded, toggle } = useSidebarGroups(pathname);
   const counts = useNavCounts();
@@ -396,16 +389,8 @@ function AppSidebar({
           ))}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarUser
-          name={user?.name ?? "Administrator"}
-          detail="System Settings · Sign Out"
-          initials={initialsOf(user?.name ?? "Administrator")}
-          onOpenMenu={() => go("/settings")}
-          onSettings={() => go("/settings")}
-          onSignOut={onRequestSignOut}
-        />
-      </SidebarFooter>
+      {/* No account block here: Settings is in the list above and Sign Out
+          is in the profile menu at the top right, where it was a third copy. */}
     </Sidebar>
   );
 }
@@ -424,7 +409,8 @@ const isRecordId = (segment: string) =>
 function useBreadcrumbs(): BreadcrumbItem[] {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const crumbs: BreadcrumbItem[] = [{ label: "General Services Office" }];
+  // No office crumb: the sidebar already names the office on every page.
+  const crumbs: BreadcrumbItem[] = [];
 
   if (pathname === "/") {
     crumbs.push({ label: "Dashboard" });
@@ -496,11 +482,8 @@ function AppTopBar({
       onToggleSidebar={onToggleSidebar}
       actions={
         <>
-          <SearchBar
-            placeholder="Search PR, PO, RIS, items, departments..."
-            className="hidden sm:block"
-          />
-          <OfficeSwitcher current={user?.office ?? "General Services Office"} />
+          {/* The search box did nothing when typed into (removal decided
+              2026-09-18), and the office label repeated the sidebar's name. */}
           <NotificationBell count={unreadCount} onClick={onOpenNotifications} />
           <ProfileMenu
             name={user?.name ?? "Administrator"}
@@ -576,7 +559,7 @@ export function AppLayout() {
   return (
     <>
       <AppShell
-        sidebar={<AppSidebar collapsed={sidebarCollapsed} onRequestSignOut={requestSignOut} />}
+        sidebar={<AppSidebar collapsed={sidebarCollapsed} />}
         topBar={
           <AppTopBar
             onToggleSidebar={toggleSidebar}
@@ -608,7 +591,6 @@ export function AppLayout() {
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <AppSidebar
             collapsed={false}
-            onRequestSignOut={requestSignOut}
             onNavigate={() => setMobileNavOpen(false)}
             className="flex h-full w-full border-r-0"
           />

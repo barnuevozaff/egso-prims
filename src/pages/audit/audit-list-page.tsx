@@ -17,7 +17,6 @@ import {
 
 import {
   ContainerCard,
-  DeleteModal,
   DepartmentChip,
   DropdownFilter,
   Button,
@@ -32,7 +31,7 @@ import {
   TableCard,
   toast,
 } from "@/components";
-import { deleteAuditEntries, exportAuditCsv } from "@/features/audit/api";
+import { exportAuditCsv } from "@/features/audit/api";
 import { useAuditEntries } from "@/features/audit/hooks";
 import {
   AUDIT_ACTIONS,
@@ -78,7 +77,7 @@ export function AuditListPage() {
     [search, dateRange, user, department, module, action, severity],
   );
 
-  const { data, loading, refresh } = useAuditEntries(filters);
+  const { data, loading } = useAuditEntries(filters);
   // KPI figures always reflect the whole register, independent of filters.
   const stats = useAuditEntries(React.useMemo(() => ({}), []));
 
@@ -102,7 +101,6 @@ export function AuditListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<AuditEntry[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -112,12 +110,6 @@ export function AuditListPage() {
   const openEntry = (id: string) => {
     setActiveId(id);
     setDrawerOpen(true);
-  };
-
-
-  const refreshAll = () => {
-    void refresh();
-    void stats.refresh();
   };
 
   const downloadCsv = (rows: AuditEntry[], suffix: string) => {
@@ -444,23 +436,9 @@ export function AuditListPage() {
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => exportPrintable(selectedRows)}
-        onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}
       />
 
-      <DeleteModal
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Purge ${selectedRows.length} log entr${selectedRows.length === 1 ? "y" : "ies"}?`}
-        description="Purging audit records is restricted to system administrators and is itself recorded. This cannot be undone."
-        onConfirm={async () => {
-          await deleteAuditEntries(selectedRows.map((r) => r.id));
-          setRowSelection({});
-          setConfirmBulkDelete(false);
-          toast.success(`Purged ${selectedRows.length} entr${selectedRows.length === 1 ? "y" : "ies"}`);
-          refreshAll();
-        }}
-      />
 
       <AuditDrawer entryId={activeId} open={drawerOpen} onOpenChange={setDrawerOpen} />
     </PageTransition>

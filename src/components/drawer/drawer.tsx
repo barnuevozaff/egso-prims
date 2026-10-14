@@ -106,5 +106,5 @@ export function DrawerFooter({
 
 /** Right-aligned action row for a drawer footer. */
 export function DrawerActions({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-end gap-2">{children}</div>;
+  return <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>;
 }

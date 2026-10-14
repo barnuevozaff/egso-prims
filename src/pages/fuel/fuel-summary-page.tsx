@@ -248,7 +248,7 @@ export function FuelSummaryPage() {
 
   const fileStem = `fuel-consumption-${year}`;
 
-  // Print and Export PDF both print this [data-print-sheet] page. The signature
+  // Print prints this [data-print-sheet] page (and saves it as PDF). The signature
   // names are edited inline in the report itself before printing.
   const doPrint = () => window.print();
   const doCsv = () => {
@@ -857,13 +857,10 @@ export function FuelSummaryPage() {
           <FileSpreadsheet />
           Export Excel
         </Button>
-        <Button variant="secondary" onClick={doPrint}>
-          <Printer />
-          Print
-        </Button>
+        {/* One button: the browser's print dialog also saves as PDF. */}
         <Button onClick={doPrint}>
-          <FileDown />
-          Export PDF
+          <Printer />
+          Print or save PDF
         </Button>
       </div>
     </PageTransition>

@@ -6,14 +6,12 @@ import {
   Boxes,
   CalendarDays,
   ClipboardList,
-  FileDown,
   FileText,
   ShoppingCart,
   Wallet,
 } from "lucide-react";
 
 import {
-  Button,
   CurrencyDisplay,
   DocumentNumber,
   DropdownFilter,
@@ -172,12 +170,6 @@ export function ReportsPage() {
       <PageHeader
         title="Reports & Analytics"
         description="Executive analytics and printable operational reports across all GSO modules."
-        actions={
-          <Button onClick={exportPrintable}>
-            <FileDown />
-            Export PDF
-          </Button>
-        }
       />
 
       {/* KPI row */}
@@ -208,10 +200,6 @@ export function ReportsPage() {
                 end={
                   <>
                     <ExportButton label="Export CSV" onClick={exportCsv} disabled={rows.length === 0} />
-                    <Button variant="secondary" onClick={exportPrintable} disabled={rows.length === 0}>
-                      <FileDown className="h-3.5 w-3.5 text-neutral-500" />
-                      Export PDF
-                    </Button>
                     <PrintButton onClick={exportPrintable} disabled={rows.length === 0} />
                   </>
                 }

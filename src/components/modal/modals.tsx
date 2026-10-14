@@ -32,6 +32,8 @@ export interface ConfirmationModalProps {
   hideCancel?: boolean;
   /** Shown on the confirm button while an async action runs. */
   loading?: boolean;
+  /** Keeps the confirm button shut, e.g. while the dialog explains why it cannot proceed. */
+  confirmDisabled?: boolean;
   onConfirm?: () => void;
   children?: React.ReactNode;
 }
@@ -51,6 +53,7 @@ export function ConfirmationModal({
   cancelLabel = "Cancel",
   hideCancel = false,
   loading = false,
+  confirmDisabled = false,
   onConfirm,
   children,
 }: ConfirmationModalProps) {
@@ -83,6 +86,7 @@ export function ConfirmationModal({
           <Button
             variant={tone === "danger" ? "danger" : "primary"}
             loading={loading}
+            disabled={confirmDisabled}
             onClick={onConfirm ?? (() => onOpenChange(false))}
           >
             {confirmLabel}

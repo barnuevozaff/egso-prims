@@ -201,6 +201,8 @@ export function RISDrawer({
             }
             confirmLabel={primaryLabel}
             loading={acting}
+            // Releasing more than is on hand would drive stock below zero.
+            confirmDisabled={insufficient.length > 0}
             onConfirm={advance}
           >
             {releasing && (
