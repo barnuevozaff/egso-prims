@@ -90,7 +90,7 @@ function TrackForm({ service }: { service: PortalService }) {
           spellCheck={false}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "portal-track-error" : "portal-track-hint"}
-          className="h-12 min-w-0 flex-[1_1_280px] rounded-[10px] border border-[#d4d5d2] bg-white px-4 text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] duration-150 placeholder:normal-case placeholder:text-[#7a7f89] focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/10 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
+          className="h-12 min-w-0 flex-[1_1_280px] rounded-[10px] border border-[#d4d5d2] bg-white px-4 text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] duration-150 placeholder:normal-case placeholder:text-[#6b707a] focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/10 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
         />
         <button
           type="submit"
