@@ -294,3 +294,33 @@ export function exportRequestsCsv(rows: RequestForIssuance[]): string {
   );
   return [header.join(","), ...lines].join("\n");
 }
+
+export interface StockSuggestion {
+  name: string;
+  unit: string;
+  inStock: boolean;
+}
+
+/**
+ * Items from central stock whose name contains the query, for the portal's
+ * RIS form (migration 050). Anonymous visitors cannot read the register, so
+ * this goes through a function that returns only name, unit and whether any
+ * is on hand. Any failure, including the function not existing yet, returns
+ * no suggestions: they are a help, and the form works without them.
+ */
+export async function suggestStock(query: string): Promise<StockSuggestion[]> {
+  if (query.trim().length < 2) return [];
+  try {
+    const { data, error } = await requireDb().rpc("portal_stock_suggestions", {
+      p_query: query.trim(),
+    });
+    if (error || !Array.isArray(data)) return [];
+    return (data as { name: string; unit: string; in_stock: boolean }[]).map((r) => ({
+      name: r.name,
+      unit: r.unit,
+      inStock: r.in_stock,
+    }));
+  } catch {
+    return [];
+  }
+}

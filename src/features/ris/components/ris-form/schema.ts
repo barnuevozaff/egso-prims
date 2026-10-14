@@ -22,7 +22,7 @@ export const risFormSchema = z.object({
   prNumber: z.string().optional(),
   poNumber: z.string().optional(),
   requester: z.string().min(3, "Enter who is requesting"),
-  departmentCode: z.string().min(2, "Enter the office"),
+  departmentCode: z.string().min(2, "Choose the requesting office"),
   fund: z.string().optional(),
   division: z.string().optional(),
   fppCode: z.string().optional(),

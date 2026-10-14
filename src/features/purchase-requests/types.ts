@@ -39,17 +39,31 @@ export interface Department {
   color: string;
 }
 
+/**
+ * The municipal offices, as GSO lists them (15 Oct 2026). The first ten codes
+ * predate the list and are on existing records, so they must stay. A record
+ * whose office was typed by hand keeps its text; departmentByCode shows it as is.
+ */
 export const DEPARTMENTS: Department[] = [
-  { code: "MO", name: "Mayor's Office", color: "bg-blue-500" },
-  { code: "ACC", name: "Accounting Office", color: "bg-emerald-500" },
-  { code: "TRE", name: "Treasury Office", color: "bg-amber-500" },
-  { code: "ENG", name: "Engineering Office", color: "bg-orange-500" },
+  { code: "MO", name: "Office of the Municipal Mayor", color: "bg-blue-500" },
+  { code: "SB", name: "Sangguniang Bayan (Office of the Vice Mayor)", color: "bg-blue-700" },
+  { code: "HRMO", name: "Human Resource Management Office", color: "bg-cyan-600" },
+  { code: "MPDO", name: "Municipal Planning and Development Office", color: "bg-sky-500" },
+  { code: "TRE", name: "Municipal Treasury Office", color: "bg-amber-500" },
+  { code: "MBO", name: "Municipal Budget Office", color: "bg-indigo-500" },
+  { code: "ACC", name: "Municipal Accounting Office", color: "bg-emerald-500" },
+  { code: "MASSO", name: "Municipal Assessor's Office", color: "bg-yellow-600" },
+  { code: "MCRO", name: "Municipal Civil Registry Office", color: "bg-pink-500" },
   { code: "GSO", name: "General Services Office", color: "bg-neutral-800" },
-  { code: "MHO", name: "Health Office", color: "bg-rose-500" },
-  { code: "MAO", name: "Agriculture Office", color: "bg-green-500" },
-  { code: "MSWDO", name: "Social Welfare & Development Office", color: "bg-violet-500" },
-  { code: "MPDO", name: "Planning Office", color: "bg-sky-500" },
-  { code: "MBO", name: "Budget Office", color: "bg-indigo-500" },
+  { code: "ENG", name: "Municipal Engineering Office", color: "bg-orange-500" },
+  { code: "MHO", name: "Municipal Health Office", color: "bg-rose-500" },
+  { code: "MSWDO", name: "Municipal Social Welfare and Development Office", color: "bg-violet-500" },
+  { code: "MAO", name: "Municipal Agriculture Office", color: "bg-green-500" },
+  { code: "MDRRMO", name: "Municipal Disaster Risk Reduction and Management Office", color: "bg-red-600" },
+  { code: "MENRO", name: "Municipal Environment and Natural Resources Office", color: "bg-teal-600" },
+  { code: "PESO", name: "Public Employment Service Office", color: "bg-fuchsia-600" },
+  { code: "MYDO", name: "Municipal Youth Development Office", color: "bg-lime-600" },
+  { code: "MTOUR", name: "Municipal Tourism Office", color: "bg-purple-600" },
 ];
 
 export const FUNDING_SOURCES = [

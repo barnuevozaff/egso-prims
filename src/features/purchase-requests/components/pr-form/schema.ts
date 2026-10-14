@@ -14,7 +14,7 @@ export const prItemSchema = z.object({
 });
 
 export const prFormSchema = z.object({
-  departmentCode: z.string().min(1, "Enter the requesting office"),
+  departmentCode: z.string().min(1, "Choose the requesting office"),
   requester: z.string().min(3, "Enter the requester's name"),
   purpose: z.string().min(10, "Describe the purpose (at least 10 characters)"),
   requestDate: z.date({ error: "Pick the request date" }),

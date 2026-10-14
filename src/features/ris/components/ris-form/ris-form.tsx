@@ -15,6 +15,8 @@ import { canRaisePO } from "@/features/purchase-requests/lib";
 import type { PurchaseRequest } from "@/features/purchase-requests/types";
 import { risFormSchema, type RISFormValues } from "@/features/ris/components/ris-form/schema";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { OfficeField } from "@/features/shared/office-field";
+import { StockNameInput } from "@/features/ris/components/ris-form/stock-name-input";
 import { cn } from "@/lib/utils";
 
 /**
@@ -223,6 +225,7 @@ export function RISForm({
   });
 
   const err = form.formState.errors;
+  const prNumber = useWatch({ control: form.control, name: "prNumber" });
 
   return (
     <form
@@ -240,13 +243,22 @@ export function RISForm({
         <Section title="Who is asking">
           <div className="grid gap-4 sm:grid-cols-2">
             <LabelledField id="ris-office" label="Requesting office" error={err.departmentCode?.message}>
-              <Input
-                id="ris-office"
-                placeholder="e.g. Municipal Health Office"
-                invalid={!!err.departmentCode}
-                aria-describedby={err.departmentCode ? "ris-office-error" : undefined}
-                className={FIELD}
-                {...form.register("departmentCode")}
+              <Controller
+                control={form.control}
+                name="departmentCode"
+                render={({ field }) => (
+                  <OfficeField
+                    // A source PR replaces the office, so the field remounts
+                    // and re-reads whether it is a listed one.
+                    key={prNumber || "none"}
+                    id="ris-office"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    invalid={!!err.departmentCode}
+                    describedBy={err.departmentCode ? "ris-office-error" : undefined}
+                  />
+                )}
               />
             </LabelledField>
             <LabelledField id="ris-requester" label="Requested by" error={err.requester?.message}>
@@ -529,12 +541,24 @@ function ItemsSection({
                     )}
                   />
                 ) : (
-                  <Input
-                    aria-label={`Item ${i + 1} name`}
-                    placeholder="e.g. Bond paper, A4"
-                    invalid={!!rowErr?.name}
-                    className={CELL}
-                    {...register(`items.${i}.name`)}
+                  <Controller
+                    control={control}
+                    name={`items.${i}.name`}
+                    render={({ field }) => (
+                      <StockNameInput
+                        id={`ris-item-${row.id}`}
+                        label={`Item ${i + 1} name`}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        onPick={(s) => {
+                          setValue(`items.${i}.name`, s.name, { shouldValidate: true });
+                          setValue(`items.${i}.unit`, s.unit);
+                        }}
+                        invalid={!!rowErr?.name}
+                        className={CELL}
+                      />
+                    )}
                   />
                 )}
               </div>
@@ -619,7 +643,7 @@ function ItemsSection({
         <span className="text-[13px] text-[#5b606b]">
           {admin
             ? "Pick from stock to see what is available."
-            : "Type the item as it is called in the office. GSO matches it to stock."}
+            : "Start typing to see items GSO keeps in stock."}
         </span>
       </div>
     </section>

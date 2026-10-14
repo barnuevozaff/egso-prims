@@ -9,6 +9,7 @@ import { useConfigOptions, useConfigText } from "@/features/config/use-module-co
 import type { PRDraftInput } from "@/features/purchase-requests/api";
 import { FUNDING_SOURCES, type PurchaseRequest } from "@/features/purchase-requests/types";
 import { prFormSchema, type PRFormValues } from "@/features/purchase-requests/components/pr-form/schema";
+import { OfficeField } from "@/features/shared/office-field";
 import { cn } from "@/lib/utils";
 
 /**
@@ -115,16 +116,20 @@ export function PRForm({ initial, submitLabel, submitting, onSubmit, onCancel }:
       <div className="flex min-w-0 flex-col gap-5">
         <Section title="Who is asking">
           <div className="grid gap-4 sm:grid-cols-2">
-            {/* Typed by hand: requesters name their own office rather than
-                picking from the register. */}
             <LabelledField id="pr-office" label="Requesting office" error={err.departmentCode?.message}>
-              <Input
-                id="pr-office"
-                placeholder="e.g. Municipal Engineering Office"
-                invalid={!!err.departmentCode}
-                aria-describedby={err.departmentCode ? "pr-office-error" : undefined}
-                className={FIELD}
-                {...form.register("departmentCode")}
+              <Controller
+                control={form.control}
+                name="departmentCode"
+                render={({ field }) => (
+                  <OfficeField
+                    id="pr-office"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    invalid={!!err.departmentCode}
+                    describedBy={err.departmentCode ? "pr-office-error" : undefined}
+                  />
+                )}
               />
             </LabelledField>
             <LabelledField id="pr-requester" label="Requested by" error={err.requester?.message}>

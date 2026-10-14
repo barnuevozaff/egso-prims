@@ -18,6 +18,8 @@ export interface ComboboxOption {
   label: string;
   /** Secondary line under the label, e.g. how much stock is on hand. */
   description?: string;
+  /** Extra words the search matches, for an option whose label is short. */
+  keywords?: string[];
 }
 
 export interface ComboboxProps {
@@ -38,6 +40,8 @@ export interface ComboboxProps {
   allowCustomValue?: boolean;
   /** Falls back to the enclosing Field's generated id. */
   id?: string;
+  /** Classes for each option row, e.g. a larger target on the portal. */
+  itemClassName?: string;
 }
 
 /** Searchable select (Popover + Command) for long option lists. */
@@ -53,6 +57,7 @@ export function Combobox({
   className,
   allowCustomValue = false,
   id,
+  itemClassName,
 }: ComboboxProps) {
   const a11y = useFieldBinding({ id, invalid });
   const [open, setOpen] = React.useState(false);
@@ -125,7 +130,8 @@ export function Combobox({
                 <CommandItem
                   key={o.value}
                   value={o.label}
-                  className="text-[12.5px]"
+                  keywords={o.keywords}
+                  className={cn("text-[12.5px]", itemClassName)}
                   onSelect={() => choose(o.value)}
                 >
                   <Check
