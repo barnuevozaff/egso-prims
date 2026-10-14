@@ -38,6 +38,9 @@ import {
   type RequestForIssuance,
 } from "@/features/ris/types";
 import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+
+/** Statuses at which the slip has actually been issued from stock. */
+const ISSUED_STATUSES: RISStatus[] = ["Released", "Completed"];
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { RISDrawer } from "@/features/ris/components/ris-drawer";
 
@@ -126,7 +129,8 @@ export function RISListPage() {
         accessorKey: "departmentCode",
         cell: ({ getValue }) => {
           const dept = departmentByCode(getValue<string>());
-          return <DepartmentChip code={dept.code} name={dept.name} color={dept.color} />;
+          // No swatch here: the control number already carries the office colour.
+          return <DepartmentChip code={dept.code} name={dept.name} />;
         },
       },
       {
@@ -143,11 +147,17 @@ export function RISListPage() {
         meta: { className: "text-neutral-600" },
       },
       {
+        // A slip is only issued once it is released. Before that the name on
+        // the record is whoever prepared it, which read as an issuance that
+        // had not happened.
         header: "Issued By",
         accessorKey: "issuedBy",
-        cell: ({ getValue }) => (
-          <span className="whitespace-nowrap text-neutral-600">{getValue<string>()}</span>
-        ),
+        cell: ({ row, getValue }) =>
+          ISSUED_STATUSES.includes(row.original.status) ? (
+            <span className="whitespace-nowrap text-neutral-600">{getValue<string>()}</span>
+          ) : (
+            <span className="text-neutral-400">—</span>
+          ),
       },
       {
         header: "Status",
@@ -155,7 +165,7 @@ export function RISListPage() {
         cell: ({ getValue }) => <StatusBadge status={getValue<RISStatus>()} />,
       },
       {
-        header: "Issued",
+        header: "Date",
         accessorKey: "issueDate",
         cell: ({ getValue }) => (
           <span className="whitespace-nowrap text-neutral-500">

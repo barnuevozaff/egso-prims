@@ -86,6 +86,9 @@ export function comparisonLabel(
 
 /** Sentence used for the overall banner. */
 export function overallLabel(overall: OverallComparison): string {
+  // Nothing recorded for the month reads as "unchanged" otherwise, which a
+  // reader takes as a month that was billed at last month's level.
+  if (overall.currentTotal === 0) return "No water bills recorded for this month yet";
   if (overall.status === "No Change") return "Overall Water Consumption unchanged";
   const arrow = overall.status === "Increased" ? "▲" : "▼";
   const pct = overall.percent === null ? "" : ` (${Math.abs(overall.percent).toFixed(2)}%)`;

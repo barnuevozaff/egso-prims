@@ -151,7 +151,8 @@ export function POListPage() {
         accessorKey: "departmentCode",
         cell: ({ getValue }) => {
           const dept = departmentByCode(getValue<string>());
-          return <DepartmentChip code={dept.code} name={dept.name} color={dept.color} />;
+          // No swatch here: the control number already carries the office colour.
+          return <DepartmentChip code={dept.code} name={dept.name} />;
         },
       },
       {
@@ -213,7 +214,8 @@ export function POListPage() {
           loading={stats.loading}
         />
         <MetricCard
-          label="Total PO Value (PHP)"
+          label="Total PO Value"
+          kind="peso"
           value={totalValue}
           icon={Wallet}
           loading={stats.loading}

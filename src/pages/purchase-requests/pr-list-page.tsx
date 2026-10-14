@@ -114,7 +114,8 @@ export function PRListPage() {
         accessorKey: "departmentCode",
         cell: ({ row }) => {
           const dept = departmentByCode(row.original.departmentCode);
-          return <DepartmentChip code={dept.code} name={dept.name} color={dept.color} />;
+          // No swatch here: the control number already carries the office colour.
+          return <DepartmentChip code={dept.code} name={dept.name} />;
         },
       },
       {

@@ -186,7 +186,7 @@ export function ReportsPage() {
         <MetricCard label="Total Purchase Orders" value={kpis?.totalPOs ?? 0} icon={ShoppingCart} loading={loading} />
         <MetricCard label="Total RIS" value={kpis?.totalRIS ?? 0} icon={ClipboardList} loading={loading} />
         <MetricCard label="Total Inventory Items" value={kpis?.totalItems ?? 0} icon={Boxes} loading={loading} />
-        <MetricCard label="Total Inventory Value (PHP)" value={kpis?.inventoryValue ?? 0} icon={Wallet} loading={loading} />
+        <MetricCard label="Total Inventory Value" kind="peso" value={kpis?.inventoryValue ?? 0} icon={Wallet} loading={loading} />
         <MetricCard label="Active Facility Reservations" value={kpis?.activeReservations ?? 0} icon={CalendarDays} loading={loading} />
       </div>
 

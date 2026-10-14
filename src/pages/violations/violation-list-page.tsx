@@ -310,10 +310,9 @@ export function ViolationListPage() {
           icon={Clock3}
           loading={loading}
         />
-        {/* Peso figures carry "(PHP)" in the label, as the utility dashboards do —
-            the shared count-up formatter is integer-only. */}
         <MetricCard
-          label="Total Amount Collected (PHP)"
+          label="Total Amount Collected"
+          kind="peso"
           value={stats.totalCollected}
           icon={Banknote}
           loading={loading}

@@ -445,13 +445,15 @@ export function WaterDashboardPage() {
           loading={allAccounts.loading}
         />
         <MetricCard
-          label={`${monthName(month)} ${year} Expense (PHP)`}
+          label={`${monthName(month)} ${year} Expense`}
+          kind="peso"
           value={overallAll.currentTotal}
           icon={Droplets}
           loading={loading}
         />
         <MetricCard
-          label={`${year} Expense to Date (PHP)`}
+          label={`${year} Expense to Date`}
+          kind="peso"
           value={yearTotal}
           icon={Wallet}
           loading={loading}

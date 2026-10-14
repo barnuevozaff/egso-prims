@@ -44,7 +44,7 @@ export function DatePicker({
           )}
         >
           <CalendarIcon className="h-3.5 w-3.5 text-neutral-500" />
-          {value ? format(value, "d MMMM, yyyy") : placeholder}
+          {value ? format(value, "d MMMM yyyy") : placeholder}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">

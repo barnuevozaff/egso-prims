@@ -105,7 +105,7 @@ export const CONFIG_DEFINITIONS: ConfigDefinition[] = [
     kind: "select",
     fallback: FUNDING_SOURCES[0],
     options: FUNDING_SOURCES,
-    note: "Pre-selected on a new Purchase Request. The requester may still change it.",
+    note: "Recorded on every new Purchase Request. The form does not ask for it.",
   },
 
   /* ---------------- Inventory ---------------- */

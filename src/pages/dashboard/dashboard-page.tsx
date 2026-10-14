@@ -312,7 +312,7 @@ export function DashboardPage() {
         actions={
           <>
             <InfoChip icon={Calendar} className="hidden sm:flex">
-              {format(new Date(), "d MMMM, yyyy")}
+              {format(new Date(), "d MMMM yyyy")}
             </InfoChip>
             <Button onClick={() => navigate("/purchase-requests/new")}>
               <Plus />

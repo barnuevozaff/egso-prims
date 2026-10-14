@@ -144,7 +144,7 @@ export function LineChartContainer({
         data,
         options: {
           elements: {
-            line: { tension: 0.35, borderWidth: 2 },
+            line: { tension: 0, borderWidth: 2 },
             point: { radius: 0, hoverRadius: 4 },
           },
           plugins: { legend: { display: false } },

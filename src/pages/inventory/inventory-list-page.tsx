@@ -222,7 +222,7 @@ export function InventoryListPage() {
         <MetricCard label="Available Stock (units)" value={availableUnits} icon={Package} loading={stats.loading} />
         <MetricCard label="Low Stock Items" value={lowStockCount} icon={AlertTriangle} loading={stats.loading} />
         <MetricCard label="Out of Stock" value={outOfStockCount} icon={PackageX} loading={stats.loading} />
-        <MetricCard label="Inventory Value (PHP)" value={inventoryValue} icon={Wallet} loading={stats.loading} />
+        <MetricCard label="Inventory Value" kind="peso" value={inventoryValue} icon={Wallet} loading={stats.loading} />
         <MetricCard
           label="Stock Movements Today"
           value={movementsToday}

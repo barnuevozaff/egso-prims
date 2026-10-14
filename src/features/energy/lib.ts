@@ -87,6 +87,9 @@ export function comparisonLabel(
 
 /** Sentence used for the overall banner. */
 export function overallLabel(overall: OverallComparison): string {
+  // Nothing recorded for the month reads as "unchanged" otherwise, which a
+  // reader takes as a month that was billed at last month's level.
+  if (overall.currentTotal === 0) return "No electricity bills recorded for this month yet";
   if (overall.status === "No Change") return "Overall Energy Consumption unchanged";
   const arrow = overall.status === "Increased" ? "▲" : "▼";
   const pct =

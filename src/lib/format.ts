@@ -1,8 +1,9 @@
 /** Formatting helpers shared across the component library. */
 
-export type CountKind = "int" | "percent" | "k" | "plus";
+export type CountKind = "int" | "percent" | "k" | "plus" | "peso";
 
 export function formatCount(n: number, kind: CountKind = "int"): string {
+  if (kind === "peso") return formatPHP(Math.round(n));
   if (kind === "percent") return n.toFixed(1) + "%";
   if (kind === "k") return Math.round(n) + "K";
   if (kind === "plus") return Math.round(n) + "+";
