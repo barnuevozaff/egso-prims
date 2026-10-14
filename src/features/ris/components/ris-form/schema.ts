@@ -5,8 +5,16 @@ export const risItemSchema = z.object({
   name: z.string().min(2, "Name the item"),
   /** Set when the typed name matches the stock register. */
   inventoryItemId: z.string().optional(),
-  requestedQty: z.number({ error: "Required" }).positive("Must be more than 0"),
-  issuedQty: z.number({ error: "Required" }).positive("Must be more than 0"),
+  unit: z.string().min(1, "Pick a unit"),
+  requestedQty: z.number({ error: "Enter the quantity" }).positive("Must be more than 0"),
+  /**
+   * Set by GSO on the admin form; the portal does not ask, and the slip
+   * starts from the requested quantity. The form checks it on the admin side.
+   */
+  issuedQty: z
+    .number({ error: "Enter the quantity to issue" })
+    .positive("Must be more than 0")
+    .optional(),
 });
 
 export const risFormSchema = z.object({
@@ -23,11 +31,3 @@ export const risFormSchema = z.object({
 });
 
 export type RISFormValues = z.infer<typeof risFormSchema>;
-
-/** Field names validated before leaving each wizard step. */
-export const RIS_STEP_FIELDS: (keyof RISFormValues)[][] = [
-  ["requester", "departmentCode", "purpose"],
-  ["items"],
-  [],
-  [],
-];

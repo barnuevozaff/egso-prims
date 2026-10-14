@@ -11,7 +11,7 @@ import {
 } from "@/components";
 import { updateRequest, type RISDraftInput } from "@/features/ris/api";
 import { useRequest } from "@/features/ris/hooks";
-import { RISWizard } from "@/features/ris/components/ris-form/ris-wizard";
+import { RISForm } from "@/features/ris/components/ris-form/ris-form";
 
 export function RISEditPage() {
   const { id = "" } = useParams();
@@ -35,7 +35,7 @@ export function RISEditPage() {
     <PageTransition className="space-y-6">
       <PageHeader
         title={ris ? `Edit ${ris.risNumber}` : "Edit RIS"}
-        description="Update the slip details, items, or attachments."
+        description="Update the slip details or items. The summary on the right shows what is still missing."
       />
       {loading ? (
         <ContainerCard padded className="mx-auto w-full max-w-3xl">
@@ -50,7 +50,9 @@ export function RISEditPage() {
           />
         </ContainerCard>
       ) : (
-        <RISWizard
+        <RISForm
+          variant="admin"
+          submitLabel="Save Changes"
           initial={ris}
           submitting={submitting}
           onSubmit={submit}

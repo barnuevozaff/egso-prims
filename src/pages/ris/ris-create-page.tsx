@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader, PageTransition, toast } from "@/components";
 import { createRequest, type RISDraftInput } from "@/features/ris/api";
-import { RISWizard } from "@/features/ris/components/ris-form/ris-wizard";
+import { RISForm } from "@/features/ris/components/ris-form/ris-form";
 
 export function RISCreatePage() {
   const navigate = useNavigate();
@@ -13,13 +13,11 @@ export function RISCreatePage() {
   const sourcePo = params.get("po") ?? undefined;
   const [submitting, setSubmitting] = React.useState(false);
 
-  const submit = async (input: RISDraftInput, asDraft: boolean) => {
+  const submit = async (input: RISDraftInput) => {
     setSubmitting(true);
     try {
-      const ris = await createRequest(input, { asDraft });
-      toast.success(
-        asDraft ? `${ris.risNumber} saved as draft` : `${ris.risNumber} submitted for approval`,
-      );
+      const ris = await createRequest(input);
+      toast.success(`${ris.risNumber} submitted for approval`);
       navigate("/ris");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to submit the requisition and issue slip");
@@ -37,7 +35,9 @@ export function RISCreatePage() {
             : "Issue stock items against an approved purchase request."
         }
       />
-      <RISWizard
+      <RISForm
+        variant="admin"
+        submitLabel="Submit Slip"
         initialPrNumber={sourcePr}
         initialPoNumber={sourcePo}
         submitting={submitting}
