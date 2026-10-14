@@ -19,6 +19,14 @@ Motion, React Hook Form + Zod, TanStack Table, React Router, Lucide.
   15 Oct 2026; egsoalaminos is a collaborator). Vercel's Git connection points
   at it, so a push to `main` deploys.
 
+## The goal right now
+
+Deployment to real users is planned for **Wednesday 21 or Friday 23 October
+2026**. Until then: polish what exists and fix its logic and flows. **No new
+features** until the existing system is at full product quality, the level
+of the references below. Prefer clean UI and simplicity; remove what is not
+needed. When in doubt, cut rather than add.
+
 ## How to work with Zaf
 
 - **Mockup before code.** Design changes are drawn first on the canvas
