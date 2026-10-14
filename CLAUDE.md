@@ -15,8 +15,9 @@ Motion, React Hook Form + Zod, TanStack Table, React Router, Lucide.
   snapshots; he reloads them and thinks a change failed.
 - Verify on the live URL, not a local dev server.
 - There are no real users yet; the live site is a progress link.
-- Push as the GitHub account **egsoalaminos**. A 403 "denied to barnuevozaff"
-  means the wrong account is active: `gh auth switch --user egsoalaminos`.
+- The repo is **barnuevozaff/egso-prims** (moved from egsoalaminos on
+  15 Oct 2026; egsoalaminos is a collaborator). Vercel's Git connection points
+  at it, so a push to `main` deploys.
 
 ## How to work with Zaf
 
