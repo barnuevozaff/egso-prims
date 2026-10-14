@@ -11,7 +11,7 @@ import {
 } from "@/components";
 import { updatePurchaseRequest, type PRDraftInput } from "@/features/purchase-requests/api";
 import { usePurchaseRequest } from "@/features/purchase-requests/hooks";
-import { PRWizard } from "@/features/purchase-requests/components/pr-form/pr-wizard";
+import { PRForm } from "@/features/purchase-requests/components/pr-form/pr-form";
 
 export function PREditPage() {
   const { id = "" } = useParams();
@@ -35,7 +35,7 @@ export function PREditPage() {
     <PageTransition className="space-y-6">
       <PageHeader
         title={pr ? `Edit ${pr.prNumber}` : "Edit Purchase Request"}
-        description="Update the request details, line items, or attachments."
+        description="Update the request details or line items."
       />
       {loading ? (
         <ContainerCard padded className="mx-auto w-full max-w-3xl">
@@ -50,7 +50,7 @@ export function PREditPage() {
           />
         </ContainerCard>
       ) : (
-        <PRWizard
+        <PRForm
           initial={pr}
           submitLabel="Save Changes"
           submitting={submitting}

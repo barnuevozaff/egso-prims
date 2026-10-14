@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { PageHeader, PageTransition, toast } from "@/components";
 import { createPurchaseRequest, type PRDraftInput } from "@/features/purchase-requests/api";
-import { PRWizard } from "@/features/purchase-requests/components/pr-form/pr-wizard";
+import { PRForm } from "@/features/purchase-requests/components/pr-form/pr-form";
 
 export function PRCreatePage() {
   const navigate = useNavigate();
@@ -25,9 +25,9 @@ export function PRCreatePage() {
     <PageTransition className="space-y-6">
       <PageHeader
         title="New Purchase Request"
-        description="Complete the four steps to submit a request for procurement review."
+        description="Fill in one page. The summary on the right shows what is still missing."
       />
-      <PRWizard
+      <PRForm
         submitLabel="Submit Request"
         submitting={submitting}
         onSubmit={submit}

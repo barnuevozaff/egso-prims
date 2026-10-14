@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 
 import { toast } from "@/components";
 import { createPurchaseRequest, type PRDraftInput } from "@/features/purchase-requests/api";
-import { PRWizard } from "@/features/purchase-requests/components/pr-form/pr-wizard";
+import { PRForm } from "@/features/purchase-requests/components/pr-form/pr-form";
 import { PortalPage, SubmissionSuccess } from "@/features/portal/components/submission-success";
 
-/** Public Purchase Request form — the same enterprise wizard, no login. */
+/** Public Purchase Request form — the same one-page form as the admin's, no login. */
 export function PortalRequestPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = React.useState(false);
@@ -28,9 +28,8 @@ export function PortalRequestPage() {
 
   return (
     <PortalPage
-      width="form"
       title="Create Purchase Request"
-      description="Complete the four steps to submit a purchase request for procurement review."
+      description="Fill in one page. The summary on the right shows what is still missing."
     >
       {reference ? (
         <SubmissionSuccess
@@ -38,7 +37,7 @@ export function PortalRequestPage() {
           message="Your Purchase Request has been received and routed to the General Services Office for review."
         />
       ) : (
-        <PRWizard
+        <PRForm
           submitLabel="Submit Request"
           submitting={submitting}
           onSubmit={submit}
