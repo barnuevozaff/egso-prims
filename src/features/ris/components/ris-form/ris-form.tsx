@@ -602,7 +602,8 @@ function ItemsSection({
                     onChange={field.onChange}
                     invalid={!!rowErr?.unit}
                     disabled={!!inv}
-                    className="h-10 rounded-lg border-[#d4d5d2] text-[14px]"
+                    size="lg"
+                    className="h-10 rounded-lg border-[#d4d5d2] px-3 text-[14px] text-neutral-900 focus-visible:border-neutral-900 focus-visible:ring-4 focus-visible:ring-neutral-900/10"
                   />
                 )}
               />
