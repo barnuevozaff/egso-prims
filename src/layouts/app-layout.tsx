@@ -373,7 +373,8 @@ function AppTopBar({
         </>
       }
     >
-      <Breadcrumb items={crumbs} />
+      {/* A one-step trail only repeats the page title below it. */}
+      {crumbs.length > 1 && <Breadcrumb items={crumbs} />}
     </TopBar>
   );
 }

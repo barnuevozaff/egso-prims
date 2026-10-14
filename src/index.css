@@ -397,9 +397,10 @@ html[data-portal] body {
  * coloured accents. White is laid down as the colour and the accent tint as an
  * image on top of it, so the band stays opaque whichever accent is selected.
  */
+/* White since 15 Oct 2026: the tinted band is gone, and painting it per cell
+   left a 1px seam between header cells. Opaque so rows cannot show through. */
 @utility table-head-band {
   background-color: var(--color-white);
-  background-image: linear-gradient(var(--accent-subtle), var(--accent-subtle));
 }
 
 @utility scrollbar-none {

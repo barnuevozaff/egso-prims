@@ -39,7 +39,7 @@ export function ProfileMenu({ name, detail, initials, items = [], className }: P
             className,
           )}
         >
-          <Avatar size="sm" name={name} initials={initials} />
+          <Avatar size="sm" name={name} initials={initials} className="rounded-[7px] bg-none bg-neutral-900" />
           {name}
           <ChevronDown className="h-3 w-3 text-neutral-400" />
         </button>
