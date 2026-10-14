@@ -56,6 +56,28 @@ export function facilityById(id: string): Facility | undefined {
  */
 export const facilityName = (id: string) => facilityById(id)?.name ?? id ?? "—";
 
+/** A typed facility as it is saved: trimmed, single-spaced. */
+export const normaliseFacility = (name: string) => name.trim().replace(/\s+/g, " ");
+
+const facilityKey = (name: string) => normaliseFacility(name).toLowerCase();
+
+/**
+ * Whether a saved reservation's facility is the one being booked.
+ *
+ * Facilities are typed by hand, so the comparison ignores case and spacing.
+ * A reservation saved from the old register ("fac-1") also matches any typed
+ * name that begins with that facility's name, so "Session Hall, 2F" is still
+ * blocked by an older Session Hall booking.
+ */
+export function sameFacility(saved: string, typed: string): boolean {
+  const a = facilityKey(saved);
+  const b = facilityKey(typed);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const registered = facilityById(saved.trim());
+  return !!registered && b.startsWith(registered.name.toLowerCase());
+}
+
 export interface EquipmentType {
   id: string;
   name: string;

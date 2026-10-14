@@ -3,19 +3,18 @@ import { useNavigate } from "react-router-dom";
 
 import { toast } from "@/components";
 import { createReservation, type ReservationDraftInput } from "@/features/reservations/api";
-import { useReservations } from "@/features/reservations/hooks";
-import { ReservationCalendar } from "@/features/reservations/components/reservation-calendar";
-import { ResWizard } from "@/features/reservations/components/res-form/res-wizard";
-import { CompactReservationCalendar } from "@/features/portal/components/compact-reservation-calendar";
+import { ResForm } from "@/features/reservations/components/res-form/res-form";
 import { PortalPage, SubmissionSuccess } from "@/features/portal/components/submission-success";
 
-/** Public facility reservation form — the same enterprise wizard, no login. */
+/**
+ * Public facility reservation form — the same one-page form as the admin's, no
+ * login. Availability is inside the form, so the month calendar that used to
+ * sit above it is gone.
+ */
 export function PortalReservePage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = React.useState(false);
   const [reference, setReference] = React.useState<string | null>(null);
-  // Existing reservations power the calendar's reserved/available dates.
-  const calendar = useReservations(React.useMemo(() => ({}), []));
 
   const submit = async (input: ReservationDraftInput) => {
     setSubmitting(true);
@@ -32,29 +31,20 @@ export function PortalReservePage() {
   return (
     <PortalPage
       title="Reserve a Facility"
-      description="Book municipal facilities and borrow event equipment for official activities."
+      description="Pick a facility, a free day and a time on one page. Booked times are shown as you choose."
     >
       {reference ? (
         <SubmissionSuccess
           reference={reference}
-          message="Your facility reservation has been received. The GSO will confirm the schedule after review."
+          message="Your facility reservation has been received. The slot is held as Pending until the GSO confirms it."
         />
       ) : (
-        <>
-          {/* The admin's month grid needs 760px; below lg the portal shows a
-              compact month that fits a phone without scrolling sideways. */}
-          <CompactReservationCalendar
-            reservations={calendar.data}
-            loading={calendar.loading}
-            className="mb-6 lg:hidden"
-          />
-          <ReservationCalendar
-            reservations={calendar.data}
-            loading={calendar.loading}
-            className="mb-6 hidden lg:block"
-          />
-          <ResWizard submitting={submitting} onSubmit={submit} onCancel={() => navigate("/portal")} />
-        </>
+        <ResForm
+          submitLabel="Submit reservation"
+          submitting={submitting}
+          onSubmit={submit}
+          onCancel={() => navigate("/portal")}
+        />
       )}
     </PortalPage>
   );

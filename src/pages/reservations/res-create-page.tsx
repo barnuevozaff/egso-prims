@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { PageHeader, PageTransition, toast } from "@/components";
 import { createReservation, type ReservationDraftInput } from "@/features/reservations/api";
-import { ResWizard } from "@/features/reservations/components/res-form/res-wizard";
+import { ResForm } from "@/features/reservations/components/res-form/res-form";
 
 export function ResCreatePage() {
   const navigate = useNavigate();
@@ -27,7 +27,12 @@ export function ResCreatePage() {
         title="New Facility Reservation"
         description="Book a municipal facility and borrow event equipment."
       />
-      <ResWizard submitting={submitting} onSubmit={submit} onCancel={() => navigate("/reservations")} />
+      <ResForm
+        submitLabel="Submit reservation"
+        submitting={submitting}
+        onSubmit={submit}
+        onCancel={() => navigate("/reservations")}
+      />
     </PageTransition>
   );
 }

@@ -11,7 +11,7 @@ import {
 } from "@/components";
 import { updateReservation, type ReservationDraftInput } from "@/features/reservations/api";
 import { useReservation } from "@/features/reservations/hooks";
-import { ResWizard } from "@/features/reservations/components/res-form/res-wizard";
+import { ResForm } from "@/features/reservations/components/res-form/res-form";
 
 export function ResEditPage() {
   const { id = "" } = useParams();
@@ -50,8 +50,9 @@ export function ResEditPage() {
           />
         </ContainerCard>
       ) : (
-        <ResWizard
+        <ResForm
           initial={r}
+          submitLabel="Save changes"
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/reservations")}

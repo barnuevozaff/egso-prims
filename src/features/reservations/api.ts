@@ -4,6 +4,7 @@ import { nextDocumentNumber } from "@/features/shared/doc-numbers";
 import {
   BLOCKING_STATUSES,
   facilityName,
+  sameFacility,
   timesOverlap,
   type Reservation,
   type ReservationListFilters,
@@ -70,7 +71,28 @@ export async function getReservation(id: string): Promise<Reservation | null> {
   return data ? rowToRes(data) : null;
 }
 
-/** Reservations that occupy the requested slot (Pending/Approved overlaps). */
+/**
+ * Every Pending or Approved reservation between two dates (ISO, inclusive),
+ * for any facility. The form filters them by the facility as it is typed, so
+ * typing does not refetch.
+ */
+export async function listBookingsBetween(from: string, to: string): Promise<Reservation[]> {
+  const db = requireDb();
+  return unwrap(
+    await db
+      .from(TABLE)
+      .select("*")
+      .gte("date", from)
+      .lte("date", to)
+      .in("status", BLOCKING_STATUSES),
+  ).map(rowToRes);
+}
+
+/**
+ * Reservations that occupy the requested slot (Pending/Approved overlaps).
+ * The facility is matched as the form matches it (see sameFacility), not by
+ * exact text, because facilities are typed by hand.
+ */
 export async function findConflicts(
   facilityId: string,
   date: string,
@@ -78,17 +100,12 @@ export async function findConflicts(
   endTime: string,
   excludeId?: string,
 ): Promise<Reservation[]> {
-  const db = requireDb();
-  const rows = unwrap(
-    await db
-      .from(TABLE)
-      .select("*")
-      .eq("facility_id", facilityId)
-      .eq("date", date)
-      .in("status", BLOCKING_STATUSES),
-  ).map(rowToRes);
+  const rows = await listBookingsBetween(date, date);
   return rows.filter(
-    (r) => r.id !== excludeId && timesOverlap(startTime, endTime, r.startTime, r.endTime),
+    (r) =>
+      r.id !== excludeId &&
+      sameFacility(r.facilityId, facilityId) &&
+      timesOverlap(startTime, endTime, r.startTime, r.endTime),
   );
 }
 
