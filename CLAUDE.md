@@ -45,21 +45,55 @@ needed. When in doubt, cut rather than add.
   saying it is done.
 - Report honestly: say what you did not check.
 
-## Design direction (portal polish pass, from 14 Oct 2026)
+## Design system (from 14–15 Oct 2026; portal and admin share it)
 
 - References: ramp.com/procurement and mercury.com for structure and tone,
-  linear.app for restraint, godly.website (now recent.design) for finish details.
-- Portal: white page, ink (#16181d) actions, the municipal seal is the only
-  colour. Geist for text, Geist Mono for reference numbers and peso amounts.
-  Values are recorded in `DESIGN.md`. The admin still uses Inter.
-- Rejected, do not reuse: the Figma PR redesign (file ADU7hH4Y6BRcBcL6DvL4D1),
-  and a live "official form preview" beside the PR form (the admin prints the
-  real format).
-- Done so far: portal home, receipt with QR, "Filed on this computer", the
-  one-page PR form (no attachments; shared with admin create/edit). Next: RIS
-  and Facility Reservation forms in the same style, then the Track page.
-- The portal audience is staff of other municipal offices, not the public.
-  Keep government terms (Fund, Division, FPP Code).
+  linear.app for restraint, godly.website (now recent.design) for finish.
+  The bar is a product company's app, not a government website.
+- Type: **Geist** everywhere (admin `--font-sans` too). Geist Mono only for
+  document numbers (PR-2026-000243). Amounts and counts use Geist with
+  `tabular-nums`; the mono slashed zero made ₱43,000 read like code.
+- Colour: white page, ink #16181d for actions, the municipal seal is the
+  only colour. Muted text #5b606b; labels #6b707a; borders #e6e6e3 / #ececea;
+  row rules #f0f0ee; hover #fafaf9; rail ground #fafaf9. Hex, never oklch.
+- Shapes: 10px buttons/inputs, 14px panels, 44px touch targets.
+- Admin shell: always-open sidebar sections (Procurement, Supply, Services,
+  Utilities, Records), sentence-case labels, current page = white card,
+  counts = quiet grey numbers. Top bar holds only the bell and the profile
+  menu (Settings, Sign out). No breadcrumb when it would repeat the title.
+- Tables (shared `EnterpriseTable`): no header band or capitals, 12.5px
+  labels, 13.5px rows. `StatusBadge` = coloured dot + the word.
+- List page pattern (see `pr-list-page.tsx`): title + one-line purpose,
+  Export and the primary action in the header, status **tabs with counts**
+  instead of a status dropdown, the record's purpose as the main cell text
+  with its number and person beneath. No Print button that prints the
+  screen. No duplicate buttons that call the same function.
+- Dashboard pattern (`dashboard-page.tsx`): "Needs your attention" rows,
+  each one click from the work, then four figures, then short lists.
+- Forms: one page, no attachments, a sticky Summary on the right with a
+  checklist and the one submit button (PR, RIS, Facility Reservation).
+- Rejected, do not reuse: the Figma PR redesign (ADU7hH4Y6BRcBcL6DvL4D1); a
+  live "official form preview" beside a form; collapsible sidebar groups.
+
+## Where the work stands (15 Oct 2026)
+
+Done: portal home, receipt with QR, "Filed on this computer", one-page PR /
+RIS / Reservation forms, office dropdown (codes), stock suggestions
+(migration 050, already run). Admin: dead and duplicate controls removed,
+sidebar and naming ("Ordinance violations"), dashboard, all tables and
+statuses, the Purchase requests list.
+
+Next, one screen at a time, same patterns, screenshot the live page after
+each: Purchase orders, Requisition & issue slips, Inventory (cut its six
+KPI cards), Facility reservations (calendar chips need facility names and a
+legend), Ordinance violations, Energy/Water/Fuel (an unbilled account still
+shows "No Change"), Reports, Audit trail, Settings, then the detail drawers,
+the admin forms, and phone layouts (lists need cards, not sideways scroll).
+Zaf rates the system under 70% of production grade; ask him what he still
+wants to achieve before deciding what is "done".
+
+**Do not touch Records Management** (src/features/records, src/pages/records,
+migration 049): someone else is building it and its workflow is not settled.
 
 ## Rules that bite
 
