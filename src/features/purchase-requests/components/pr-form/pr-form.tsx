@@ -240,7 +240,7 @@ function ItemsSection({ form }: { form: FormApi }) {
   const itemsError = formState.errors.items;
   // Description takes every spare pixel; the numeric columns are sized to
   // their longest likely value.
-  const cols = "sm:grid-cols-[minmax(0,1fr)_64px_92px_112px_104px_40px]";
+  const cols = "sm:grid-cols-[minmax(0,1fr)_64px_112px_112px_104px_40px]";
 
   return (
     <section

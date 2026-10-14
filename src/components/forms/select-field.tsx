@@ -27,7 +27,7 @@ export interface SelectFieldProps {
   /** For a select with no visible label, such as a table cell. */
   "aria-label"?: string;
   /**
-   * `lg` is the portal forms' list: 44px options in 14px type, as in the
+   * `lg` is the portal forms' list: 40px options, as tall as the field, in 14px type, as in the
    * approved office picker. `default` keeps the admin's compact list.
    */
   size?: "default" | "lg";
@@ -71,7 +71,9 @@ export function SelectField({
         align="start"
         sideOffset={4}
         className={cn(
-          "max-h-[min(var(--radix-select-content-available-height),30rem)] min-w-[max(var(--radix-select-trigger-width),8rem)]",
+          "max-h-[min(var(--radix-select-content-available-height),30rem)]",
+          // The portal list is exactly as wide as its field; the admin keeps 8rem at least.
+          lg ? "w-(--radix-select-trigger-width) min-w-0" : "min-w-[max(var(--radix-select-trigger-width),8rem)]",
           lg && "rounded-xl border-[#e4e4e1] bg-white shadow-[0_12px_32px_-8px_rgba(22,24,29,0.22)]",
         )}
       >
@@ -82,7 +84,7 @@ export function SelectField({
             disabled={o.disabled}
             className={
               lg
-                ? "min-h-11 rounded-lg pl-3 pr-9 text-[14px] text-neutral-900 focus:bg-[#f4f4f2] focus:text-neutral-900 data-[state=checked]:font-medium [&_svg]:text-neutral-900"
+                ? "min-h-10 rounded-lg pl-3 pr-8 text-[14px] text-neutral-900 focus:bg-[#f4f4f2] focus:text-neutral-900 data-[state=checked]:font-medium [&_svg]:text-neutral-900"
                 : "text-[12.5px]"
             }
           >
