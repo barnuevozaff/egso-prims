@@ -40,7 +40,7 @@ Iisa ang form ng dalawa (`pr-form.tsx`).
 | Items | Requester | Bawat isa: description, qty, unit, estimated unit cost |
 | Fund | Auto | Galing sa Settings → Procurement → Default Funding Source. Hindi tinatanong sa form. |
 | Request date | Auto | Ang araw ng pag-file. Hindi tinatanong. |
-| Attachments | — | Tinanggal sa form noong 15 Oct; nananatili ang mga luma |
+| Attachments | — | Tinanggal sa form noong 15 Oct. **Hindi ginagamit** (sabi ni Zaf). |
 | Comments, History, Approvals | System / GSO | Talaan ng mga nangyari |
 
 ### A3. Mga status ngayon at ang daloy
@@ -95,7 +95,7 @@ Sa `/portal/track`, ito ang sinasabi kung nasaan ang PR:
 - Blangko ang **Section** at **FPP**.
 - Pirma: General Services Officer, Municipal Treasurer, Municipal Mayor. Nakasulat ang mga
   pangalan sa code (`src/lib/officials.ts`).
-- **Hindi naka-print ang Purpose.**
+- **Ito na ang official form** (sabi ni Zaf). Hindi ito gagalawin.
 
 ### A7. Mga koneksyon
 
@@ -129,7 +129,7 @@ Sa `/portal/track`, ito ang sinasabi kung nasaan ang PR:
 8. **Edit at Delete kahit anong status,** kahit Approved o may PO na. Permanente ang Delete.
 9. **"Administrator" lang ang nakatala** bilang gumawa, kaya hindi malalaman kung sinong staff
    ang nag-approve.
-10. **Hindi naka-print ang Purpose** sa PR. Blangko rin ang Section at FPP.
+10. **May natitirang "Attachments" tab** sa detail, kahit hindi na ginagamit ang attachments.
 11. **Hindi alam ng PR kung may PO na ito,** at pwedeng magkaroon ng dobleng PO.
 12. **Walang paraan para malaman ng requester kung bakit ibinalik o tinanggihan** ang PR,
     maliban kung tatawagan sila.
@@ -184,6 +184,8 @@ Wala nang Mayor's Office at Budget Office.
 
 1. **Listahan.** Ganito pa rin, at ang tabs ay ang 5 status.
    - Tatanggalin ang "Print" sa bulk bar.
+   - Tatanggalin ang **Attachments** tab sa detail. Ang matitira: Timeline, Comments, History
+     (tingnan ang D11).
    - Ang Delete ay para sa Head lang.
 2. **Iisang detail view (drawer).** Bubuksan ng Dashboard ang listahan, nakabukas na ang
    drawer. Tatanggalin ang hiwalay na full page, *o* ito ang gagamitin sa lahat (tanong D5).
@@ -201,12 +203,9 @@ Date. *Tingnan ang D6 kung may kulang.*
 
 ### C6. Print
 
-Susundin ang **official na PR form**. Kailangan ko ng scan o picture nito para tumugma
-(tanong D7).
-- Idadagdag ang **Purpose**.
-- Ilalagay ang **Requested by**.
-- Ang mga pirma (GSO, Treasurer, Mayor) ay mananatili sa papel kung kasama sila sa official
-  form. **Pirma lang ito sa papel, hindi hakbang sa system.**
+**Walang babaguhin.** Official na ang printed PR na nasa system ngayon.
+
+Ang mga pirma (GSO, Treasurer, Mayor) ay nasa papel lang. **Hindi sila hakbang sa system.**
 
 ### C7. Talaan
 
@@ -242,11 +241,9 @@ Sagutin sa ilalim ng bawat isa, kahit isang salita lang.
 o section o division.
 > Sagot:
 
-**D7. Pakipadala ng picture ng official PR form** na ginagamit ngayon, para tumugma ang print.
-> Sagot:
+**D7.** ~~Picture ng official PR form~~ — *Sagot ni Zaf: official na ang nasa system. Walang babaguhin.*
 
-**D8. Kasama pa ba sa papel na PR ang pirma ng Treasurer at Mayor?**
-> Sagot:
+**D8.** ~~Pirma ng Treasurer at Mayor sa papel~~ — *Sagot ni Zaf: kasama sa official form. Mananatili.*
 
 **D9. Delete:** dapat bang mabura ang PR? O "Cancelled" na lang lagi, para may talaan?
 > Sagot:
@@ -254,6 +251,14 @@ o section o division.
 **D10. Ang mga lumang PR** na nasa "Department Head Review" o "Budget Review": gagawin bang
 "For review" lahat?
 > Sagot:
+
+---
+
+**D11. Comments tab:** ginagamit ba ng GSO ang comments sa isang PR (hal. tala ng staff)? Kung
+hindi, tatanggalin din ito.
+> Sagot:
+
+**Nasagot na:** Attachments — *hindi ginagamit, tatanggalin ang natitirang tab.*
 
 ---
 
