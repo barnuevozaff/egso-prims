@@ -91,20 +91,13 @@ export function PortalLayout() {
   }, []);
 
   return (
-    <div data-portal="" className="flex min-h-[100dvh] flex-col bg-canvas font-sans text-neutral-900 antialiased">
+    <div data-portal="" className="flex min-h-[100dvh] flex-col bg-canvas font-['Geist',ui-sans-serif,system-ui,sans-serif] text-neutral-900 antialiased">
       <SkipLink />
 
-      {/* Government strip */}
-      <div className="bg-(--accent-solid) text-white">
-        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-5 py-1.5 text-[12px] md:px-8">
-          <span>Republic of the Philippines</span>
-          <span className="hidden sm:inline">Province of Laguna</span>
-        </div>
-      </div>
-
-      {/* Masthead */}
-      <header className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-6 px-5 py-3.5 md:px-8">
+      {/* Masthead. The government strip that sat above it moved to the footer:
+          it is who runs the office, not something a filer acts on. */}
+      <header className="border-b border-[#ececea] bg-white">
+        <div className="mx-auto flex min-h-[68px] w-full max-w-[1120px] items-center justify-between gap-6 px-5 py-3 sm:px-6">
           <Link
             to="/portal"
             className="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none lg:shrink-0 focus-visible:ring-2 focus-visible:ring-(--accent-ring) focus-visible:ring-offset-2"
@@ -112,26 +105,19 @@ export function PortalLayout() {
             <img
               src={BRAND_LOGO}
               alt="Seal of the Municipality of Alaminos"
-              className="h-11 w-11 shrink-0 object-contain"
+              className="h-9 w-9 shrink-0 object-contain"
             />
-            {/* On the narrowest phones (320px) the uppercase line wraps rather than
-                pushing the page sideways. */}
-            <span className="flex min-w-0 flex-col">
-              <span className="text-balance text-[11.5px] font-medium uppercase tracking-[0.1em] text-neutral-500">
-                Municipality of Alaminos, Laguna
-              </span>
-              {/* Set as a letterhead sets it: the one serif in the portal. */}
-              <span className="font-['Spectral',ui-serif,Georgia,serif] text-[20px] font-medium leading-tight text-neutral-900">
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="text-[15px] font-semibold tracking-[-0.01em] text-neutral-900">
                 General Services Office
               </span>
+              <span className="text-[13px] text-[#5b606b]">Municipality of Alaminos, Laguna</span>
             </span>
           </Link>
 
           {isHome ? (
-            <span className="hidden text-right text-[13px] leading-snug text-neutral-500 lg:block">
-              Purchase Request &amp; Inventory
-              <br />
-              Management System
+            <span className="hidden text-[13px] text-[#5b606b] md:block">
+              Purchase Request &amp; Inventory Management
             </span>
           ) : (
             <ServiceNav className="hidden lg:block" />
@@ -147,13 +133,13 @@ export function PortalLayout() {
         </React.Suspense>
       </main>
 
-      <footer className="border-t border-neutral-200 bg-white">
-        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-2 px-5 py-4 text-[12.5px] text-neutral-500 sm:flex-row sm:items-center sm:justify-between md:px-8">
+      <footer className="border-t border-[#ececea] bg-white">
+        <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-5 py-6 text-[13px] text-[#5b606b] sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span className="flex items-center gap-2.5">
-            <img src={BRAND_LOGO} alt="" className="h-6 w-6 object-contain" />
-            General Services Office, Municipality of Alaminos, Laguna
+            <img src={BRAND_LOGO} alt="" className="h-5 w-5 object-contain" />
+            General Services Office · Municipality of Alaminos, Laguna
           </span>
-          <span>Copyright © Municipality of Alaminos, Laguna</span>
+          <span>Republic of the Philippines · Province of Laguna</span>
         </div>
       </footer>
     </div>

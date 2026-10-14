@@ -330,13 +330,14 @@
 
   --canvas: #f6f7f8;
 
-  --accent-solid: #7e1624;
-  --accent-solid-hover: #66111d;
+  /* Ink, not crimson (14 Oct 2026): the seal is the portal's only colour. */
+  --accent-solid: #16181d;
+  --accent-solid-hover: #000000;
   --accent-contrast: #ffffff;
-  /* 5.6:1 against white and 5.2:1 against the canvas: a focus ring you can see. */
-  --accent-ring: #b0415a;
-  --accent-subtle: #f6eced;
-  --accent-text: #7e1624;
+  /* 6.9:1 against white: a focus ring you can see. */
+  --accent-ring: #5b606b;
+  --accent-subtle: #f1f1ef;
+  --accent-text: #16181d;
 }
 
 /*

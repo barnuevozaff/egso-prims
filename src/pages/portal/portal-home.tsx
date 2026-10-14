@@ -4,20 +4,17 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 
 import { PORTAL_SERVICES, type PortalService } from "@/features/portal/data";
-import { cn } from "@/lib/utils";
 
 /**
- * The staff portal's home: one screen, no scrolling on an office laptop.
+ * The staff portal's home, approved 14 Oct 2026 (canvas "Portal Home
+ * Redesign"). White page, ink actions, the seal the only colour.
  *
- * The four services are the page. The question sits on a crimson band and the
- * cards overlap its lower edge, so a tall screen fills with the band rather
- * than with an empty gap, and nothing on the page competes with the cards.
- *
- * Filing cards are crimson; the tracking card is ink. A clerk can say what the
- * colour means: crimson starts a document, ink follows one.
+ * Tracking sits under the question because it is the one thing a returning
+ * filer comes for; the three filings follow as cards; the steps close the page
+ * so a first-time filer knows what happens after they submit.
  */
 
-/** Strong ease-out: the cards arrive quickly and settle. */
+/** Strong ease-out: things arrive quickly and settle. */
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 const FILING = PORTAL_SERVICES.filter((s) => s.kind === "filing");
@@ -25,15 +22,16 @@ const TRACKING = PORTAL_SERVICES.find((s) => s.kind === "lookup");
 
 /** What a filer does, start to finish. */
 const STEPS = [
-  "Choose a service",
-  "Complete the form",
-  "Keep your reference number to track it",
+  { title: "Choose a service", body: "Pick the form that matches what your office needs." },
+  { title: "Complete and submit", body: "You get a receipt with a reference number right away." },
+  { title: "Track it here", body: "Enter the reference number above to see where it is." },
 ] as const;
 
 /** A reference number as the office writes it: trimmed and in capitals. */
 const normaliseReference = (value: string) => value.trim().toUpperCase();
 
-function CardFrame({
+/** Arrive once, in reading order, from a small offset. Nothing loops. */
+function Reveal({
   index,
   className,
   children,
@@ -45,64 +43,18 @@ function CardFrame({
   const reduce = useReducedMotion();
   return (
     <motion.div
-      // Arrive once, in reading order, from a small offset. Nothing loops.
       initial={reduce ? false : { opacity: 0, transform: "translateY(8px)" }}
       animate={{ opacity: 1, transform: "translateY(0px)" }}
-      transition={{ duration: 0.36, delay: index * 0.04, ease: EASE_OUT }}
-      className={cn("h-full min-w-0", className)}
+      transition={{ duration: 0.4, delay: index * 0.05, ease: EASE_OUT }}
+      className={className}
     >
       {children}
     </motion.div>
   );
 }
 
-function FilingCard({ service, index }: { service: PortalService; index: number }) {
-  const Icon = service.icon;
-  return (
-    <CardFrame index={index}>
-      {/*
-       * The card is not a link; only its button opens the form (owner's call:
-       * a stray click on the card should not start a filing). On a phone the
-       * card is a row and the button is the crimson circle at its end, which
-       * keeps all three filings and the tracking field on one phone screen.
-       * From `sm` up it is the full card and the button is its action bar.
-       */}
-      <div className="flex h-full items-center gap-3 rounded-md border border-neutral-200 bg-white px-3.5 py-3 sm:flex-col sm:items-stretch sm:gap-0 sm:p-6">
-        <div className="flex items-center justify-between">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-neutral-100 text-(--accent-text)">
-            <Icon className="h-5 w-5" />
-          </span>
-          <span className="hidden text-[12px] font-semibold tracking-[0.06em] text-neutral-500 sm:inline">
-            {service.code}
-          </span>
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h2 className="text-[15px] font-semibold leading-snug text-neutral-900 sm:mt-5 sm:text-[17px]">
-            {service.title}
-          </h2>
-          <p className="mt-1.5 hidden flex-1 text-[14px] leading-relaxed text-neutral-500 sm:block">
-            {service.description}
-          </p>
-        </div>
-        {/* One link, two shapes: a 44px circle on a phone, the full-width bar from sm. */}
-        <Link
-          to={service.to}
-          className="group ui-accent ui-accent-hover grid h-11 w-11 shrink-0 place-items-center rounded-full text-[14px] font-semibold transition-[background-color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) focus-visible:ring-offset-2 active:scale-[0.98] sm:mt-6 sm:flex sm:w-full sm:items-center sm:justify-between sm:rounded-md sm:px-4"
-        >
-          <span className="sr-only sm:not-sr-only">{service.cta}</span>
-          <ArrowRight
-            aria-hidden="true"
-            className="h-[18px] w-[18px] transition-transform duration-150 ease-out group-hover:translate-x-[3px]"
-          />
-        </Link>
-      </div>
-    </CardFrame>
-  );
-}
-
-function TrackingCard({ service, index }: { service: PortalService; index: number }) {
+function TrackForm({ service }: { service: PortalService }) {
   const navigate = useNavigate();
-  const Icon = service.icon;
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [reference, setReference] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -120,26 +72,11 @@ function TrackingCard({ service, index }: { service: PortalService; index: numbe
   };
 
   return (
-    <CardFrame index={index}>
-      <form
-        onSubmit={submit}
-        noValidate
-        className="flex h-full flex-col rounded-md border border-neutral-200 bg-white p-4 sm:p-6"
-      >
-        {/* The icon tile is dropped on a phone, where the field is what matters. */}
-        <span className="hidden h-10 w-10 place-items-center rounded-md bg-neutral-100 text-neutral-900 sm:grid">
-          <Icon className="h-5 w-5" />
-        </span>
-        {/* Same line box as the filing titles, so the four headings share a baseline. */}
-        <h2 className="text-[15px] font-semibold leading-snug text-neutral-900 sm:mt-5 sm:text-[17px]">
-          {service.title}
-        </h2>
-        <label
-          htmlFor="portal-track-ref"
-          className="mt-0.5 mb-3 text-[13px] leading-relaxed text-neutral-500 sm:mb-0 sm:mt-1.5 sm:text-[14px]"
-        >
-          {service.description}
-        </label>
+    <form onSubmit={submit} noValidate className="mt-10 max-w-[560px]">
+      <label htmlFor="portal-track-ref" className="mb-2 block text-[14px] font-medium">
+        Track a request
+      </label>
+      <div className="flex flex-wrap gap-2">
         <input
           ref={inputRef}
           id="portal-track-ref"
@@ -148,89 +85,107 @@ function TrackingCard({ service, index }: { service: PortalService; index: numbe
             setReference(e.target.value);
             if (error) setError(null);
           }}
-          placeholder="e.g. PR-2026-000214"
+          placeholder="Reference number, e.g. PR-2026-000214"
           autoComplete="off"
           spellCheck={false}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "portal-track-error" : undefined}
-          className="mt-auto h-11 w-full rounded-md border border-neutral-400 bg-white px-3.5 text-[14px] uppercase text-neutral-900 transition-colors placeholder:normal-case placeholder:text-neutral-500 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
+          aria-describedby={error ? "portal-track-error" : "portal-track-hint"}
+          className="h-12 min-w-0 flex-[1_1_280px] rounded-[10px] border border-[#d4d5d2] bg-white px-4 text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] duration-150 placeholder:normal-case placeholder:text-[#7a7f89] focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/10 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
         />
-        {error && (
-          <p id="portal-track-error" role="alert" className="mt-1.5 text-[12.5px] text-red-700">
-            {error}
-          </p>
-        )}
         <button
           type="submit"
-          className="group mt-2.5 flex h-11 items-center justify-between rounded-md bg-neutral-900 px-4 text-[14px] font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
+          className="h-12 rounded-[10px] bg-neutral-900 px-[22px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
         >
-          {service.cta}
-          <ArrowRight className="h-[18px] w-[18px] transition-transform duration-150 ease-out group-hover:translate-x-[3px]" />
+          Track
         </button>
-      </form>
-    </CardFrame>
+      </div>
+      {error ? (
+        <p id="portal-track-error" role="alert" className="mt-2 text-[13px] text-red-700">
+          {error}
+        </p>
+      ) : (
+        <p id="portal-track-hint" className="mt-2 text-[13px] text-[#5b606b]">
+          The reference number is printed on your receipt.
+        </p>
+      )}
+    </form>
+  );
+}
+
+function FilingCard({ service }: { service: PortalService }) {
+  const Icon = service.icon;
+  return (
+    // The card is not a link; only its button opens the form (owner's call:
+    // a stray click on the card should not start a filing).
+    <div className="flex h-full flex-col rounded-[14px] border border-[#e4e4e1] bg-white p-6 shadow-[0_1px_2px_rgba(22,24,29,0.04)] sm:p-7">
+      <div className="flex items-center justify-between">
+        <span className="grid h-10 w-10 place-items-center rounded-[10px] border border-[#e4e4e1] text-neutral-900">
+          <Icon className="h-5 w-5" />
+        </span>
+        <span className="font-['Geist_Mono',ui-monospace,monospace] text-[12px] font-medium tracking-[0.04em] text-[#5b606b]">
+          {service.code}
+        </span>
+      </div>
+      <h3 className="mt-6 text-[19px] font-semibold tracking-[-0.015em]">{service.title}</h3>
+      <p className="mt-2 flex-1 text-[15px] leading-relaxed text-[#5b606b]">{service.description}</p>
+      <Link
+        to={service.to}
+        className="group mt-7 inline-flex h-11 items-center gap-2 self-start rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
+      >
+        {service.cta}
+        <ArrowRight
+          aria-hidden="true"
+          className="h-4 w-4 transition-transform duration-150 ease-out group-hover:translate-x-[3px]"
+        />
+      </Link>
+    </div>
   );
 }
 
 export function PortalHome() {
   return (
-    <div className="flex flex-1 flex-col">
-      {/* The question, on the band. Its height follows the screen's, so a tall
-          screen is not left with a gap under the cards. */}
-      <section className="bg-(--accent-solid) text-white">
-        <div className="mx-auto w-full max-w-[1200px] px-5 pb-14 pt-7 sm:pb-[clamp(8rem,18vh,12rem)] sm:pt-[clamp(2.5rem,8vh,6rem)] md:px-8">
-          <h1 className="text-[26px] font-semibold tracking-[-0.01em] text-balance md:text-[32px]">
+    <div className="flex flex-1 flex-col bg-white">
+      <section className="mx-auto w-full max-w-[1120px] px-5 pb-16 pt-14 sm:px-6 sm:pb-[72px] sm:pt-[88px]">
+        <Reveal index={0}>
+          <h1 className="max-w-[720px] text-balance text-[36px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[52px]">
             What do you need from the&nbsp;GSO?
           </h1>
-          <p className="mt-1.5 text-[15px] text-white/85">
-            File a request, or track one you already submitted. No account needed.
+          <p className="mt-[18px] max-w-[560px] text-[17px] leading-relaxed text-[#5b606b] sm:text-[18px]">
+            File a request, or follow one you already submitted. No account needed.
           </p>
-          {/*
-           * How a request goes, in the order it happens. It took the place of two
-           * group labels ("File a request", "Track a request") that only restated
-           * the cards; the sequence is information a first-time filer needs.
-           * Desktop only: on a phone it would push tracking off the screen.
-           */}
-          <ol
-            aria-label="How it works"
-            className="mt-8 hidden list-none items-center gap-3.5 text-[14px] text-white/90 lg:flex"
-          >
-            {STEPS.map((step, i) => (
-              // The connecting rule lives inside the step it leads to, so the list
-              // is read as three items rather than five.
-              <li key={step} className="flex items-center gap-2.5">
-                {i > 0 && <span aria-hidden="true" className="mr-1 h-px w-10 bg-white/35" />}
-                <span
-                  aria-hidden="true"
-                  className="grid h-7 w-7 place-items-center rounded-full border border-white/45 text-[12.5px] font-semibold tabular-nums"
-                >
-                  {i + 1}
-                </span>
-                {step}
+          {TRACKING && <TrackForm service={TRACKING} />}
+        </Reveal>
+      </section>
+
+      <section className="border-y border-[#ececea] bg-[#f7f7f6]">
+        <div className="mx-auto w-full max-w-[1120px] px-5 pb-16 pt-14 sm:px-6">
+          <h2 className="mb-5 text-[15px] font-semibold">Start a new request</h2>
+          <ul className="grid list-none gap-4 md:grid-cols-3">
+            {FILING.map((s, i) => (
+              <li key={s.to} className="min-w-0">
+                <Reveal index={i + 1} className="h-full">
+                  <FilingCard service={s} />
+                </Reveal>
               </li>
             ))}
-          </ol>
+          </ul>
         </div>
       </section>
 
-      <div className="-mt-9 flex flex-1 flex-col sm:-mt-[5.5rem]">
-        <div className="mx-auto w-full max-w-[1200px] px-5 pb-8 sm:pb-10 md:px-8">
-          {/* Each card is its own list item; `display: contents` would have
-              flattened the grid but also dropped the list semantics in Safari. */}
-          <ul className="grid list-none gap-2.5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
-            {FILING.map((s, i) => (
-              <li key={s.to} className="min-w-0">
-                <FilingCard service={s} index={i} />
-              </li>
-            ))}
-            {TRACKING && (
-              <li className="min-w-0">
-                <TrackingCard service={TRACKING} index={FILING.length} />
-              </li>
-            )}
-          </ul>
-        </div>
-      </div>
+      <section className="mx-auto w-full max-w-[1120px] px-5 pb-[72px] pt-14 sm:px-6">
+        <h2 className="mb-6 text-[15px] font-semibold">How a request goes</h2>
+        <ol className="grid list-none gap-8 md:grid-cols-3">
+          {STEPS.map((step, i) => (
+            <li key={step.title} className="border-t border-[#e4e4e1] pt-4">
+              <span aria-hidden="true" className="font-['Geist_Mono',ui-monospace,monospace] text-[12px] font-medium text-neutral-900">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <p className="mt-2 text-[15px] font-semibold">{step.title}</p>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-[#5b606b]">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
     </div>
   );
 }
