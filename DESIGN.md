@@ -20,7 +20,49 @@ colors:
   panel-grey: "#fafafa"
   error-stroke: "#dc2626"
   error-text: "#b91c1c"
+  # Portal home redesign, approved 2026-10-14: ink replaces crimson as the
+  # portal accent; the seal is the only colour.
+  portal-ink: "#16181d"
+  portal-muted: "#5b606b"
+  portal-placeholder: "#6b707a"
+  portal-field-stroke: "#d4d5d2"
+  portal-card-stroke: "#e4e4e1"
+  portal-hairline: "#ececea"
+  portal-band: "#f7f7f6"
 typography:
+  portal-display:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "52px"
+    fontWeight: 600
+    lineHeight: 1.05
+    letterSpacing: "-0.035em"
+  portal-display-phone:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "36px"
+    fontWeight: 600
+    lineHeight: 1.05
+    letterSpacing: "-0.035em"
+  portal-lead:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "18px"
+    fontWeight: 400
+    lineHeight: 1.625
+  portal-card-title:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "19px"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "-0.015em"
+  portal-body:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.625
+  portal-code:
+    fontFamily: "Geist Mono, ui-monospace, monospace"
+    fontSize: "12px"
+    fontWeight: 500
+    letterSpacing: "0.04em"
   display:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "32px"
