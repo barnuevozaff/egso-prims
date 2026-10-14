@@ -25,8 +25,7 @@ export const PORTAL_SERVICES: PortalService[] = [
   {
     icon: FileText,
     title: "Purchase Request",
-    description:
-      "Submit official purchase requests for office supplies, equipment, and operational requirements.",
+    description: "Request supplies, equipment, or services your office needs to buy.",
     cta: "Create PR",
     navLabel: "Purchase Request",
     kind: "filing",
@@ -35,10 +34,10 @@ export const PORTAL_SERVICES: PortalService[] = [
   },
   {
     icon: ClipboardList,
-    title: "Requisition & Issue Slip (RIS)",
-    description:
-      "Request available inventory items from the General Services Office inventory.",
-    cta: "Request Items",
+    // The code sits on the card's corner, so the title does not repeat it.
+    title: "Requisition & Issue Slip",
+    description: "Get items the GSO already has in stock, issued to your office.",
+    cta: "Request items",
     navLabel: "Requisition",
     kind: "filing",
     code: "RIS",
@@ -47,9 +46,8 @@ export const PORTAL_SERVICES: PortalService[] = [
   {
     icon: CalendarDays,
     title: "Facility Reservation",
-    description:
-      "Reserve available government facilities through an online scheduling system.",
-    cta: "Reserve Facility",
+    description: "Book a municipal hall, room, or venue for a date and time.",
+    cta: "Reserve a facility",
     navLabel: "Reservation",
     kind: "filing",
     code: "FR",

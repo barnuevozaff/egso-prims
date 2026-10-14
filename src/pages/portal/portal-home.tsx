@@ -233,14 +233,40 @@ function FiledOnThisComputer({ filed }: { filed: FiledRequest[] }) {
             The status updates on its own. No need to look for the receipt.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={clearFilings}
-          className="h-11 shrink-0 rounded-lg px-2.5 text-[13px] text-[#5b606b] transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
-        >
-          Clear list
-        </button>
+        {filed.length > 0 && (
+          <button
+            type="button"
+            onClick={clearFilings}
+            className="h-11 shrink-0 rounded-lg px-2.5 text-[13px] text-[#5b606b] transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+          >
+            Clear list
+          </button>
+        )}
       </div>
+      {filed.length === 0 && (
+        // Desktop only (the parent hides it below lg): it fills the hero's
+        // right half and tells a first-time filer the list exists.
+        <div className="px-5 pb-5">
+          <ul aria-hidden="true" className="list-none space-y-2">
+            {[0, 1, 2].map((i) => (
+              <li
+                key={i}
+                className="flex items-center gap-3.5 rounded-[10px] border border-dashed border-[#e4e4e1] px-3 py-3.5"
+              >
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-28 rounded-full bg-[#ececea]" />
+                  <div className="h-3 w-48 max-w-full rounded-full bg-[#f3f3f1]" />
+                </div>
+                <div className="h-6 w-20 rounded-full bg-[#f3f3f1]" />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-[14px] leading-relaxed text-[#5b606b]">
+            Nothing filed from this computer yet. Requests you submit here appear in this list
+            with their status.
+          </p>
+        </div>
+      )}
       <ul className="list-none px-2 pb-2">
         {rows.map((row) => (
           <li key={row.reference}>
@@ -284,12 +310,8 @@ export function PortalHome() {
   const hasFiled = filed.length > 0;
   return (
     <div className="flex flex-1 flex-col bg-white">
-      <section
-        className={cn(
-          "mx-auto grid w-full max-w-[1120px] items-start gap-10 px-5 pb-16 pt-14 sm:px-6 sm:pb-[72px] sm:pt-[88px]",
-          hasFiled && "lg:grid-cols-2 lg:gap-14",
-        )}
-      >
+      <section className="mx-auto grid w-full max-w-[1120px] items-start gap-10 px-5 pb-16 pt-14 sm:px-6 sm:pb-[72px] sm:pt-[88px] lg:grid-cols-2 lg:gap-14">
+
         <Reveal index={0}>
           <h1 className="max-w-[720px] text-balance text-[36px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[52px]">
             What do you need from the&nbsp;GSO?
@@ -299,11 +321,10 @@ export function PortalHome() {
           </p>
           {TRACKING && <TrackForm service={TRACKING} />}
         </Reveal>
-        {hasFiled && (
-          <Reveal index={1}>
-            <FiledOnThisComputer filed={filed} />
-          </Reveal>
-        )}
+        {/* On a phone the empty panel would only push the services down. */}
+        <Reveal index={1} className={cn(!hasFiled && "hidden lg:block")}>
+          <FiledOnThisComputer filed={filed} />
+        </Reveal>
       </section>
 
       <section className="border-y border-[#ececea] bg-[#f7f7f6]">
