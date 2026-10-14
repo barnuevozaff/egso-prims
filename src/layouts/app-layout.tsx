@@ -81,16 +81,21 @@ const inventoryItem: ModuleNavItem = {
   countKey: "stockAlerts",
   badgeColor: "orange",
 };
+// Slips issue from stock, so the RIS sits beside Inventory rather than inside
+// Procurement: request → order → stock → issue, top to bottom.
+const risItem: ModuleNavItem = { icon: ClipboardList, label: "Requisition & Issue Slips", to: "/ris" };
 const reservationItem: ModuleNavItem = {
   icon: CalendarDays,
-  label: "Facility Reservation",
+  label: "Facility Reservations",
   to: "/reservations",
   countKey: "pendingReservations",
   badgeColor: "green",
 };
+// Tickets for breaches of municipal ordinances: illegal parking, obstruction,
+// vending and the like. "Ordinance Violation Receipt" is the usual LGU name.
 const violationItem: ModuleNavItem = {
   icon: ShieldAlert,
-  label: "Violation Management",
+  label: "Ordinance Violations",
   to: "/violations",
 };
 const reportsItem: ModuleNavItem = { icon: BarChart3, label: "Reports", to: "/reports" };
@@ -111,7 +116,6 @@ const procurementChildren: ModuleNavItem[] = [
     countKey: "pendingPOs",
     countAsDot: true,
   },
-  { icon: ClipboardList, label: "Requisition and Issue Slip", to: "/ris" },
 ];
 const utilitiesChildren: ModuleNavItem[] = [
   { icon: Zap, label: "Energy Consumption", to: "/energy" },
@@ -237,6 +241,7 @@ const systemNav: (ModuleNavItem & { trailing?: React.ReactNode })[] = [
 const NAV_PATHS: string[] = [
   dashboardItem,
   inventoryItem,
+  risItem,
   reservationItem,
   violationItem,
   reportsItem,
@@ -356,6 +361,7 @@ function AppSidebar({
             {procurementChildren.map(renderItem)}
           </CollapsibleNavGroup>
           {renderItem(inventoryItem)}
+          {renderItem(risItem)}
           {renderItem(reservationItem)}
           {renderItem(violationItem)}
           <CollapsibleNavGroup
@@ -428,10 +434,10 @@ function useBreadcrumbs(): BreadcrumbItem[] {
   const sections: { prefix: string; label: string; newLabel: string }[] = [
     { prefix: "/purchase-requests", label: "Purchase Requests", newLabel: "New Request" },
     { prefix: "/purchase-orders", label: "Purchase Orders", newLabel: "New Order" },
-    { prefix: "/ris", label: "Requisition and Issue Slip", newLabel: "New RIS" },
+    { prefix: "/ris", label: "Requisition & Issue Slips", newLabel: "New RIS" },
     { prefix: "/inventory", label: "Inventory", newLabel: "New Item" },
-    { prefix: "/reservations", label: "Facility Reservation", newLabel: "New Reservation" },
-    { prefix: "/violations", label: "Violation Management", newLabel: "" },
+    { prefix: "/reservations", label: "Facility Reservations", newLabel: "New Reservation" },
+    { prefix: "/violations", label: "Ordinance Violations", newLabel: "" },
     { prefix: "/energy", label: "Energy Consumption", newLabel: "" },
     { prefix: "/water", label: "Water Consumption", newLabel: "" },
     { prefix: "/fuel", label: "Fuel Consumption", newLabel: "" },

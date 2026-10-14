@@ -48,6 +48,8 @@ import {
 
 interface SectionSpec {
   category: ConfigCategory;
+  /** Heading shown, when the module's name differs from its stored category. */
+  title?: string;
   icon: React.ComponentType<{ className?: string }>;
   description: string;
 }
@@ -73,7 +75,9 @@ const MODULE_SECTIONS: SectionSpec[] = [
       "The hours a municipal facility can be booked for, and how far apart the selectable times are.",
   },
   {
+    // The stored category keeps its old name; renaming it would orphan the saved values.
     category: "Violation Management",
+    title: "Ordinance Violations",
     icon: ShieldAlert,
     description:
       "The offences the office issues tickets for, how a fine may be settled, and the standard amount a new violation starts at.",
@@ -152,7 +156,7 @@ export function SettingsPage() {
         for (const d of changed) delete next[fieldId(d)];
         return next;
       });
-      toast.success(`${category} settings saved`);
+      toast.success(`${MODULE_SECTIONS.find((m) => m.category === category)?.title ?? category} settings saved`);
       void refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to save settings");
@@ -254,7 +258,7 @@ export function SettingsPage() {
   };
 
   /** One settings card: what it controls, its fields, and its save bar. */
-  const renderSection = ({ category, icon: Icon, description }: SectionSpec) => {
+  const renderSection = ({ category, title, icon: Icon, description }: SectionSpec) => {
     const dirty = dirtyIn(category);
     return (
       <ContainerCard key={category} className="p-5">
@@ -264,7 +268,7 @@ export function SettingsPage() {
               <Icon className="h-3.5 w-3.5 text-neutral-600" />
             </span>
             <div className="min-w-0">
-              <SectionTitle as="h3">{category}</SectionTitle>
+              <SectionTitle as="h3">{title ?? category}</SectionTitle>
               <p className="mt-0.5 max-w-2xl text-[11.5px] leading-relaxed text-neutral-500">
                 {description}
               </p>

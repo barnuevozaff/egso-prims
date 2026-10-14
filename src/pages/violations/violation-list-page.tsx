@@ -281,7 +281,7 @@ export function ViolationListPage() {
   return (
     <PageTransition className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
-        title="Violation Management"
+        title="Ordinance Violations"
         description="Manage violator profiles, recorded violations, and payment history."
         actions={
           <Button onClick={addViolation}>
