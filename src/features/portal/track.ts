@@ -35,6 +35,18 @@ export interface TrackResult {
   timeline: ApprovalTimelineStep[];
 }
 
+/**
+ * Where a document stands, read off its steps rather than off a list of status
+ * names, so a new workflow stage cannot fall through a lookup table.
+ */
+export type Standing = "moving" | "finished" | "stopped";
+
+export function standingOf(steps: ApprovalTimelineStep[]): Standing {
+  if (steps.some((s) => s.status === "rejected")) return "stopped";
+  if (steps.every((s) => s.status === "approved")) return "finished";
+  return "moving";
+}
+
 const PR_OFFICE: Record<PRStatus, string> = {
   Draft: "Requesting Office",
   Submitted: "General Services Office",

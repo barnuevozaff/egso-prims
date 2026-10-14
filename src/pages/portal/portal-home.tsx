@@ -1,9 +1,14 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, X } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
+import { Skeleton } from "@/components";
 import { PORTAL_SERVICES, type PortalService } from "@/features/portal/data";
+import { clearFilings, useFiledRequests, type FiledRequest } from "@/features/portal/recent";
+import { standingOf, trackReference, type TrackResult } from "@/features/portal/track";
+import { cn } from "@/lib/utils";
 
 /**
  * The staff portal's home, approved 14 Oct 2026 (canvas "Portal Home
@@ -117,7 +122,8 @@ function FilingCard({ service }: { service: PortalService }) {
   return (
     // The card is not a link; only its button opens the form (owner's call:
     // a stray click on the card should not start a filing).
-    <div className="flex h-full flex-col rounded-[14px] border border-[#e4e4e1] bg-white p-6 shadow-[0_1px_2px_rgba(22,24,29,0.04)] sm:p-7">
+    // No hover lift: the card is not clickable, and a lift would say it is.
+    <div className="flex h-full flex-col rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04)] sm:p-7">
       <div className="flex items-center justify-between">
         <span className="grid h-10 w-10 place-items-center rounded-[10px] border border-[#e4e4e1] text-neutral-900">
           <Icon className="h-5 w-5" />
@@ -126,11 +132,11 @@ function FilingCard({ service }: { service: PortalService }) {
           {service.code}
         </span>
       </div>
-      <h3 className="mt-6 text-[19px] font-semibold tracking-[-0.015em]">{service.title}</h3>
+      <h3 className="mt-4 text-[19px] sm:mt-6 font-semibold tracking-[-0.015em]">{service.title}</h3>
       <p className="mt-2 flex-1 text-[15px] leading-relaxed text-[#5b606b]">{service.description}</p>
       <Link
         to={service.to}
-        className="group mt-7 inline-flex h-11 items-center gap-2 self-start rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
+        className="group mt-5 inline-flex h-11 sm:mt-7 items-center gap-2 self-start rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
       >
         {service.cta}
         <ArrowRight
@@ -142,10 +148,148 @@ function FilingCard({ service }: { service: PortalService }) {
   );
 }
 
+type RecentRow =
+  | { reference: string; state: "loading" }
+  | { reference: string; state: "missing" }
+  | { reference: string; state: "found"; result: TrackResult };
+
+/** "Updated 2 hours ago", from the document's own last change. */
+const updatedAgo = (iso: string) =>
+  `Updated ${formatDistanceToNow(new Date(iso), { addSuffix: true })}`;
+
+function StatusPill({ result }: { result: TrackResult }) {
+  const standing = standingOf(result.timeline);
+  // Icon and word together: the pill never relies on colour alone.
+  if (standing === "stopped") {
+    return (
+      <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 text-[12px] font-medium text-red-700">
+        <X aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
+        {result.status}
+      </span>
+    );
+  }
+  if (standing === "finished") {
+    return (
+      <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-neutral-900 px-2 text-[12px] font-medium text-white">
+        <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
+        {result.status}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-[#d4d5d2] bg-white px-2 text-[12px] font-medium">
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-neutral-900" />
+      {result.status}
+    </span>
+  );
+}
+
+/**
+ * Wow #2 (approved 14 Oct 2026): the requests filed from this computer, with
+ * their live status. Hidden until something has been filed here.
+ */
+function FiledOnThisComputer({ filed }: { filed: FiledRequest[] }) {
+  const [rows, setRows] = React.useState<RecentRow[]>([]);
+  const key = filed.map((f) => f.reference).join(",");
+
+  React.useEffect(() => {
+    let alive = true;
+    const refs = key ? key.split(",") : [];
+    setRows(refs.map((reference) => ({ reference, state: "loading" })));
+    const load = () =>
+      Promise.all(
+        refs.map(async (reference): Promise<RecentRow> => {
+          try {
+            const result = await trackReference(reference);
+            return result
+              ? { reference, state: "found", result }
+              : { reference, state: "missing" };
+          } catch {
+            return { reference, state: "missing" };
+          }
+        }),
+      ).then((next) => alive && setRows(next));
+    void load();
+    // Coming back to the tab is when a filer expects news: look again then.
+    const onVisible = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      alive = false;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [key]);
+
+  return (
+    <section
+      aria-labelledby="filed-title"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white shadow-[0_1px_2px_rgba(22,24,29,0.04),0_8px_24px_-12px_rgba(22,24,29,0.10)]"
+    >
+      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+        <div>
+          <h2 id="filed-title" className="text-[15px] font-semibold">
+            Filed on this computer
+          </h2>
+          <p className="mt-1 text-[13px] text-[#5b606b]">
+            The status updates on its own. No need to look for the receipt.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={clearFilings}
+          className="h-11 shrink-0 rounded-lg px-2.5 text-[13px] text-[#5b606b] transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+        >
+          Clear list
+        </button>
+      </div>
+      <ul className="list-none px-2 pb-2">
+        {rows.map((row) => (
+          <li key={row.reference}>
+            <Link
+              to={`/portal/track?ref=${encodeURIComponent(row.reference)}`}
+              className="flex min-h-11 items-center gap-3.5 rounded-[10px] px-3 py-3.5 transition-colors hover:bg-[#f7f7f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-900"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-['Geist_Mono',ui-monospace,monospace] text-[13px] font-medium">
+                    {row.reference}
+                  </span>
+                  {row.state === "found" && <StatusPill result={row.result} />}
+                  {row.state === "loading" && <Skeleton className="h-6 w-24 rounded-full" />}
+                </div>
+                {row.state === "found" && (
+                  <p className="mt-1 truncate text-[14px] text-[#5b606b]">{row.result.title}</p>
+                )}
+                {row.state === "missing" && (
+                  <p className="mt-1 text-[14px] text-[#5b606b]">
+                    Status not available. Open it to try again.
+                  </p>
+                )}
+              </div>
+              {row.state === "found" && (
+                <span className="hidden whitespace-nowrap text-[12px] text-[#5b606b] sm:inline">
+                  {updatedAgo(row.result.updatedAt)}
+                </span>
+              )}
+              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[#5b606b]" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function PortalHome() {
+  const filed = useFiledRequests();
+  const hasFiled = filed.length > 0;
   return (
     <div className="flex flex-1 flex-col bg-white">
-      <section className="mx-auto w-full max-w-[1120px] px-5 pb-16 pt-14 sm:px-6 sm:pb-[72px] sm:pt-[88px]">
+      <section
+        className={cn(
+          "mx-auto grid w-full max-w-[1120px] items-start gap-10 px-5 pb-16 pt-14 sm:px-6 sm:pb-[72px] sm:pt-[88px]",
+          hasFiled && "lg:grid-cols-2 lg:gap-14",
+        )}
+      >
         <Reveal index={0}>
           <h1 className="max-w-[720px] text-balance text-[36px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[52px]">
             What do you need from the&nbsp;GSO?
@@ -155,6 +299,11 @@ export function PortalHome() {
           </p>
           {TRACKING && <TrackForm service={TRACKING} />}
         </Reveal>
+        {hasFiled && (
+          <Reveal index={1}>
+            <FiledOnThisComputer filed={filed} />
+          </Reveal>
+        )}
       </section>
 
       <section className="border-y border-[#ececea] bg-[#f7f7f6]">

@@ -96,7 +96,7 @@ export function PortalLayout() {
 
       {/* Masthead. The government strip that sat above it moved to the footer:
           it is who runs the office, not something a filer acts on. */}
-      <header className="border-b border-[#ececea] bg-white">
+      <header className="border-b border-[#ececea] bg-white print:hidden">
         <div className="mx-auto flex min-h-[68px] w-full max-w-[1120px] items-center justify-between gap-6 px-5 py-3 sm:px-6">
           <Link
             to="/portal"
@@ -133,7 +133,7 @@ export function PortalLayout() {
         </React.Suspense>
       </main>
 
-      <footer className="border-t border-[#ececea] bg-white">
+      <footer className="border-t border-[#ececea] bg-white print:hidden">
         <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-5 py-6 text-[13px] text-[#5b606b] sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span className="flex items-center gap-2.5">
             <img src={BRAND_LOGO} alt="" className="h-5 w-5 object-contain" />

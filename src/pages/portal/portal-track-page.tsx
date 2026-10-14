@@ -5,7 +5,12 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, Check, Clock3, X } from "lucide-react";
 
 import { Skeleton, Spinner, type ApprovalTimelineStep } from "@/components";
-import { trackReference, type TrackResult } from "@/features/portal/track";
+import {
+  standingOf,
+  trackReference,
+  type Standing,
+  type TrackResult,
+} from "@/features/portal/track";
 import { PortalPage } from "@/features/portal/components/submission-success";
 import { cn } from "@/lib/utils";
 
@@ -13,18 +18,6 @@ const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
 /** A reference number as the office writes it: trimmed and in capitals. */
 const normaliseReference = (value: string) => value.trim().toUpperCase();
-
-/**
- * Where a document stands, read off its steps rather than off a list of status
- * names, so a new workflow stage cannot fall through a lookup table.
- */
-type Standing = "moving" | "finished" | "stopped";
-
-function standingOf(steps: ApprovalTimelineStep[]): Standing {
-  if (steps.some((s) => s.status === "rejected")) return "stopped";
-  if (steps.every((s) => s.status === "approved")) return "finished";
-  return "moving";
-}
 
 /**
  * Public read-only tracking by reference number (PR / PO / RIS / FR).
