@@ -282,7 +282,7 @@ export function RISForm({
               <Input
                 id="ris-fpp"
                 placeholder="e.g. 4410"
-                className={cn(FIELD, MONO)}
+                className={FIELD}
                 {...form.register("fppCode")}
               />
             </LabelledField>
