@@ -1,9 +1,9 @@
 import * as React from "react";
 import { addDays, format, isSameMonth, parseISO } from "date-fns";
-import { ArrowRight, Check, Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import { PageTransition, Skeleton } from "@/components";
+import { PageTransition, Skeleton, StatusBadge } from "@/components";
 import { listPurchaseRequests } from "@/features/purchase-requests/api";
 import {
   PENDING_PR_STATUSES,
@@ -162,32 +162,6 @@ function Figure({ label, value, note }: { label: string; value: string; note: st
   );
 }
 
-function PRStatus({ status }: { status: PurchaseRequest["status"] }) {
-  const done = status === "Approved" || status === "Completed";
-  const stopped = status === "Rejected" || status === "Cancelled";
-  return (
-    <span
-      className={cn(
-        "inline-flex w-[104px] shrink-0 items-center gap-1.5 text-[12.5px]",
-        done ? "text-green-700" : stopped ? "text-red-700" : "text-[#4a4f59]",
-      )}
-    >
-      {done ? (
-        <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
-      ) : (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "h-[7px] w-[7px] rounded-full",
-            stopped ? "bg-red-600" : "shadow-[inset_0_0_0_2px_#16181d]",
-          )}
-        />
-      )}
-      {status}
-    </span>
-  );
-}
-
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -254,7 +228,7 @@ export function DashboardPage() {
     .slice(0, 4);
 
   return (
-    <PageTransition className="mx-auto w-full max-w-[1180px] space-y-5 pb-10">
+    <PageTransition className="w-full max-w-[1180px] space-y-5 pb-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[13px] text-[#5b606b]">{format(now, "EEEE, d MMMM yyyy")}</p>
@@ -380,7 +354,7 @@ export function DashboardPage() {
                 <span className={cn("shrink-0 text-[13.5px] font-medium text-neutral-900", FIG)}>
                   {formatPHP(prTotal(pr))}
                 </span>
-                <PRStatus status={pr.status} />
+                <StatusBadge status={pr.status} className="w-[110px] shrink-0" />
               </button>
             ))
           )}
