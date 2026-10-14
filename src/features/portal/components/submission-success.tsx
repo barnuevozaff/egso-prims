@@ -35,15 +35,18 @@ export function PortalPage({
   width?: "wide" | "form" | "narrow";
   children: React.ReactNode;
 }) {
+  // `wide` matches the masthead's 1120px measure, so the page title and the
+  // seal start on the same left edge.
   const measure =
-    width === "narrow" ? "max-w-2xl" : width === "form" ? "max-w-[52rem]" : "max-w-[1200px]";
+    width === "narrow" ? "max-w-2xl" : width === "form" ? "max-w-[52rem]" : "max-w-[1120px]";
+  const gutter = width === "wide" ? "px-5 sm:px-6" : "px-5 md:px-8";
   return (
     <div className="flex flex-1 flex-col">
       {/* White like the home page since 14 Oct 2026; the band was crimson, and
           an ink band once the accent turned ink would have been the heaviest
           thing on every form. */}
       <section className="border-b border-[#ececea] bg-white text-neutral-900 print:hidden">
-        <div className={cn("mx-auto w-full px-5 pb-8 pt-6 md:px-8", measure)}>
+        <div className={cn("mx-auto w-full pb-8 pt-6", gutter, measure)}>
           <Link
             to="/portal"
             className="-ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)"
@@ -61,7 +64,7 @@ export function PortalPage({
           )}
         </div>
       </section>
-      <PageTransition className={cn("mx-auto w-full px-5 py-8 md:px-8", measure)}>
+      <PageTransition className={cn("mx-auto w-full py-8", gutter, measure)}>
         {children}
       </PageTransition>
     </div>

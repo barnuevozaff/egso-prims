@@ -22,7 +22,14 @@ import { cn } from "@/lib/utils";
  * printed form; the admin prints the official format from the saved request.
  */
 
-const emptyItem = { description: "", quantity: 1, unit: "pc", estimatedCost: 0 };
+// The cost starts blank, not 0, so the filer types a price instead of first
+// deleting a zero. Blank fails the schema ("Required") as 0 did.
+const emptyItem = {
+  description: "",
+  quantity: 1,
+  unit: "pc",
+  estimatedCost: undefined as unknown as number,
+};
 
 const peso = (n: number) =>
   `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
