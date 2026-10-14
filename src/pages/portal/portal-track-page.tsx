@@ -12,6 +12,8 @@ import {
   type TrackResult,
 } from "@/features/portal/track";
 import { PortalPage } from "@/features/portal/components/submission-success";
+import { FiledOnThisComputer } from "@/features/portal/components/filed-on-this-computer";
+import { useFiledRequests } from "@/features/portal/recent";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
@@ -30,6 +32,9 @@ const normaliseReference = (value: string) => value.trim().toUpperCase();
 export function PortalTrackPage() {
   const [params, setParams] = useSearchParams();
   const reduce = useReducedMotion();
+  const filed = useFiledRequests();
+  /** The reference last searched, so writing it to ?ref= does not search again. */
+  const lastLinked = React.useRef<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [ref, setRef] = React.useState(params.get("ref") ?? "");
   const [loading, setLoading] = React.useState(false);
@@ -45,6 +50,7 @@ export function PortalTrackPage() {
         inputRef.current?.focus();
         return;
       }
+      lastLinked.current = reference;
       setLoading(true);
       setError(null);
       // Keep the address in step with what is shown, so a reload or a copied
@@ -63,77 +69,101 @@ export function PortalTrackPage() {
     [setParams],
   );
 
-  // Search on arrival when given ?ref= (from the home page or a receipt).
+  // Search when the address names a reference: on arrival (from the home
+  // page or a receipt) and when a row in "Filed on this computer" is picked.
+  // search() records what it searched, so its own ?ref= write is skipped.
+  const linked = params.get("ref");
   React.useEffect(() => {
-    const initial = params.get("ref");
-    if (initial) void search(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!linked || linked === lastLinked.current) return;
+    lastLinked.current = normaliseReference(linked);
+    setRef(linked);
+    void search(linked);
+  }, [linked, search]);
 
   return (
     <PortalPage
-      width="narrow"
-      title="Track Request"
-      description="Enter the reference number from your submission receipt. It starts with PR-, PO-, RIS- or FR-."
+      title="Track a Request"
+      description="Enter the reference number from your receipt to see where it is now."
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void search(ref);
-        }}
-        noValidate
-        className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5"
-      >
-        <label htmlFor="track-ref" className="text-[14px] font-medium text-neutral-900">
-          Reference number
-        </label>
-        <div className="mt-2 flex gap-2">
-          <input
-            ref={inputRef}
-            id="track-ref"
-            placeholder="e.g. PR-2026-000214"
-            value={ref}
-            onChange={(e) => {
-              setRef(e.target.value);
-              if (error) setError(null);
+      <div className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+        <div className="flex min-w-0 flex-col gap-5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void search(ref);
             }}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "track-ref-error" : undefined}
-            className="h-11 min-w-0 flex-1 rounded-md border border-neutral-400 bg-white px-3.5 text-[14px] uppercase text-neutral-900 transition-colors placeholder:normal-case placeholder:text-neutral-500 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="group inline-flex h-11 shrink-0 items-center gap-2 rounded-md bg-neutral-900 px-4 text-[14px] font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+            noValidate
+            className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
           >
-            Track
-            {loading ? (
-              <Spinner size="sm" label="Searching" />
+            <label htmlFor="track-ref" className="block text-[14px] font-medium text-neutral-900">
+              Reference number
+            </label>
+            <div className="mt-1.5 flex gap-2">
+              <input
+                ref={inputRef}
+                id="track-ref"
+                placeholder="e.g. PR-2026-000214"
+                value={ref}
+                onChange={(e) => {
+                  setRef(e.target.value);
+                  if (error) setError(null);
+                }}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "track-ref-error" : "track-ref-helper"}
+                className="h-11 min-w-0 flex-1 rounded-[10px] border border-[#d4d5d2] bg-white px-3.5 font-['Geist_Mono',ui-monospace,monospace] text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif] placeholder:normal-case placeholder:text-[#6b707a] focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/[0.08] aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="group inline-flex h-11 shrink-0 items-center gap-2 rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+              >
+                Track
+                {loading ? (
+                  <Spinner size="sm" label="Searching" />
+                ) : (
+                  <ArrowRight className="h-[18px] w-[18px] transition-transform duration-150 ease-out group-hover:translate-x-[3px]" />
+                )}
+              </button>
+            </div>
+            {error ? (
+              <p id="track-ref-error" role="alert" className="mt-1.5 text-[13px] text-red-700">
+                {error}
+              </p>
             ) : (
-              <ArrowRight className="h-[18px] w-[18px] transition-transform duration-150 ease-out group-hover:translate-x-[3px]" />
+              <p id="track-ref-helper" className="mt-1.5 text-[13px] text-[#5b606b]">
+                It starts with PR-, PO-, RIS- or FR-, and is printed on your receipt.
+              </p>
             )}
-          </button>
+          </form>
+
+          {loading && <ResultSkeleton />}
+
+          {!loading && result && (
+            <motion.div
+              initial={reduce ? false : { opacity: 0, transform: "translateY(8px)" }}
+              animate={{ opacity: 1, transform: "translateY(0px)" }}
+              transition={{ duration: 0.26, ease: EASE_OUT }}
+            >
+              <TrackResultCard result={result} />
+            </motion.div>
+          )}
+
+          {!loading && !result && (
+            // Holds the space the result will take, so the page is not a lone
+            // field on an empty canvas at desktop widths.
+            <div className="rounded-[14px] border border-dashed border-[#d4d5d2] px-6 py-10 text-center">
+              <p className="text-[15px] font-medium text-neutral-900">The request's progress shows here</p>
+              <p className="mt-1.5 text-[14px] text-[#5b606b]">
+                Type a reference number above, or pick one you filed on this computer.
+              </p>
+            </div>
+          )}
         </div>
-        {error && (
-          <p id="track-ref-error" role="alert" className="mt-1.5 text-[12.5px] text-red-700">
-            {error}
-          </p>
-        )}
-      </form>
 
-      {loading && <ResultSkeleton />}
-
-      {!loading && result && (
-        <motion.div
-          initial={reduce ? false : { opacity: 0, transform: "translateY(8px)" }}
-          animate={{ opacity: 1, transform: "translateY(0px)" }}
-          transition={{ duration: 0.26, ease: EASE_OUT }}
-        >
-          <TrackResultCard result={result} />
-        </motion.div>
-      )}
+        <FiledOnThisComputer filed={filed} />
+      </div>
     </PortalPage>
   );
 }
@@ -144,7 +174,7 @@ function TrackResultCard({ result }: { result: TrackResult }) {
   return (
     <article
       aria-labelledby="track-result-title"
-      className="mt-4 rounded-md border border-neutral-200 bg-white p-5 sm:p-6"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
     >
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
@@ -326,7 +356,7 @@ function ResultSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className="mt-4 rounded-md border border-neutral-200 bg-white p-5 sm:p-6"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
     >
       <Skeleton className="h-5 w-64 max-w-full" />
       <Skeleton className="mt-2 h-4 w-40" />

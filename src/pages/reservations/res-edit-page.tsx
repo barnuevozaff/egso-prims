@@ -52,7 +52,7 @@ export function ResEditPage() {
       ) : (
         <ResForm
           initial={r}
-          submitLabel="Save changes"
+          submitLabel="Save Changes"
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/reservations")}

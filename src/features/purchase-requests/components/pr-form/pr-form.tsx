@@ -171,6 +171,7 @@ export function PRForm({ initial, submitLabel, submitting, onSubmit, onCancel }:
 
       <SummaryPanel
         form={form}
+        isNew={!initial}
         submitLabel={submitLabel}
         submitting={submitting}
         onCancel={onCancel}
@@ -297,7 +298,7 @@ function ItemsSection({ form }: { form: FormApi }) {
                 aria-label={`Item ${i + 1} quantity`}
                 placeholder="Qty"
                 invalid={!!rowErr?.quantity}
-                className={cn(CELL, MONO)}
+                className={cn(CELL, MONO, "placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif]")}
                 {...register(`items.${i}.quantity`, { valueAsNumber: true })}
               />
               <Controller
@@ -381,11 +382,14 @@ function ItemsSection({ form }: { form: FormApi }) {
 
 function SummaryPanel({
   form,
+  isNew,
   submitLabel,
   submitting,
   onCancel,
 }: {
   form: FormApi;
+  /** A new request gets the note on what happens next; an edit does not. */
+  isNew: boolean;
   submitLabel: string;
   submitting: boolean;
   onCancel: () => void;
@@ -422,7 +426,13 @@ function SummaryPanel({
       aria-label="Summary"
       className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 lg:sticky lg:top-6"
     >
-      <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>
+        {/* How far along, at a glance; the list below says what is left. */}
+        <span className={cn("text-[13px] text-[#5b606b]", MONO)}>
+          {checks.filter((c) => c.done).length} of {checks.length}
+        </span>
+      </div>
       <p className="mt-4 text-[13px] text-[#5b606b]">Estimated total</p>
       <p className={cn("mt-1 text-[28px] font-semibold leading-tight tracking-[-0.01em]", MONO)}>
         {peso(total)}
@@ -435,7 +445,7 @@ function SummaryPanel({
         {checks.map((c) => (
           <li key={c.label} className="flex items-center gap-2.5 text-[14px]">
             {c.done ? (
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-neutral-900 text-white">
+              <span className="tick-in grid h-5 w-5 shrink-0 place-items-center rounded-full bg-neutral-900 text-white">
                 <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
               </span>
             ) : (
@@ -475,6 +485,11 @@ function SummaryPanel({
       >
         Cancel
       </button>
+      {isNew && (
+        <p className="mt-3 text-[13px] leading-relaxed text-[#5b606b]">
+          You get a reference number right away. GSO reviews the request next.
+        </p>
+      )}
     </aside>
   );
 }

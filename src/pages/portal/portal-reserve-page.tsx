@@ -40,7 +40,7 @@ export function PortalReservePage() {
         />
       ) : (
         <ResForm
-          submitLabel="Submit reservation"
+          submitLabel="Submit Reservation"
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/portal")}

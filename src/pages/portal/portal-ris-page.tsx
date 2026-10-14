@@ -42,7 +42,7 @@ export function PortalRISPage() {
         // Portal filers have no approved PR to point at; they identify themselves.
         <RISForm
           variant="portal"
-          submitLabel="Submit requisition"
+          submitLabel="Submit Requisition"
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/portal")}

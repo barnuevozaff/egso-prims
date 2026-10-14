@@ -241,7 +241,7 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
                 placeholder="e.g. 0917 220 4455"
                 invalid={!!err.contactNumber}
                 aria-describedby={err.contactNumber ? "res-contact-error" : undefined}
-                className={cn(FIELD, MONO, "text-[14px]")}
+                className={cn(FIELD, MONO, "text-[14px]", "placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif]")}
                 {...form.register("contactNumber")}
               />
             </LabelledField>
@@ -738,20 +738,33 @@ function SummaryPanel({
       aria-label="Summary"
       className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 lg:sticky lg:top-6"
     >
-      <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>
+        {/* How far along, at a glance; the list below says what is left. */}
+        <span className={cn("text-[13px] text-[#5b606b]", MONO)}>
+          {checks.filter((c) => c.done).length} of {checks.length}
+        </span>
+      </div>
 
       <p className="mt-4 text-[13px] text-[#5b606b]">Facility</p>
-      <p className={cn("mt-1 break-words text-[17px] font-semibold tracking-[-0.01em]", !facility && "text-[#5b606b]")}>
-        {facility || "Type the facility"}
-      </p>
+      {/* Still to fill reads as a quiet prompt, not as an answer. */}
+      {facility ? (
+        <p className="mt-1 break-words text-[17px] font-semibold tracking-[-0.01em]">{facility}</p>
+      ) : (
+        <p className="mt-1 text-[15px] text-[#5b606b]">No facility yet</p>
+      )}
 
       <p className="mt-4 text-[13px] text-[#5b606b]">When</p>
       <p className="mt-1 text-[15px] font-medium text-neutral-900">
         {v.date ? format(v.date, "EEEE, d MMMM yyyy") : "Pick a date"}
       </p>
-      <p className={cn("mt-0.5 text-[15px] font-semibold", MONO, !hasTime && "text-[#5b606b]")}>
-        {hasTime ? `${formatTime(v.startTime!)} – ${formatTime(v.endTime!)}` : "Pick a time"}
-      </p>
+      {hasTime ? (
+        <p className={cn("mt-0.5 text-[15px] font-semibold", MONO)}>
+          {`${formatTime(v.startTime!)} – ${formatTime(v.endTime!)}`}
+        </p>
+      ) : (
+        <p className="mt-0.5 text-[15px] text-[#5b606b]">No time picked yet</p>
+      )}
       {hasTime && (
         <p className="mt-0.5 text-[13px] text-[#5b606b]">{hours === 1 ? "1 hour" : `${hours} hours`}</p>
       )}
@@ -778,7 +791,7 @@ function SummaryPanel({
         {checks.map((c) => (
           <li key={c.label} className="flex items-center gap-2.5 text-[14px]">
             {c.done ? (
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-neutral-900 text-white">
+              <span className="tick-in grid h-5 w-5 shrink-0 place-items-center rounded-full bg-neutral-900 text-white">
                 <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
               </span>
             ) : (

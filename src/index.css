@@ -600,3 +600,27 @@ html[data-portal] body {
     print-color-adjust: exact;
   }
 }
+
+/*
+ * A checklist tick arrives with a small pop (polish pass, approved 15 Oct
+ * 2026), so finishing a part of a form is felt as well as seen. Nothing moves
+ * for a visitor who asked their system for reduced motion.
+ */
+@keyframes tick-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.tick-in {
+  animation: tick-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tick-in {
+    animation: none;
+  }
+}

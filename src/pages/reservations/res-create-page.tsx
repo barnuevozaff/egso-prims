@@ -28,7 +28,7 @@ export function ResCreatePage() {
         description="Book a municipal facility and borrow event equipment."
       />
       <ResForm
-        submitLabel="Submit reservation"
+        submitLabel="Submit Reservation"
         submitting={submitting}
         onSubmit={submit}
         onCancel={() => navigate("/reservations")}

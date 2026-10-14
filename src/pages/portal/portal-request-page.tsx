@@ -38,7 +38,7 @@ export function PortalRequestPage() {
         />
       ) : (
         <PRForm
-          submitLabel="Submit Request"
+          submitLabel="Submit Purchase Request"
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/portal")}
