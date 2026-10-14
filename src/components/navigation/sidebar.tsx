@@ -2,7 +2,6 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { NotificationBadge } from "@/components/status/badges";
-import { OverlineLabel } from "@/components/typography/typography";
 
 /**
  * Sidebar system: a 240px rail on its own ground, ruled right, sticky full
@@ -30,7 +29,7 @@ export function Sidebar({
       className={cn(
         // `group` + data-collapsed drives the icon-only state of every child
         // through CSS (no prop-drilling, no child re-renders). Width animates.
-        "group sticky top-0 hidden h-screen w-rail shrink-0 flex-col overflow-hidden border-r border-neutral-200 bg-sidebar transition-[width] duration-200 ease-out data-[collapsed=true]:w-[68px] md:flex",
+        "group sticky top-0 hidden h-screen w-rail shrink-0 flex-col overflow-hidden border-r border-[#ececea] bg-[#fafaf9] transition-[width] duration-200 ease-out data-[collapsed=true]:w-[68px] md:flex",
         className,
       )}
     >
@@ -58,7 +57,7 @@ export function SidebarBrand({
       {logo ? (
         // Rendered at the mark's exact footprint; object-contain preserves the
         // seal's aspect ratio (never stretched/cropped/recolored).
-        <img src={logo} alt={title} className="h-7 w-7 shrink-0 rounded-lg object-contain" />
+        <img src={logo} alt={title} className="h-8 w-8 shrink-0 object-contain" />
       ) : (
         // Was bg-neutral-900 — the accent this system used before the seal
         // burgundy replaced it, left behind on the one tile that stands in for
@@ -67,9 +66,9 @@ export function SidebarBrand({
           <Icon className="h-4 w-4" />
         </div>
       )}
-      <div className="flex flex-col leading-tight group-data-[collapsed=true]:hidden">
-        <span className="text-[13px] font-semibold tracking-tight text-neutral-900">{title}</span>
-        {subtitle && <span className="text-[10px] text-neutral-500">{subtitle}</span>}
+      <div className="flex min-w-0 flex-col leading-tight group-data-[collapsed=true]:hidden">
+        <span className="truncate text-[14px] font-semibold tracking-[-0.01em] text-neutral-900">{title}</span>
+        {subtitle && <span className="truncate text-[12px] text-[#5b606b]">{subtitle}</span>}
       </div>
     </div>
   );
@@ -95,9 +94,11 @@ export function SidebarGroup({
       {label && (
         // neutral-600, not the component's neutral-500: the rail is a shade
         // deeper than the canvas, and 500 only reaches 4.13:1 against it.
-        <OverlineLabel className="px-2 pb-2 pt-1 group-data-[collapsed=true]:hidden">
+        // A plain small heading, not an uppercase overline. #6b707a keeps
+        // 4.6:1 on the rail's ground.
+        <div className="px-2.5 pb-1.5 pt-4 text-[11.5px] font-medium text-[#6b707a] group-data-[collapsed=true]:hidden">
           {label}
-        </OverlineLabel>
+        </div>
       )}
       <nav className="flex flex-col gap-0.5">{children}</nav>
     </div>
@@ -138,13 +139,14 @@ export function SidebarItem({
       aria-current={active ? "page" : undefined}
       aria-label={label}
       className={cn(
-        "flex w-full items-center gap-navgap rounded-lg px-2 py-nav text-[13px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) disabled:pointer-events-none disabled:opacity-50 group-data-[collapsed=true]:justify-center group-data-[collapsed=true]:gap-0",
+        "flex h-[34px] w-full items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) disabled:pointer-events-none disabled:opacity-50 group-data-[collapsed=true]:justify-center group-data-[collapsed=true]:gap-0",
+        // The page you are on is a small white card on the rail.
         active
-          ? "ui-accent-soft ui-accent-fg font-medium"
-          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+          ? "bg-white font-medium text-neutral-900 shadow-[0_0_0_1px_#e6e6e3,0_1px_2px_rgba(22,24,29,0.05)]"
+          : "text-[#4a4f59] hover:bg-[#f1f1ef] hover:text-neutral-900",
       )}
     >
-      <Icon className="h-navicon w-navicon shrink-0" />
+      <Icon className="h-4 w-4 shrink-0" />
       <span className="flex-1 truncate text-left group-data-[collapsed=true]:hidden">{label}</span>
       {dot && (
         <NotificationBadge
@@ -153,11 +155,10 @@ export function SidebarItem({
         />
       )}
       {badge && (
-        <NotificationBadge
-          count={badge.text}
-          color={badge.color}
-          className="group-data-[collapsed=true]:hidden"
-        />
+        // A count, in the mono face, quiet: the number is the news, not the colour.
+        <span className="rounded-md bg-[#ececea] px-1.5 py-px font-['Geist_Mono',ui-monospace,monospace] text-[11.5px] tabular-nums text-neutral-900 group-data-[collapsed=true]:hidden">
+          {badge.text}
+        </span>
       )}
       {trailing}
     </button>

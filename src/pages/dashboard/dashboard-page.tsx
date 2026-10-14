@@ -1,82 +1,47 @@
 import * as React from "react";
-import { formatDistanceToNow } from "date-fns";
-import type { ColumnDef } from "@tanstack/react-table";
-import {
-  Activity,
-  AlertTriangle,
-  Bell,
-  Boxes,
-  Calendar,
-  CalendarDays,
-  ClipboardCheck,
-  ClipboardList,
-  Clock,
-  FileText,
-  History,
-  Package,
-  Plus,
-  ShoppingCart,
-  Workflow,
-} from "lucide-react";
-import { format } from "date-fns";
+import { addDays, format, isSameMonth, parseISO } from "date-fns";
+import { ArrowRight, Check, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import {
-  ActivityTimeline,
-  Button,
-  CardCarousel,
-  Caption,
-  CurrencyDisplay,
-  DocumentNumber,
-  EmptyState,
-  EnterpriseTable,
-  InfoChip,
-  InformationCard,
-  MetricCard,
-  NotificationCard,
-  PageHeader,
-  PageTransition,
-  ProgressBar,
-  ScheduleCard,
-  StatusBadge,
-  SummaryCard,
-  TableCard,
-  toast,
-  type DocumentStatus,
-} from "@/components";
+import { PageTransition, Skeleton } from "@/components";
 import { listPurchaseRequests } from "@/features/purchase-requests/api";
 import {
-  departmentByCode,
-  prTotal,
   PENDING_PR_STATUSES,
+  prTotal,
   type PurchaseRequest,
 } from "@/features/purchase-requests/types";
+import { listPurchaseOrders } from "@/features/purchase-orders/api";
+import { poTotal, type PurchaseOrder } from "@/features/purchase-orders/types";
 import { listInventoryItems } from "@/features/inventory/api";
 import { stockStatusOf, type InventoryItem } from "@/features/inventory/types";
 import { useAuth } from "@/features/auth/auth-context";
-import { useNotifications } from "@/features/notifications/hooks";
-import { markAllNotificationsRead } from "@/features/notifications/api";
-import { notificationRoute } from "@/features/notifications/types";
-import { MODULE_ICON, moduleTone } from "@/features/notifications/module-icons";
 import { listReservations } from "@/features/reservations/api";
 import { facilityById, type Reservation } from "@/features/reservations/types";
-import { listAuditEntries } from "@/features/audit/api";
 import { countRows } from "@/lib/db";
-import type { AuditEntry } from "@/features/audit/types";
+import { formatPHP } from "@/lib/format";
 import { useRealtimeRefresh } from "@/features/shared/use-realtime";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { cn } from "@/lib/utils";
 
-/* ---------------- live data ---------------- */
+/**
+ * The admin's first screen, approved 15 Oct 2026 (canvas "Admin — Dashboard").
+ *
+ * It leads with what is waiting on the office, each row one click from the
+ * work, then four figures in pesos, the newest requests, and the facilities
+ * booked this week. The notification panel that used to sit here repeated the
+ * bell in the top bar and is gone; so are the six gradient summary cards,
+ * which restated counts shown elsewhere on the page.
+ */
+
+const MONO = "font-['Geist_Mono',ui-monospace,monospace]";
 
 interface DashboardData {
   prs: PurchaseRequest[];
-  poPending: number;
+  pos: PurchaseOrder[];
   risPending: number;
-  risIssued: number;
+  risReleased: number;
   items: InventoryItem[];
   reservations: Reservation[];
-  audit: AuditEntry[];
-  poCount: number;
 }
 
 function useDashboardData() {
@@ -85,41 +50,17 @@ function useDashboardData() {
 
   const load = React.useCallback(async () => {
     try {
-      /*
-       * Purchase orders and issue slips only ever reach this screen as four
-       * numbers, and the activity panel only ever shows the newest five
-       * entries. They were being loaded whole: every order and every slip in
-       * the office crossed the wire so that four tiles could print a count,
-       * and the entire audit trail — the fastest-growing table there is — so
-       * that five lines could be listed. The counts are counted by the
-       * database now and the trail is asked for five rows.
-       */
-      const [prs, poPending, poCount, risPending, risIssued, items, reservations, audit] =
-        await Promise.all([
-          listPurchaseRequests(),
-          countRows("purchase_orders", ["Pending Approval"]),
-          countRows("purchase_orders"),
-          countRows("ris_requests", ["Pending Approval"]),
-          countRows("ris_requests", ["Released", "Completed"]),
-          listInventoryItems(),
-          listReservations(),
-          listAuditEntries({ limit: DASHBOARD_ACTIVITY_LIMIT }),
-        ]);
-      setData({
-        prs,
-        poPending,
-        poCount,
-        risPending,
-        risIssued,
-        items,
-        reservations,
-        audit,
-      });
+      const [prs, pos, risPending, risReleased, items, reservations] = await Promise.all([
+        listPurchaseRequests(),
+        listPurchaseOrders(),
+        countRows("ris_requests", ["Pending Approval"]),
+        countRows("ris_requests", ["Released", "Completed"]),
+        listInventoryItems(),
+        listReservations(),
+      ]);
+      setData({ prs, pos, risPending, risReleased, items, reservations });
     } catch (e) {
-      // Without this the six fetches rejected into nothing: `data` stayed null,
-      // every tile read zero and every panel read empty, and the first screen
-      // after sign-in reported a quiet office instead of a failed load. Every
-      // other list in the system already says so; this one now does too.
+      // A failed load must not read as a quiet office.
       reportLoadFailure(e, "the dashboard");
     } finally {
       setLoading(false);
@@ -138,290 +79,361 @@ function useDashboardData() {
   return { data, loading };
 }
 
-/* ---------------- presentation mappers ---------------- */
-
-
-const moduleActivity: Record<string, { icon: React.ComponentType<{ className?: string }>; tone: string }> = {
-  "Purchase Requests": { icon: FileText, tone: "text-emerald-600 bg-emerald-50" },
-  "Purchase Orders": { icon: ShoppingCart, tone: "text-blue-600 bg-blue-50" },
-  RIS: { icon: ClipboardList, tone: "text-violet-600 bg-violet-50" },
-  Inventory: { icon: Boxes, tone: "text-amber-600 bg-amber-50" },
-  Reservations: { icon: CalendarDays, tone: "text-sky-600 bg-sky-50" },
-  Authentication: { icon: History, tone: "text-neutral-600 bg-neutral-100" },
-  Reports: { icon: Activity, tone: "text-blue-600 bg-blue-50" },
-  System: { icon: Workflow, tone: "text-orange-600 bg-orange-50" },
+const greeting = (d: Date) => {
+  const h = d.getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 };
 
-/** How many notifications the dashboard panel shows before deferring to the drawer. */
-const DASHBOARD_NOTIFICATION_LIMIT = 5;
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-/** How many audit entries the activity panel shows — and asks the database for. */
-const DASHBOARD_ACTIVITY_LIMIT = 5;
+/** "9:00 AM", from the stored "09:00". */
+const clock = (hhmm: string) => format(parseISO(`2000-01-01T${hhmm}`), "h:mm a");
 
-/* ---------------- Page ---------------- */
+function Panel({
+  title,
+  aside,
+  children,
+  className,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const id = React.useId();
+  return (
+    <section
+      aria-labelledby={id}
+      className={cn("overflow-hidden rounded-[14px] border border-[#e6e6e3] bg-white", className)}
+    >
+      <div className="flex items-baseline justify-between gap-3 px-5 pb-3 pt-4">
+        <h2 id={id} className="text-[15px] font-semibold text-neutral-900">
+          {title}
+        </h2>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function TaskRow({
+  count,
+  title,
+  detail,
+  onOpen,
+}: {
+  count: number;
+  title: string;
+  detail: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-4 border-t border-[#f0f0ee] px-5 py-3.5 text-left transition-colors hover:bg-[#f7f7f6] focus-visible:bg-[#f7f7f6] focus-visible:outline-none"
+    >
+      <span className={cn("w-11 text-[22px] font-semibold tracking-[-0.02em]", MONO)}>{count}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14.5px] font-medium text-neutral-900">{title}</span>
+        <span className="mt-0.5 block truncate text-[13px] text-[#5b606b]">{detail}</span>
+      </span>
+      <ArrowRight
+        aria-hidden="true"
+        className="h-[18px] w-[18px] text-[#8a8f98] transition-transform duration-150 ease-out group-hover:translate-x-[3px] group-hover:text-neutral-900"
+      />
+    </button>
+  );
+}
+
+function Figure({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="border-b border-[#f0f0ee] px-5 py-[18px] sm:border-b-0 sm:border-r last:border-0">
+      <p className="text-[13px] text-[#5b606b]">{label}</p>
+      <p className={cn("mt-2 text-[24px] font-semibold tracking-[-0.02em] text-neutral-900", MONO)}>
+        {value}
+      </p>
+      <p className="mt-1 text-[12.5px] text-[#5b606b]">{note}</p>
+    </div>
+  );
+}
+
+function PRStatus({ status }: { status: PurchaseRequest["status"] }) {
+  const done = status === "Approved" || status === "Completed";
+  const stopped = status === "Rejected" || status === "Cancelled";
+  return (
+    <span
+      className={cn(
+        "inline-flex w-[104px] shrink-0 items-center gap-1.5 text-[12.5px]",
+        done ? "text-green-700" : stopped ? "text-red-700" : "text-[#4a4f59]",
+      )}
+    >
+      {done ? (
+        <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "h-[7px] w-[7px] rounded-full",
+            stopped ? "bg-red-600" : "shadow-[inset_0_0_0_2px_#16181d]",
+          )}
+        />
+      )}
+      {status}
+    </span>
+  );
+}
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, loading } = useDashboardData();
-  const today = format(new Date(), "yyyy-MM-dd");
+  const now = new Date();
 
-  const {
-    data: notifications,
-    loading: notificationsLoading,
-    refresh: refreshNotifications,
-    unreadCount,
-  } = useNotifications({ limit: DASHBOARD_NOTIFICATION_LIMIT });
-
-  const markAllRead = React.useCallback(async () => {
-    try {
-      await markAllNotificationsRead();
-      await refreshNotifications();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to mark notifications read.");
-    }
-  }, [refreshNotifications]);
-
-  const pendingPRs = data?.prs.filter((p) => PENDING_PR_STATUSES.includes(p.status)).length ?? 0;
-  const lowStock =
-    data?.items.filter((it) => stockStatusOf(it) !== "Available").length ?? 0;
-  const totalUnits = data?.items.reduce((s, it) => s + it.onHand, 0) ?? 0;
-
-  /*
-   * Each tile counts what is standing on the desk right now; none of them
-   * compares today with anything, so none of them has a direction. They used
-   * to claim one anyway, and the claim contradicted itself: "awaiting
-   * approval" was printed in green under Purchase Orders and in red under the
-   * Requisition and Issue Slips directly beside it. The line under the value
-   * is a caption now, and the colour is spent where it means something.
-   */
-  const stats = [
-    { label: "Pending Purchase Requests", value: pendingPRs, icon: FileText, trend: { label: "awaiting review", direction: "none" as const } },
-    { label: "Pending Purchase Orders", value: data?.poPending ?? 0, icon: ShoppingCart, trend: { label: "awaiting approval", direction: "none" as const } },
-    { label: "Pending Requisition and Issue Slips", value: data?.risPending ?? 0, icon: ClipboardList, trend: { label: "awaiting approval", direction: "none" as const } },
-    { label: "Inventory Alerts", value: lowStock, icon: AlertTriangle, trend: { label: "low, critical & out of stock", direction: "none" as const } },
-  ];
-
-  const prColumns = React.useMemo<ColumnDef<PurchaseRequest, unknown>[]>(
-    () => [
-      {
-        header: "PR Number",
-        accessorKey: "prNumber",
-        cell: ({ row }) => (
-          <DocumentNumber
-            value={row.original.prNumber}
-            chipColor={departmentByCode(row.original.departmentCode).color}
-          />
-        ),
-      },
-      { header: "Department", accessorKey: "departmentCode", meta: { className: "text-neutral-600" } },
-      { header: "Requester", accessorKey: "requester", meta: { className: "text-neutral-600" } },
-      {
-        header: "Purpose",
-        accessorKey: "purpose",
-        cell: ({ getValue }) => (
-          <span className="block max-w-[240px] truncate">{getValue<string>()}</span>
-        ),
-        meta: { className: "text-neutral-600" },
-      },
-      {
-        header: "Amount",
-        id: "amount",
-        accessorFn: (pr) => prTotal(pr),
-        cell: ({ row }) => <CurrencyDisplay amount={prTotal(row.original)} />,
-      },
-      {
-        header: "Status",
-        accessorKey: "status",
-        cell: ({ getValue }) => <StatusBadge status={getValue<DocumentStatus>()} />,
-      },
-      {
-        header: "Created",
-        accessorKey: "createdAt",
-        cell: ({ getValue }) => (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-500">
-            <Clock className="h-3.5 w-3.5" />
-            {formatDistanceToNow(new Date(getValue<string>()), { addSuffix: true })}
-          </span>
-        ),
-      },
-    ],
-    [],
+  const pendingPRs = (data?.prs ?? []).filter((p) => PENDING_PR_STATUSES.includes(p.status));
+  const oldestPending = pendingPRs.reduce<string | null>(
+    (min, p) => (min === null || p.createdAt < min ? p.createdAt : min),
+    null,
   );
+  const pendingOffices = [...new Set(pendingPRs.map((p) => p.departmentCode))].slice(0, 3);
+  const pendingPOs = (data?.pos ?? []).filter((p) => p.status === "Pending Approval");
+  const openPOs = (data?.pos ?? []).filter((p) => !["Completed", "Cancelled"].includes(p.status));
+  const pendingRes = (data?.reservations ?? [])
+    .filter((r) => r.status === "Pending")
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
-  const operationalSummary = [
-    { name: "Inventory Summary", meta: "Live stock position", gradient: "from-blue-100 to-cyan-100", icon: Package, stat: `${totalUnits.toLocaleString()} units` },
-    { name: "Recent Purchase Orders", meta: "Across all suppliers", gradient: "from-violet-100 to-fuchsia-100", icon: ShoppingCart, stat: `${data?.poCount ?? 0} orders` },
-    { name: "Recent RIS", meta: "Released & completed", gradient: "from-emerald-100 to-lime-100", icon: ClipboardList, stat: `${data?.risIssued ?? 0} issued` },
-    { name: "Upcoming Reservations", meta: "Pending & approved", gradient: "from-sky-100 to-indigo-100", icon: CalendarDays, stat: `${data?.reservations.filter((r) => ["Pending", "Approved"].includes(r.status)).length ?? 0} scheduled` },
-    { name: "Low Stock Items", meta: "Requires attention", gradient: "from-rose-100 to-orange-100", icon: AlertTriangle, stat: `${lowStock} items` },
-    { name: "Pending Approvals", meta: "Across departments", gradient: "from-amber-100 to-yellow-100", icon: ClipboardCheck, stat: `${pendingPRs + (data?.poPending ?? 0) + (data?.risPending ?? 0)} pending` },
-  ];
+  const tasks = [
+    pendingPRs.length > 0 && {
+      count: pendingPRs.length,
+      title: `${plural(pendingPRs.length, "Purchase request", "Purchase requests")} awaiting review`,
+      detail: [
+        oldestPending && `Oldest filed ${format(parseISO(oldestPending), "d MMM")}`,
+        pendingOffices.join(", "),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      to: "/purchase-requests",
+    },
+    pendingPOs.length > 0 && {
+      count: pendingPOs.length,
+      title: `${plural(pendingPOs.length, "Purchase order", "Purchase orders")} awaiting approval`,
+      detail: `${formatPHP(pendingPOs.reduce((s, p) => s + poTotal(p), 0))} in total`,
+      to: "/purchase-orders",
+    },
+    (data?.risPending ?? 0) > 0 && {
+      count: data!.risPending,
+      title: `${plural(data!.risPending, "Requisition slip", "Requisition slips")} to approve`,
+      detail: "Pending approval",
+      to: "/ris",
+    },
+    pendingRes.length > 0 && {
+      count: pendingRes.length,
+      title: `${plural(pendingRes.length, "Facility reservation", "Facility reservations")} to confirm`,
+      detail: `Next: ${format(parseISO(pendingRes[0].date), "EEE d MMM")}, ${clock(pendingRes[0].startTime)}`,
+      to: "/reservations",
+    },
+  ].filter(Boolean) as { count: number; title: string; detail: string; to: string }[];
 
-  /**
-   * Stock on hand measured against the point the office reorders at.
-   *
-   * The bar used to fill against `reorderLevel * 3`. There is no capacity or
-   * maximum-stock column in the schema, so that ×3 was not a figure the office
-   * keeps — it was picked to make a bar move, and it rendered as a percentage
-   * of nothing. `reorderLevel` is a real number a supply officer sets and can
-   * state, so the bar now fills towards it and the caption says so. Full means
-   * "at or above the reorder point", not "as much as we could hold".
-   */
-  const inventoryHealth = (data?.items ?? []).slice(0, 5).map((it) => {
-    const status = stockStatusOf(it);
-    return {
-      name: it.name,
-      onHand: it.onHand,
-      reorderLevel: it.reorderLevel,
-      unit: it.unit,
-      pct: Math.min(100, Math.round((it.onHand / Math.max(1, it.reorderLevel)) * 100)),
-      tone: status === "Available" ? ("success" as const) : status === "Low Stock" ? ("warning" as const) : ("danger" as const),
-    };
-  });
+  const thisMonth = (data?.prs ?? []).filter((p) => isSameMonth(parseISO(p.createdAt), now));
+  const stockValue = (data?.items ?? []).reduce((s, it) => s + it.onHand * it.unitPrice, 0);
+  const lowStock = (data?.items ?? []).filter((it) => stockStatusOf(it) !== "Available").length;
 
-  const todaysReservations = (data?.reservations ?? [])
-    .filter((r) => r.date === today && !["Cancelled", "Rejected"].includes(r.status))
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
-    .slice(0, 4)
-    .map((r) => {
-      const facility = facilityById(r.facilityId);
-      return {
-        time: r.startTime,
-        title: `${facility?.name ?? "Facility"} — ${r.purpose}`,
-        meta: departmentByCode(r.departmentCode).code,
-        tone: facility?.color ?? "bg-blue-500",
-      };
-    });
-
-  const recentActivity = (data?.audit ?? []).slice(0, DASHBOARD_ACTIVITY_LIMIT).map((e) => {
-    const pres = moduleActivity[e.module] ?? moduleActivity.System;
-    return {
-      icon: pres.icon,
-      tone: pres.tone,
-      text: `${e.action}${e.documentNumber ? ` · ${e.documentNumber}` : ""} — ${e.user}`,
-      time: formatDistanceToNow(new Date(e.timestamp), { addSuffix: true }),
-    };
-  });
+  const weekDays = Array.from({ length: 7 }, (_, i) => format(addDays(now, i), "yyyy-MM-dd"));
+  const thisWeek = weekDays
+    .map((day) => ({
+      day,
+      bookings: (data?.reservations ?? [])
+        .filter((r) => r.date === day && !["Cancelled", "Rejected"].includes(r.status))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    }))
+    .filter((d) => d.bookings.length > 0)
+    .slice(0, 4);
 
   return (
-    <PageTransition className="space-y-6">
-      <PageHeader
-        title={`Welcome back, ${user?.name ?? "Administrator"}`}
-        description="Monitor procurement requests, inventory, issuances, and facility reservations across all municipal departments."
-        actions={
-          <>
-            <InfoChip icon={Calendar} className="hidden sm:flex">
-              {format(new Date(), "d MMMM yyyy")}
-            </InfoChip>
-            <Button onClick={() => navigate("/purchase-requests/new")}>
-              <Plus />
-              New Purchase Request
-            </Button>
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((s) => (
-          <MetricCard key={s.label} {...s} loading={loading} />
-        ))}
+    <PageTransition className="mx-auto w-full max-w-[1180px] space-y-5 pb-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[13px] text-[#5b606b]">{format(now, "EEEE, d MMMM yyyy")}</p>
+          <h1 className="mt-1.5 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-neutral-900 sm:text-[30px]">
+            {greeting(now)}, {user?.name ?? "Administrator"}
+          </h1>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/purchase-requests/new")}
+          className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-neutral-900 px-4 text-[14px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
+        >
+          <Plus aria-hidden="true" className="h-4 w-4" />
+          New purchase request
+        </button>
       </div>
 
-      <TableCard
-        title="Recent Purchase Requests"
-        action={{ label: "View All", onClick: () => navigate("/purchase-requests") }}
+      <Panel
+        title="Needs your attention"
+        aside={
+          !loading && (
+            <span className="text-[13px] text-[#5b606b]">
+              {tasks.length === 0
+                ? "All clear"
+                : `${tasks.reduce((s, t) => s + t.count, 0)} ${plural(tasks.reduce((s, t) => s + t.count, 0), "item", "items")}`}
+            </span>
+          )
+        }
       >
-        <EnterpriseTable
-          columns={prColumns}
-          data={(data?.prs ?? []).slice(0, 6)}
-          loading={loading}
-          skeletonRows={6}
-          onRowClick={(pr) => navigate(`/purchase-requests/${pr.id}`)}
-        />
-      </TableCard>
-
-      <CardCarousel title="Operational Summary">
-        {operationalSummary.map((card) => (
-          <SummaryCard key={card.name} {...card} />
-        ))}
-      </CardCarousel>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <InformationCard
-          icon={Boxes}
-          title="Inventory Health"
-          action={{ label: "View", onClick: () => navigate("/inventory") }}
-        >
-          <Caption className="mb-3 block">On hand against reorder point</Caption>
-          <ul className="space-y-3">
-            {inventoryHealth.map((item) => (
-              <li key={item.name}>
-                <div className="flex items-center justify-between gap-3 text-[12.5px]">
-                  <span className="truncate text-neutral-700">{item.name}</span>
-                  <span className="shrink-0 tabular-nums text-neutral-500">
-                    {item.onHand.toLocaleString()} / {item.reorderLevel.toLocaleString()} {item.unit}
-                  </span>
-                </div>
-                <ProgressBar value={item.pct} tone={item.tone} className="mt-1.5" />
-              </li>
+        {loading ? (
+          <div className="space-y-3 border-t border-[#f0f0ee] px-5 py-4">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-10 w-full" />
             ))}
-          </ul>
-        </InformationCard>
+          </div>
+        ) : tasks.length === 0 ? (
+          <p className="border-t border-[#f0f0ee] px-5 py-5 text-[14px] text-[#5b606b]">
+            Nothing is waiting on the office. New requests appear here as they come in.
+          </p>
+        ) : (
+          tasks.map((t) => (
+            <TaskRow key={t.to} count={t.count} title={t.title} detail={t.detail} onOpen={() => navigate(t.to)} />
+          ))
+        )}
+      </Panel>
 
-        <ScheduleCard meta="Today" events={todaysReservations} />
+      <section
+        aria-label="Key figures"
+        className="grid overflow-hidden rounded-[14px] border border-[#e6e6e3] bg-white sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {loading ? (
+          [0, 1, 2, 3].map((i) => (
+            <div key={i} className="px-5 py-[18px]">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="mt-3 h-7 w-24" />
+            </div>
+          ))
+        ) : (
+          <>
+            <Figure
+              label="Requested this month"
+              value={formatPHP(thisMonth.reduce((s, p) => s + prTotal(p), 0))}
+              note={`${thisMonth.length} ${plural(thisMonth.length, "purchase request", "purchase requests")}`}
+            />
+            <Figure
+              label="Open purchase orders"
+              value={formatPHP(openPOs.reduce((s, p) => s + poTotal(p), 0))}
+              note={`${openPOs.length} ${plural(openPOs.length, "order", "orders")}`}
+            />
+            <Figure
+              label="Stock value"
+              value={formatPHP(stockValue)}
+              note={`${data?.items.length ?? 0} items · ${lowStock === 0 ? "none running low" : `${lowStock} running low`}`}
+            />
+            <Figure
+              label="Slips released"
+              value={String(data?.risReleased ?? 0)}
+              note="Requisition and issue slips"
+            />
+          </>
+        )}
+      </section>
 
-        <InformationCard
-          icon={Activity}
-          title="Recent Activity"
-          action={{ label: "Audit Trail", onClick: () => navigate("/audit") }}
-        >
-          <ActivityTimeline items={recentActivity} />
-        </InformationCard>
-
-        <InformationCard
-          icon={Bell}
-          title="System Notifications"
-          action={
-            unreadCount > 0
-              ? { label: "Mark all read", onClick: () => void markAllRead() }
-              : undefined
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <Panel
+          title="Latest purchase requests"
+          aside={
+            <button
+              type="button"
+              onClick={() => navigate("/purchase-requests")}
+              className="rounded text-[13px] text-[#5b606b] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+            >
+              View all
+            </button>
           }
         >
-          {notifications.length === 0 ? (
-            <EmptyState
-              icon={Bell}
-              title={notificationsLoading ? "Loading notifications…" : "Nothing to review"}
-              description={
-                notificationsLoading
-                  ? undefined
-                  : "Notifications appear here as requests move through approval."
-              }
-            />
+          {loading ? (
+            <div className="space-y-3 border-t border-[#f0f0ee] px-5 py-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-9 w-full" />
+              ))}
+            </div>
+          ) : (data?.prs.length ?? 0) === 0 ? (
+            <p className="border-t border-[#f0f0ee] px-5 py-5 text-[14px] text-[#5b606b]">
+              No purchase requests yet.
+            </p>
           ) : (
-            <ul className="space-y-3">
-              {notifications.map((n) => {
-                const route = notificationRoute(n);
-                return (
-                  <li key={n.id}>
-                    <NotificationCard
-                      icon={MODULE_ICON[n.module] ?? Bell}
-                      tone={moduleTone(n.module)}
-                      title={n.title}
-                      body={n.description}
-                      time={formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                      unread={!n.isRead}
-                      onClick={route ? () => navigate(route) : undefined}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
+            data!.prs.slice(0, 5).map((pr) => (
+              <button
+                key={pr.id}
+                type="button"
+                onClick={() => navigate(`/purchase-requests/${pr.id}`)}
+                className="flex w-full items-center gap-3 border-t border-[#f0f0ee] px-5 py-3 text-left transition-colors hover:bg-[#fafaf9] focus-visible:bg-[#fafaf9] focus-visible:outline-none"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block text-[12.5px] font-medium text-neutral-900", MONO)}>
+                    {pr.prNumber}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[13.5px] text-[#4a4f59]">
+                    {pr.purpose} · {pr.requester}
+                  </span>
+                </span>
+                <span className={cn("shrink-0 text-[13.5px] text-neutral-900", MONO)}>
+                  {formatPHP(prTotal(pr))}
+                </span>
+                <PRStatus status={pr.status} />
+              </button>
+            ))
           )}
-        </InformationCard>
-      </div>
+        </Panel>
 
-      <div className="h-4" />
+        <Panel
+          title="Facilities this week"
+          aside={
+            <button
+              type="button"
+              onClick={() => navigate("/reservations")}
+              className="rounded text-[13px] text-[#5b606b] hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
+            >
+              Calendar
+            </button>
+          }
+        >
+          {loading ? (
+            <div className="space-y-3 border-t border-[#f0f0ee] px-5 py-4">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-9 w-full" />
+              ))}
+            </div>
+          ) : thisWeek.length === 0 ? (
+            <p className="border-t border-[#f0f0ee] px-5 py-5 text-[14px] text-[#5b606b]">
+              No facility is booked in the next seven days.
+            </p>
+          ) : (
+            thisWeek.map(({ day, bookings }) => (
+              <div key={day} className="flex gap-4 border-t border-[#f0f0ee] px-5 py-3">
+                <div className="w-11 shrink-0 text-center">
+                  <div className="text-[11.5px] uppercase text-[#5b606b]">
+                    {format(parseISO(day), "EEE")}
+                  </div>
+                  <div className={cn("text-[18px] font-semibold text-neutral-900", MONO)}>
+                    {format(parseISO(day), "d")}
+                  </div>
+                </div>
+                <ul className="min-w-0 flex-1 space-y-2">
+                  {bookings.map((r) => (
+                    <li key={r.id}>
+                      <div className="truncate text-[14px] font-medium text-neutral-900">
+                        {facilityById(r.facilityId)?.name ?? "Facility"}
+                      </div>
+                      <div className="mt-0.5 truncate text-[13px] text-[#5b606b]">
+                        {clock(r.startTime)}–{clock(r.endTime)} · {r.departmentCode} ·{" "}
+                        {r.status === "Pending" ? "Waiting for you" : r.status}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </Panel>
+      </div>
     </PageTransition>
   );
 }

@@ -1,20 +1,16 @@
 import * as React from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Archive,
   BarChart3,
   Building2,
   CalendarDays,
-  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   Droplets,
   FileCheck2,
   FileText,
-  Files,
   Fuel,
-  Gauge,
   History,
   LayoutDashboard,
   LogOut,
@@ -48,7 +44,6 @@ import { useNotifications } from "@/features/notifications/hooks";
 import { NotificationDrawer } from "@/features/notifications/components/notification-drawer";
 import { useAppearanceSync, useBranding } from "@/features/config/use-appearance";
 import { useNavCounts, type NavCounts } from "@/features/shared/use-nav-counts";
-import { SIDEBAR_GROUPS_KEY } from "@/layouts/sidebar-groups";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 interface ModuleNavItem {
@@ -79,10 +74,10 @@ const inventoryItem: ModuleNavItem = {
 };
 // Slips issue from stock, so the RIS sits beside Inventory rather than inside
 // Procurement: request → order → stock → issue, top to bottom.
-const risItem: ModuleNavItem = { icon: ClipboardList, label: "Requisition & Issue Slips", to: "/ris" };
+const risItem: ModuleNavItem = { icon: ClipboardList, label: "Requisition & issue slips", to: "/ris" };
 const reservationItem: ModuleNavItem = {
   icon: CalendarDays,
-  label: "Facility Reservations",
+  label: "Facility reservations",
   to: "/reservations",
   countKey: "pendingReservations",
   badgeColor: "green",
@@ -91,7 +86,7 @@ const reservationItem: ModuleNavItem = {
 // vending and the like. "Ordinance Violation Receipt" is the usual LGU name.
 const violationItem: ModuleNavItem = {
   icon: ShieldAlert,
-  label: "Ordinance Violations",
+  label: "Ordinance violations",
   to: "/violations",
 };
 const reportsItem: ModuleNavItem = { icon: BarChart3, label: "Reports", to: "/reports" };
@@ -100,35 +95,33 @@ const reportsItem: ModuleNavItem = { icon: BarChart3, label: "Reports", to: "/re
 const procurementChildren: ModuleNavItem[] = [
   {
     icon: FileText,
-    label: "Purchase Requests",
+    label: "Purchase requests",
     to: "/purchase-requests",
     countKey: "pendingPRs",
     badgeColor: "blue",
   },
   {
     icon: ShoppingCart,
-    label: "Purchase Orders",
+    label: "Purchase orders",
     to: "/purchase-orders",
     countKey: "pendingPOs",
-    countAsDot: true,
   },
 ];
 const utilitiesChildren: ModuleNavItem[] = [
-  { icon: Zap, label: "Energy Consumption", to: "/energy" },
-  { icon: Droplets, label: "Water Consumption", to: "/water" },
-  { icon: Fuel, label: "Fuel Consumption", to: "/fuel" },
+  { icon: Zap, label: "Energy", to: "/energy" },
+  { icon: Droplets, label: "Water", to: "/water" },
+  { icon: Fuel, label: "Fuel", to: "/fuel" },
 ];
 // The two National Archives forms the office files. Each is named for what it
 // is rather than standing in for the whole module.
 const recordsChildren: ModuleNavItem[] = [
-  { icon: ScrollText, label: "Records Disposition Schedule", to: "/records" },
-  { icon: ClipboardCheck, label: "Records Inventory and Appraisal", to: "/records/inventory" },
-  { icon: FileCheck2, label: "Authority to Dispose of Records", to: "/records/disposal" },
+  { icon: ScrollText, label: "Disposition schedule", to: "/records" },
+  { icon: ClipboardCheck, label: "Inventory and appraisal", to: "/records/inventory" },
+  { icon: FileCheck2, label: "Authority to dispose", to: "/records/disposal" },
 ];
 
-/* ---- Collapsible group state (persisted until the next sign-in; default closed) ---- */
+/* ---- Rail width (icon-only or full), persisted on this computer ---- */
 
-type GroupKey = "procurement" | "utilities" | "records";
 const SIDEBAR_COLLAPSED_KEY = "gso-prims.sidebar-collapsed";
 
 /** Last persisted collapsed state (default expanded). */
@@ -140,112 +133,30 @@ function readSidebarCollapsed(): boolean {
   }
 }
 
-function readGroups(pathname: string): Record<GroupKey, boolean> {
-  // Closed, except the group holding the page being opened, so arriving on a
-  // link such as /fuel never leaves the current page hidden inside a shut group.
-  const fallback = {
-    procurement: procurementChildren.some((c) => isActive(pathname, c.to)),
-    utilities: utilitiesChildren.some((c) => isActive(pathname, c.to)),
-    records: recordsChildren.some((c) => isActive(pathname, c.to)),
-  };
-  try {
-    const raw = localStorage.getItem(SIDEBAR_GROUPS_KEY);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<Record<GroupKey, boolean>>) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function useSidebarGroups(pathname: string) {
-  const [expanded, setExpanded] = React.useState<Record<GroupKey, boolean>>(() =>
-    readGroups(pathname),
-  );
-  const toggle = (key: GroupKey) =>
-    setExpanded((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(next));
-      } catch {
-        // Storage unavailable (private mode): state still applies for this session.
-      }
-      return next;
-    });
-  return { expanded, toggle };
-}
-
 /**
- * Collapsible nav group. Reuses the existing SidebarItem for both the parent
- * row (with a rotating chevron) and its children — no new sidebar component or
- * styling is introduced. The parent highlights when any child route is active.
+ * The rail, top to bottom, in the order work moves: request, order, stock,
+ * issue; then the services the office runs, the meters it reads, its records.
+ * Every section is open; the groups used to start shut, so reaching Inventory
+ * or Fuel took a click on a heading first.
  */
-function CollapsibleNavGroup({
-  icon,
-  label,
-  active,
-  expanded,
-  onToggle,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  active: boolean;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <SidebarItem
-        icon={icon}
-        label={label}
-        active={active}
-        onClick={onToggle}
-        trailing={
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-neutral-400 transition-transform group-data-[collapsed=true]:hidden ${
-              expanded ? "" : "-rotate-90"
-            }`}
-          />
-        }
-      />
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <div className="mt-0.5 flex flex-col gap-0.5 pl-4 group-data-[collapsed=true]:pl-0">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+const NAV_SECTIONS: { label?: string; items: ModuleNavItem[] }[] = [
+  { items: [dashboardItem] },
+  { label: "Procurement", items: procurementChildren },
+  { label: "Supply", items: [inventoryItem, risItem] },
+  { label: "Services", items: [reservationItem, violationItem] },
+  { label: "Utilities", items: utilitiesChildren },
+  { label: "Records", items: recordsChildren },
+  { items: [reportsItem] },
+];
 
 const systemNav: (ModuleNavItem & { trailing?: React.ReactNode })[] = [
-  { icon: History, label: "Audit Trail", to: "/audit" },
+  { icon: History, label: "Audit trail", to: "/audit" },
   { icon: Settings, label: "Settings", to: "/settings" },
 ];
 
 /** Every path the sidebar leads to, so an item can tell when a deeper one owns
  *  the page. Declared here because the last of the item lists is above it. */
-const NAV_PATHS: string[] = [
-  dashboardItem,
-  inventoryItem,
-  risItem,
-  reservationItem,
-  violationItem,
-  reportsItem,
-  ...procurementChildren,
-  ...utilitiesChildren,
-  ...recordsChildren,
-  ...systemNav,
-]
+const NAV_PATHS: string[] = [...NAV_SECTIONS.flatMap((sec) => sec.items), ...systemNav]
   .map((item) => item.to)
   .filter((to): to is string => Boolean(to));
 
@@ -306,7 +217,6 @@ function AppSidebar({
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const branding = useBranding();
-  const { expanded, toggle } = useSidebarGroups(pathname);
   const counts = useNavCounts();
 
   /** Navigates, then lets the mobile drawer close itself behind the new route. */
@@ -329,10 +239,6 @@ function AppSidebar({
       />
     );
   };
-  const procurementActive = procurementChildren.some((c) => isActive(pathname, c.to));
-  const utilitiesActive = utilitiesChildren.some((c) => isActive(pathname, c.to));
-  const recordsActive = recordsChildren.some((c) => isActive(pathname, c.to));
-
   return (
     <Sidebar collapsed={collapsed} className={className}>
       <SidebarBrand
@@ -342,41 +248,11 @@ function AppSidebar({
         subtitle={branding.organizationName}
       />
       <SidebarContent>
-        <SidebarGroup>
-          {renderItem(dashboardItem)}
-          <CollapsibleNavGroup
-            icon={Files}
-            label="Procurement"
-            active={procurementActive}
-            expanded={expanded.procurement}
-            onToggle={() => toggle("procurement")}
-          >
-            {procurementChildren.map(renderItem)}
-          </CollapsibleNavGroup>
-          {renderItem(inventoryItem)}
-          {renderItem(risItem)}
-          {renderItem(reservationItem)}
-          {renderItem(violationItem)}
-          <CollapsibleNavGroup
-            icon={Gauge}
-            label="Utilities"
-            active={utilitiesActive}
-            expanded={expanded.utilities}
-            onToggle={() => toggle("utilities")}
-          >
-            {utilitiesChildren.map(renderItem)}
-          </CollapsibleNavGroup>
-          <CollapsibleNavGroup
-            icon={Archive}
-            label="Records Management"
-            active={recordsActive}
-            expanded={expanded.records}
-            onToggle={() => toggle("records")}
-          >
-            {recordsChildren.map(renderItem)}
-          </CollapsibleNavGroup>
-          {renderItem(reportsItem)}
-        </SidebarGroup>
+        {NAV_SECTIONS.map((sec, i) => (
+          <SidebarGroup key={sec.label ?? `top-${i}`} label={sec.label}>
+            {sec.items.map(renderItem)}
+          </SidebarGroup>
+        ))}
         <SidebarDivider />
         <SidebarGroup>
           {systemNav.map(({ to, ...item }) => (
