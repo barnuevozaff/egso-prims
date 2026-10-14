@@ -37,20 +37,23 @@ export function PortalPage({
     width === "narrow" ? "max-w-2xl" : width === "form" ? "max-w-[52rem]" : "max-w-[1200px]";
   return (
     <div className="flex flex-1 flex-col">
-      <section className="bg-(--accent-solid) text-white">
-        <div className={cn("mx-auto w-full px-5 pb-9 pt-6 md:px-8", measure)}>
+      {/* White like the home page since 14 Oct 2026; the band was crimson, and
+          an ink band once the accent turned ink would have been the heaviest
+          thing on every form. */}
+      <section className="border-b border-[#ececea] bg-white text-neutral-900">
+        <div className={cn("mx-auto w-full px-5 pb-8 pt-6 md:px-8", measure)}>
           <Link
             to="/portal"
-            className="-ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] text-white/80 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            className="-ml-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[13px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All services
           </Link>
-          <h1 className="mt-3 text-[24px] font-semibold tracking-[-0.01em] text-balance md:text-[28px]">
+          <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.025em] text-balance md:text-[32px]">
             {title}
           </h1>
           {description && (
-            <p className="mt-1.5 max-w-2xl text-[15px] leading-relaxed text-pretty text-white/85">
+            <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-pretty text-[#5b606b]">
               {description}
             </p>
           )}
