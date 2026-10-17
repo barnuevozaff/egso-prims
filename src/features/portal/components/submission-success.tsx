@@ -1,8 +1,7 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, Copy, Printer } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
+import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 
 import { PageTransition, toast } from "@/components";
 import { rememberFiling } from "@/features/portal/recent";
@@ -84,9 +83,9 @@ function receiptTitle(reference: string): string {
  * The receipt, approved 14 Oct 2026 (canvas "Portal Home Redesign", Wow #1).
  *
  * The reference number is the thing to keep, so it is the largest text and has
- * its own Copy button. The QR opens this request's tracking page, so a filer
- * can carry it away on a phone. The number is also remembered on this computer
- * for the home page's "Filed on this computer" list.
+ * its own Copy button. The number is also remembered on this computer for the
+ * home page's "Filed on this computer" list. The QR code and Print receipt
+ * were removed on 18 Oct 2026 at the owner's request.
  */
 export function SubmissionSuccess({
   reference,
@@ -98,7 +97,6 @@ export function SubmissionSuccess({
   const reduce = useReducedMotion();
   const [copied, setCopied] = React.useState(false);
   const trackPath = `/portal/track?ref=${encodeURIComponent(reference)}`;
-  const trackUrl = `${window.location.origin}${trackPath}`;
 
   React.useEffect(() => {
     rememberFiling(reference);
@@ -172,21 +170,6 @@ export function SubmissionSuccess({
           </p>
         </div>
 
-        <figure className="m-0 flex shrink-0 flex-col items-center gap-2.5 rounded-[14px] border border-[#e4e4e1] bg-white p-4">
-          <QRCodeSVG
-            value={trackUrl}
-            size={148}
-            fgColor="#16181d"
-            bgColor="#ffffff"
-            level="M"
-            title={`QR code that opens the tracking page for ${reference}`}
-          />
-          <figcaption className="text-center text-[13px] leading-snug text-[#5b606b]">
-            Scan to follow it
-            <br />
-            on your phone
-          </figcaption>
-        </figure>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-[#ececea] bg-[#fbfbfa] px-6 py-5 sm:px-10 print:hidden">
@@ -201,14 +184,6 @@ export function SubmissionSuccess({
               className="h-4 w-4 transition-transform duration-150 ease-out group-hover:translate-x-[3px]"
             />
           </Link>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-11 items-center gap-2 rounded-[10px] border border-[#d4d5d2] bg-white px-[18px] text-[15px] font-medium text-neutral-900 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
-          >
-            <Printer aria-hidden="true" className="h-4 w-4" />
-            Print receipt
-          </button>
         </div>
         <Link
           to="/portal"
