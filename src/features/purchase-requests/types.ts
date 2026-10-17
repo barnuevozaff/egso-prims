@@ -1,10 +1,13 @@
 /** Purchase Request domain types. Shapes mirror the future Supabase schema. */
 
+/**
+ * Only the GSO uses the system (its head and staff), so a request goes from
+ * Submitted straight to the head's approval. Department Head Review and Budget
+ * Review were removed on 18 Oct 2026; no stored request was in either.
+ */
 export type PRStatus =
   | "Draft"
   | "Submitted"
-  | "Department Head Review"
-  | "Budget Review"
   | "Approved"
   | "Rejected"
   | "Cancelled"
@@ -13,8 +16,6 @@ export type PRStatus =
 export const PR_STATUSES: PRStatus[] = [
   "Draft",
   "Submitted",
-  "Department Head Review",
-  "Budget Review",
   "Approved",
   "Rejected",
   "Cancelled",
@@ -26,11 +27,7 @@ export const PR_STATUSES: PRStatus[] = [
  * is not yet anyone's queue, so it is deliberately absent. Shared by the
  * dashboard tile and the sidebar badge so the two can never disagree.
  */
-export const PENDING_PR_STATUSES: PRStatus[] = [
-  "Submitted",
-  "Department Head Review",
-  "Budget Review",
-];
+export const PENDING_PR_STATUSES: PRStatus[] = ["Submitted"];
 
 export interface Department {
   code: string;

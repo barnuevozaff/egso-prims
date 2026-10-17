@@ -62,7 +62,7 @@ import {
   totalInventoryValue,
   type ReportsData,
 } from "@/features/reports/analytics";
-import { departmentByCode } from "@/features/purchase-requests/types";
+import { departmentByCode, PENDING_PR_STATUSES } from "@/features/purchase-requests/types";
 import { itemValue } from "@/features/inventory/types";
 import {
   accountLabel,
@@ -155,9 +155,7 @@ export function AnalyticsPanels({
   const movement = movementByDay(d.stockCard, 14);
 
   /* Procurement */
-  const pendingApprovals = d.prs.filter((p) =>
-    ["Submitted", "Department Head Review", "Budget Review"].includes(p.status),
-  ).length;
+  const pendingApprovals = d.prs.filter((p) => PENDING_PR_STATUSES.includes(p.status)).length;
   const avgDays = averageApprovalDays(d.prs);
   const monthKeyNow = format(new Date(), "yyyy-MM");
   const procurementThisMonth = d.pos

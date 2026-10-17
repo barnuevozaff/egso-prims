@@ -50,9 +50,8 @@ export function standingOf(steps: ApprovalTimelineStep[]): Standing {
 const PR_OFFICE: Record<PRStatus, string> = {
   Draft: "Requesting Office",
   Submitted: "General Services Office",
-  "Department Head Review": "General Services Office",
-  "Budget Review": "Municipal Budget Office",
-  Approved: "Mayor's Office",
+  // The GSO head approves; the request stays with the GSO for its purchase order.
+  Approved: "General Services Office",
   Completed: "General Services Office",
   Rejected: "General Services Office",
   Cancelled: "General Services Office",

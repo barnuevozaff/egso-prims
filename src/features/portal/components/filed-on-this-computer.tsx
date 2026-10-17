@@ -148,14 +148,21 @@ export function FiledOnThisComputer({ filed }: { filed: FiledRequest[] }) {
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-['Geist_Mono',ui-monospace,monospace] text-[13px] font-medium">
+                  <span className="whitespace-nowrap font-['Geist_Mono',ui-monospace,monospace] text-[13px] font-medium">
                     {row.reference}
                   </span>
                   {row.state === "found" && <StatusPill result={row.result} />}
                   {row.state === "loading" && <Skeleton className="h-6 w-24 rounded-full" />}
                 </div>
                 {row.state === "found" && (
-                  <p className="mt-1 truncate text-[14px] text-[#5b606b]">{row.result.title}</p>
+                  <>
+                    <p className="mt-1 truncate text-[14px] text-[#5b606b]">{row.result.title}</p>
+                    {/* Under the title, not beside it: beside it, the narrow
+                        panel on the Track page split the number and cut the title. */}
+                    <p className="mt-0.5 text-[12px] text-[#6b707a]">
+                      {updatedAgo(row.result.updatedAt)}
+                    </p>
+                  </>
                 )}
                 {row.state === "missing" && (
                   <p className="mt-1 text-[14px] text-[#5b606b]">
@@ -163,11 +170,6 @@ export function FiledOnThisComputer({ filed }: { filed: FiledRequest[] }) {
                   </p>
                 )}
               </div>
-              {row.state === "found" && (
-                <span className="hidden whitespace-nowrap text-[12px] text-[#5b606b] sm:inline">
-                  {updatedAgo(row.result.updatedAt)}
-                </span>
-              )}
               <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[#5b606b]" />
             </Link>
           </li>

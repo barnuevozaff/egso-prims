@@ -9,8 +9,6 @@ export const formatDate = (iso: string) => format(new Date(iso), "d MMM yyyy");
 const WORKFLOW_CHAIN = [
   "Created",
   "Submitted",
-  "Department Head Review",
-  "Budget Review",
   "Approved",
   "Completed",
 ] as const;
@@ -19,10 +17,8 @@ const WORKFLOW_CHAIN = [
 const STATUS_PROGRESS: Record<PRStatus, number> = {
   Draft: 1,
   Submitted: 2,
-  "Department Head Review": 2,
-  "Budget Review": 3,
-  Approved: 5,
-  Completed: 6,
+  Approved: 3,
+  Completed: 4,
   Rejected: -1,
   Cancelled: -1,
 };
@@ -87,10 +83,6 @@ export function nextApprovalStatus(status: PRStatus): PRStatus | null {
     case "Draft":
       return "Submitted";
     case "Submitted":
-      return "Department Head Review";
-    case "Department Head Review":
-      return "Budget Review";
-    case "Budget Review":
       return "Approved";
     case "Approved":
       return "Completed";
