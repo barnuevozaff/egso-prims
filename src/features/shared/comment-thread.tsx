@@ -3,6 +3,8 @@ import { Paperclip, Send } from "lucide-react";
 import { format } from "date-fns";
 
 import { Avatar, Button, Caption, EmptyState, Textarea } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { initialsOf } from "@/lib/initials";
 
 export interface ThreadComment {
   id: string;
@@ -22,6 +24,7 @@ export function CommentThread({
   /** Persists the comment; resolve when saved. */
   onSubmit: (text: string) => Promise<void>;
 }) {
+  const { user } = useAuth();
   const [draft, setDraft] = React.useState("");
   const [sending, setSending] = React.useState(false);
 
@@ -77,7 +80,8 @@ export function CommentThread({
       )}
 
       <div className="flex items-start gap-2.5 border-t border-neutral-100 pt-4">
-        <Avatar size="sm" initials="AD" name="Administrator" />
+        {/* Whoever is signed in writes the comment, so their initials sit by the box. */}
+        <Avatar size="sm" initials={initialsOf(user?.name ?? "")} name={user?.name} />
         <div className="flex-1">
           <Textarea
             rows={2}

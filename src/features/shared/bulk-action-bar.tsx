@@ -1,4 +1,4 @@
-import { Download, Printer, Trash2, X } from "lucide-react";
+import { Ban, Download, Printer, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components";
@@ -7,6 +7,7 @@ import { Button } from "@/components";
 export function BulkActionBar({
   count,
   onDelete,
+  onVoid,
   onExport,
   onPrint,
   onClear,
@@ -14,6 +15,11 @@ export function BulkActionBar({
   count: number;
   /** Omitted where records may not be deleted, such as the audit trail. */
   onDelete?: () => void;
+  /**
+   * Offered instead of Delete for numbered official documents: voiding keeps
+   * the number, the record and its history.
+   */
+  onVoid?: () => void;
   onExport: () => void;
   onPrint: () => void;
   onClear: () => void;
@@ -43,6 +49,16 @@ export function BulkActionBar({
             </Button>
             {/* A shade darker than the variant's default: this one carries a
                 word, not just an icon, so it sits at red-600. */}
+            {onVoid && (
+              <Button
+                variant="danger"
+                className="text-red-600 hover:text-red-700"
+                onClick={onVoid}
+              >
+                <Ban />
+                Void
+              </Button>
+            )}
             {onDelete && (
               <Button
                 variant="danger"

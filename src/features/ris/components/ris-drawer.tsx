@@ -31,6 +31,8 @@ import { nextRISStatus } from "@/features/ris/lib";
 import { RISDetailPanels } from "@/features/ris/components/ris-detail-panels";
 import { RISPrintSheet } from "@/features/shared/procurement-sheets";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 
 /** Right slide-over showing the full issuance slip. */
 export function RISDrawer({
@@ -46,6 +48,7 @@ export function RISDrawer({
   onChanged?: () => void;
   onEdit?: (risId: string) => void;
 }) {
+  const { user } = useAuth();
   const { data: ris, loading, setData } = useRequest(open ? risId : null);
   const [confirmAdvance, setConfirmAdvance] = React.useState(false);
   const [confirmReturn, setConfirmReturn] = React.useState(false);
@@ -71,7 +74,7 @@ export function RISDrawer({
     setActing(true);
     try {
       const updated = await setRequestStatus(ris.id, next, {
-        by: "Administrator",
+        by: user?.name ?? "Staff",
         office: "General Services Office",
       });
       setData(updated);
@@ -93,7 +96,7 @@ export function RISDrawer({
     setActing(true);
     try {
       const updated = await setRequestStatus(ris.id, "Draft", {
-        by: "Administrator",
+        by: user?.name ?? "Staff",
         office: "General Services Office",
         remarks: "Returned to requester for revision",
       });
@@ -169,10 +172,14 @@ export function RISDrawer({
                 <Printer />
                 Print
               </Button>
-              <Button variant="secondary" onClick={() => onEdit?.(ris.id)}>
-                <Pencil />
-                Edit
-              </Button>
+              {/* A voided document is closed for editing (firestore.rules), and
+                  only roles that manage the module reach the edit page. */}
+              {ris.status !== "Cancelled" && can(user, "manage:ris") && (
+                <Button variant="secondary" onClick={() => onEdit?.(ris.id)}>
+                  <Pencil />
+                  Edit
+                </Button>
+              )}
               {!terminal && (
                 <Button variant="outline" onClick={() => setConfirmReturn(true)}>
                   <Undo2 />

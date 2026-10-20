@@ -6,7 +6,7 @@
  * National Archives, and this is how that authority is requested.
  */
 
-import type { ScheduleStatus } from "@/features/records/types";
+import type { RecordsDocStatus, ScheduleStatus } from "@/features/records/types";
 
 export type { ScheduleStatus };
 
@@ -45,7 +45,12 @@ export interface DisposalRequest {
   certifiedBy?: string;
   /** Their position — the authority the certification rests on. */
   certifiedByPosition?: string;
-  status: ScheduleStatus;
+  status: RecordsDocStatus;
+  /** Set when the form was voided (approved policy, 2026-10-20). */
+  voidReason?: string;
+  voidedAt?: string;
+  /** The Administrator who voided it (email). */
+  voidedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,7 +79,7 @@ export interface DisposalInput {
 
 export interface DisposalListFilters {
   search?: string;
-  status?: ScheduleStatus | "All";
+  status?: RecordsDocStatus | "All";
 }
 
 /** The agency block this office files under, used to prefill a new request. */

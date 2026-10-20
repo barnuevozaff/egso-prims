@@ -15,6 +15,8 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import { useAppraisals } from "@/features/records/inventory-hooks";
 import type { InventoryAppraisal } from "@/features/records/inventory-types";
 import { SCHEDULE_STATUSES } from "@/features/records/types";
@@ -37,6 +39,7 @@ const listDate = (iso: string) => {
  */
 export function InventoryListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState(ALL);
 
@@ -90,10 +93,12 @@ export function InventoryListPage() {
         title="Records Inventory and Appraisal"
         description="What the office holds, and the values that justify how long each series is kept."
         actions={
-          <Button onClick={() => navigate("/records/inventory/new")}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Inventory
-          </Button>
+          can(user, "manage:records") ? (
+            <Button onClick={() => navigate("/records/inventory/new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Inventory
+            </Button>
+          ) : undefined
         }
       />
 
@@ -113,6 +118,7 @@ export function InventoryListPage() {
               options={[
                 { value: ALL, label: "All statuses" },
                 ...SCHEDULE_STATUSES.map((s) => ({ value: s, label: s })),
+                { value: "Cancelled", label: "Cancelled" },
               ]}
             />
           </FilterBar>
@@ -130,7 +136,9 @@ export function InventoryListPage() {
             description:
               "An inventory describes what the office holds — volume, medium, location — and appraises each series.",
             icon: ClipboardList,
-            action: { label: "New Inventory", onClick: () => navigate("/records/inventory/new") },
+            action: can(user, "manage:records")
+              ? { label: "New Inventory", onClick: () => navigate("/records/inventory/new") }
+              : undefined,
           }}
         />
       </TableCard>

@@ -1,12 +1,11 @@
 import * as React from "react";
 import { format } from "date-fns";
-import { Building2, Gauge, MapPin, Pencil, Plus, Trash2, User } from "lucide-react";
+import { Ban, Building2, Gauge, History, MapPin, Pencil, Plus, User } from "lucide-react";
 
 import {
   Button,
   Caption,
   CurrencyDisplay,
-  DeleteModal,
   Drawer,
   DrawerActions,
   DrawerBody,
@@ -26,13 +25,15 @@ import {
   TableHeader,
   TableHeaderRow,
   TableRow,
-  toast,
 } from "@/components";
-import { deleteWaterMeterReadings } from "@/features/water/api";
+import { useAuth } from "@/features/auth/auth-context";
+import { voidWaterMeterReading } from "@/features/water/api";
 import { useWaterMeterReadings } from "@/features/water/hooks";
 import { readingsOf, submeterLabel } from "@/features/water/lib";
 import type { WaterMeterReading, WaterSubmeter } from "@/features/water/types";
 import { departmentByCode } from "@/features/purchase-requests/types";
+import { activeOnly, hasHistory } from "@/features/shared/revisions";
+import { RecordHistoryDialog, VoidRecordDialog } from "@/features/shared/void-record";
 
 const num = (n: number) =>
   n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,7 +44,7 @@ export function WaterSubmeterDrawer({
   open,
   onOpenChange,
   onEdit,
-  onAddReading,
+  onAddReading: addReading,
   onEditReading,
   onChanged,
 }: {
@@ -57,22 +58,31 @@ export function WaterSubmeterDrawer({
 }) {
   const { data, loading, refresh } = useWaterMeterReadings(
     React.useMemo(
-      () => (submeter ? { submeterId: submeter.id } : { submeterId: "__none__" }),
+      // Voided readings stay in the history, marked, but leave the totals.
+      () => ({ submeterId: submeter ? submeter.id : "__none__", includeVoided: true }),
       [submeter],
     ),
   );
-  const [pendingDelete, setPendingDelete] = React.useState<WaterMeterReading | null>(null);
+  const [pendingVoid, setPendingVoid] = React.useState<WaterMeterReading | null>(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "Administrator";
+  // An archived submeter takes no new readings until it is restored
+  // (approved 2026-10-21).
+  const closed = !!submeter && submeter.status !== "Active";
+  const onAddReading = closed ? undefined : addReading;
+  const [historyFor, setHistoryFor] = React.useState<WaterMeterReading | null>(null);
 
   const readings = React.useMemo(
     () => (submeter ? readingsOf(data, submeter.id) : []),
     [data, submeter],
   );
+  const counted = React.useMemo(() => activeOnly(readings), [readings]);
   const totals = React.useMemo(
     () => ({
-      consumption: readings.reduce((s, r) => s + r.consumption, 0),
-      amount: readings.reduce((s, r) => s + r.amount, 0),
+      consumption: counted.reduce((s, r) => s + r.consumption, 0),
+      amount: counted.reduce((s, r) => s + r.amount, 0),
     }),
-    [readings],
+    [counted],
   );
 
   return (
@@ -90,8 +100,9 @@ export function WaterSubmeterDrawer({
             description={`${submeter.submeterNumber} · Water submeter`}
             onClose={() => onOpenChange(false)}
           >
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2">
               <StatusBadge status={submeter.status} />
+              {closed && <Caption className="text-[11.5px]">Restore it to record new readings.</Caption>}
             </div>
           </DrawerHeader>
 
@@ -139,7 +150,7 @@ export function WaterSubmeterDrawer({
                 <div className="rounded-lg border border-neutral-200 p-3">
                   <OverlineLabel>Recorded Readings</OverlineLabel>
                   <div className="mt-0.5 text-[16px] font-semibold tabular-nums tracking-tight text-neutral-900">
-                    {loading ? <Skeleton className="h-5 w-10" /> : readings.length}
+                    {loading ? <Skeleton className="h-5 w-10" /> : counted.length}
                   </div>
                 </div>
                 <div className="rounded-lg border border-neutral-200 p-3">
@@ -218,6 +229,11 @@ export function WaterSubmeterDrawer({
                               className="whitespace-nowrap py-2.5 font-medium text-neutral-800"
                             >
                               {format(new Date(r.readingDate), "d MMM yyyy")}
+                              {r.voided && (
+                                <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">
+                                  Voided
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="py-2.5 text-right tabular-nums text-neutral-500">
                               {num(r.previousReading)}
@@ -236,24 +252,36 @@ export function WaterSubmeterDrawer({
                             </TableCell>
                             <TableCell className="py-2.5 text-right">
                               <span className="inline-flex items-center gap-1">
-                                {onEditReading && (
+                                {onEditReading && !r.voided && (
                                   <IconButton
-                                    aria-label={`Edit reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
-                                    variant="danger"
+                                    aria-label={`Correct the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="ghost"
                                     size="icon-sm"
                                     onClick={() => onEditReading(submeter, r)}
                                   >
                                     <Pencil />
                                   </IconButton>
                                 )}
-                                <IconButton
-                                  aria-label={`Delete reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => setPendingDelete(r)}
-                                >
-                                  <Trash2 />
-                                </IconButton>
+                                {hasHistory(r) && (
+                                  <IconButton
+                                    aria-label={`History of the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setHistoryFor(r)}
+                                  >
+                                    <History />
+                                  </IconButton>
+                                )}
+                                {!r.voided && isAdmin && (
+                                  <IconButton
+                                    aria-label={`Void the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="danger"
+                                    size="icon-sm"
+                                    onClick={() => setPendingVoid(r)}
+                                  >
+                                    <Ban />
+                                  </IconButton>
+                                )}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -264,7 +292,8 @@ export function WaterSubmeterDrawer({
                 )}
                 <Caption as="p" className="mt-2 text-[10.5px]">
                   Registered {format(new Date(submeter.createdAt), "d MMMM yyyy")} ·{" "}
-                  {readings.length} reading{readings.length === 1 ? "" : "s"}
+                  {counted.length} reading{counted.length === 1 ? "" : "s"}
+                  {readings.length > counted.length && ` · ${readings.length - counted.length} voided`}
                 </Caption>
               </section>
             </div>
@@ -290,27 +319,30 @@ export function WaterSubmeterDrawer({
             </DrawerActions>
           </DrawerFooter>
 
-          <DeleteModal
-            open={!!pendingDelete}
-            onOpenChange={(o) => !o && setPendingDelete(null)}
+          <VoidRecordDialog
+            open={!!pendingVoid}
+            onOpenChange={(o) => !o && setPendingVoid(null)}
             title={
-              pendingDelete
-                ? `Delete the ${format(new Date(pendingDelete.readingDate), "d MMM yyyy")} reading?`
-                : "Delete meter reading?"
+              pendingVoid
+                ? `Void the reading of ${format(new Date(pendingVoid.readingDate), "d MMM yyyy")}?`
+                : "Void reading?"
             }
-            description="The reading will be permanently removed. Later readings keep their own recorded previous values and are not recalculated."
-            onConfirm={async () => {
-              if (pendingDelete) {
-                await deleteWaterMeterReadings([pendingDelete.id]);
-                toast.success("Meter reading deleted");
-                setPendingDelete(null);
-                void refresh();
-                onChanged?.();
-              }
+            description="The reading keeps its values and stays in this history, marked voided with your reason, your name and the time. It no longer counts in totals. Later readings keep their own recorded previous values."
+            onVoid={(reason) => voidWaterMeterReading(pendingVoid!.id, reason)}
+            onDone={() => {
+              setPendingVoid(null);
+              void refresh();
+              onChanged?.();
             }}
           />
         </>
       )}
+      <RecordHistoryDialog
+        open={!!historyFor}
+        onOpenChange={(o) => !o && setHistoryFor(null)}
+        title={historyFor ? `Reading of ${format(new Date(historyFor.readingDate), "d MMM yyyy")} — history` : "History"}
+        record={historyFor}
+      />
     </Drawer>
   );
 }

@@ -90,7 +90,9 @@ export function ScheduleForm({
   const [datePrepared, setDatePrepared] = React.useState<Date | undefined>(
     initial ? new Date(`${initial.datePrepared}T00:00:00`) : new Date(),
   );
-  const [status, setStatus] = React.useState<ScheduleStatus>(initial?.status ?? "Draft");
+  const [status, setStatus] = React.useState<ScheduleStatus>(
+    initial?.status && initial.status !== "Cancelled" ? initial.status : "Draft",
+  );
   const [series, setSeries] = React.useState<RecordSeriesDraft[]>(
     initial?.series.map((s) => ({
       // Kept so the save updates these lines rather than replacing them.

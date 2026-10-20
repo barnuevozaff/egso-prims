@@ -52,10 +52,16 @@ export function isAcceptedFile(file: File): boolean {
   return /\.(jpe?g|png|webp|pdf)$/i.test(file.name);
 }
 
-/** Loads pdf.js once and points it at the bundled worker (no CDN). */
+/**
+ * Loads pdf.js once and points it at the bundled worker (no CDN).
+ *
+ * The legacy build, not the default one: pdf.js 5 assumes browsers newer
+ * than the office PCs' Chrome 109 (it calls Promise.withResolvers, Chrome
+ * 119+). The legacy build carries the polyfills, in the worker too.
+ */
 async function loadPdfjs() {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   return pdfjs;
 }

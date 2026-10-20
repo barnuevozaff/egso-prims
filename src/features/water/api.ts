@@ -1,537 +1,64 @@
-import { fetchAll, requireDb, searchOr, unwrap } from "@/lib/db";
-import { nextDocumentNumber } from "@/features/shared/doc-numbers";
-import type {
-  SubmeterStatus,
-  WaterAccount,
-  WaterBill,
-  WaterBillFilters,
-  WaterMeterReading,
-  WaterSubmeter,
-  WaterSubmeterBill,
-} from "@/features/water/types";
+import { dataBackend, lazyCall } from "@/lib/data-backend";
+import * as supabaseApi from "@/features/water/api.supabase";
 
 /**
- * Water Consumption service — Supabase-backed, same conventions as every
- * other General Services Office module. Components never call Supabase directly.
+ * Water Consumption service. Screens import from here; which database answers is decided
+ * once, in lib/data-backend.ts. The Firestore version (api.firebase.ts) is
+ * loaded only when the app runs on Firebase, and on first use, so a Supabase
+ * build never downloads the Firebase SDK.
  */
 
-const ACCOUNTS = "water_accounts";
-const BILLS = "water_bills";
-const SUBMETERS = "water_submeters";
-const SUBMETER_BILLS = "water_submeter_bills";
-const READINGS = "water_meter_readings";
-const nowIso = () => new Date().toISOString();
+type Api = Omit<typeof supabaseApi, "rowToAccount" | "rowToBill" | "rowToSubmeter" | "rowToSubmeterBill" | "rowToReading">;
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function rowToAccount(r: any): WaterAccount {
-  return {
-    id: r.id,
-    accountNumber: r.account_number,
-    accountName: r.account_name ?? undefined,
-    location: r.location,
-    meterNumber: r.meter_number,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  };
-}
+// Type-only check, nothing is bundled: the Firestore version must take and
+// return exactly what the Supabase version does.
+const firestoreMatches: Api = {} as typeof import("@/features/water/api.firebase");
+void firestoreMatches;
 
-function rowToBill(r: any): WaterBill {
-  return {
-    id: r.id,
-    docNumber: r.doc_number ?? undefined,
-    accountId: r.account_id,
-    billingMonth: r.billing_month,
-    billingYear: r.billing_year,
-    amount: Number(r.amount),
-    consumption: Number(r.consumption ?? 0),
-    remarks: r.remarks ?? undefined,
-    createdAt: r.created_at,
-  };
-}
+const loadFirestore = () => import("@/features/water/api.firebase") as Promise<Api>;
+const pick = <K extends keyof Api>(name: K): Api[K] =>
+  dataBackend === "firebase" ? lazyCall(loadFirestore, name) : supabaseApi[name];
 
-/* ---------------- accounts ---------------- */
+export type {
+  AccountListFilters,
+  AccountDraftInput,
+  BillDraftInput,
+  SubmeterListFilters,
+  SubmeterDraftInput,
+  SubmeterAssignmentInput,
+  SubmeterBillFilters,
+  SubmeterBillDraftInput,
+  MeterReadingFilters,
+  MeterReadingDraftInput,
+} from "@/features/water/api.supabase";
 
-export interface AccountListFilters {
-  search?: string;
-  location?: string;
-}
-
-export async function listWaterAccounts(
-  filters: AccountListFilters = {},
-): Promise<WaterAccount[]> {
-  const db = requireDb();
-  let q = db.from(ACCOUNTS).select("*").order("account_number", { ascending: true });
-  if (filters.location) q = q.eq("location", filters.location);
-  if (filters.search?.trim()) {
-    q = q.or(
-      searchOr(["account_number", "account_name", "location", "meter_number"], filters.search),
-    );
-  }
-  return (await fetchAll((from, to) => q.range(from, to))).map(rowToAccount);
-}
-
-export async function getWaterAccount(id: string): Promise<WaterAccount | null> {
-  const db = requireDb();
-  const { data, error } = await db.from(ACCOUNTS).select("*").eq("id", id).maybeSingle();
-  if (error) return null;
-  return data ? rowToAccount(data) : null;
-}
-
-export interface AccountDraftInput {
-  accountNumber: string;
-  accountName?: string;
-  location: string;
-  meterNumber: string;
-}
-
-export async function createWaterAccount(input: AccountDraftInput): Promise<WaterAccount> {
-  const db = requireDb();
-  const at = nowIso();
-  const row = {
-    id: `wa-${Date.now()}`,
-    account_number: input.accountNumber,
-    account_name: input.accountName?.trim() || null,
-    location: input.location,
-    meter_number: input.meterNumber,
-    created_at: at,
-    updated_at: at,
-  };
-  return rowToAccount(unwrap(await db.from(ACCOUNTS).insert(row).select().single()));
-}
-
-export async function updateWaterAccount(
-  id: string,
-  input: AccountDraftInput,
-): Promise<WaterAccount> {
-  const db = requireDb();
-  const row = {
-    account_number: input.accountNumber,
-    account_name: input.accountName?.trim() || null,
-    location: input.location,
-    meter_number: input.meterNumber,
-    updated_at: nowIso(),
-  };
-  return rowToAccount(unwrap(await db.from(ACCOUNTS).update(row).eq("id", id).select().single()));
-}
-
-/** Deletes accounts; their bills cascade in the database. */
-export async function deleteWaterAccounts(ids: string[]): Promise<void> {
-  const db = requireDb();
-  unwrap(await db.from(ACCOUNTS).delete().in("id", ids));
-}
-
-/* ---------------- bills ---------------- */
-
-export async function listWaterBills(filters: WaterBillFilters = {}): Promise<WaterBill[]> {
-  const db = requireDb();
-  let q = db
-    .from(BILLS)
-    .select("*")
-    .order("billing_year", { ascending: false })
-    .order("billing_month", { ascending: false });
-  if (filters.accountId) q = q.eq("account_id", filters.accountId);
-  if (filters.year) q = q.eq("billing_year", filters.year);
-  if (filters.month) q = q.eq("billing_month", filters.month);
-  const rows = (await fetchAll((from, to) => q.range(from, to))).map(rowToBill);
-
-  // Period-range filtering is ordinal (year*12+month), applied in memory so
-  // the range can straddle a year boundary.
-  const ord = (y: number, m: number) => y * 12 + m;
-  const from =
-    filters.fromYear && filters.fromMonth ? ord(filters.fromYear, filters.fromMonth) : null;
-  const to = filters.toYear && filters.toMonth ? ord(filters.toYear, filters.toMonth) : null;
-  return rows.filter((b) => {
-    const o = ord(b.billingYear, b.billingMonth);
-    if (from !== null && o < from) return false;
-    if (to !== null && o > to) return false;
-    return true;
-  });
-}
-
-export interface BillDraftInput {
-  accountId: string;
-  billingMonth: number;
-  billingYear: number;
-  amount: number;
-  consumption: number;
-  remarks?: string;
-}
-
-export async function createWaterBill(input: BillDraftInput): Promise<WaterBill> {
-  const db = requireDb();
-  const docNumber = await nextDocumentNumber("WC");
-  const row = {
-    doc_number: docNumber,
-    id: `wb-${input.accountId}-${input.billingYear}-${String(input.billingMonth).padStart(2, "0")}`,
-    account_id: input.accountId,
-    billing_month: input.billingMonth,
-    billing_year: input.billingYear,
-    amount: input.amount,
-    consumption: input.consumption,
-    remarks: input.remarks?.trim() || null,
-    created_at: nowIso(),
-  };
-  const { data, error } = await db.from(BILLS).insert(row).select().single();
-  if (error) {
-    const msg = String((error as { message?: string }).message ?? "");
-    if (msg.toLowerCase().includes("duplicate")) {
-      throw new Error("A bill for that account and billing period already exists.");
-    }
-    throw new Error(`Unable to record the bill: ${msg}`);
-  }
-  return rowToBill(data);
-}
-
-export async function updateWaterBill(
-  id: string,
-  input: Pick<BillDraftInput, "amount" | "consumption" | "remarks">,
-): Promise<WaterBill> {
-  const db = requireDb();
-  const row = {
-    amount: input.amount,
-    consumption: input.consumption,
-    remarks: input.remarks?.trim() || null,
-  };
-  return rowToBill(unwrap(await db.from(BILLS).update(row).eq("id", id).select().single()));
-}
-
-export async function deleteWaterBills(ids: string[]): Promise<void> {
-  const db = requireDb();
-  unwrap(await db.from(BILLS).delete().in("id", ids));
-}
-
-/* ---------------- submeters ---------------- */
-
-function rowToSubmeter(r: any): WaterSubmeter {
-  return {
-    id: r.id,
-    accountId: r.account_id,
-    submeterName: r.submeter_name,
-    submeterNumber: r.submeter_number,
-    assignedOffice: r.assigned_office,
-    assignedDepartment: r.assigned_department ?? undefined,
-    assignedFacility: r.assigned_facility ?? undefined,
-    assignedUser: r.assigned_user ?? undefined,
-    remarks: r.remarks ?? undefined,
-    status: r.status as SubmeterStatus,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  };
-}
-
-function rowToSubmeterBill(r: any): WaterSubmeterBill {
-  return {
-    id: r.id,
-    submeterId: r.submeter_id,
-    billingMonth: r.billing_month,
-    billingYear: r.billing_year,
-    consumption: Number(r.consumption ?? 0),
-    amount: Number(r.amount),
-    remarks: r.remarks ?? undefined,
-    createdAt: r.created_at,
-  };
-}
-
-export interface SubmeterListFilters {
-  accountId?: string;
-  assignedOffice?: string;
-  status?: string;
-}
-
-export async function listWaterSubmeters(
-  filters: SubmeterListFilters = {},
-): Promise<WaterSubmeter[]> {
-  const db = requireDb();
-  let q = db.from(SUBMETERS).select("*").order("submeter_number", { ascending: true });
-  if (filters.accountId) q = q.eq("account_id", filters.accountId);
-  if (filters.assignedOffice) q = q.eq("assigned_office", filters.assignedOffice);
-  if (filters.status) q = q.eq("status", filters.status);
-  return (await fetchAll((from, to) => q.range(from, to))).map(rowToSubmeter);
-}
-
-export interface SubmeterDraftInput {
-  accountId: string;
-  submeterName: string;
-  submeterNumber: string;
-  assignedOffice: string;
-  assignedDepartment?: string;
-  assignedFacility?: string;
-  assignedUser?: string;
-  remarks?: string;
-  status: SubmeterStatus;
-}
-
-export async function createWaterSubmeter(input: SubmeterDraftInput): Promise<WaterSubmeter> {
-  const db = requireDb();
-  const at = nowIso();
-  const row = {
-    id: `ws-${input.accountId}-${Date.now()}`,
-    account_id: input.accountId,
-    submeter_name: input.submeterName,
-    submeter_number: input.submeterNumber,
-    assigned_office: input.assignedOffice,
-    assigned_department: input.assignedDepartment?.trim() || null,
-    assigned_facility: input.assignedFacility?.trim() || null,
-    assigned_user: input.assignedUser?.trim() || null,
-    remarks: input.remarks?.trim() || null,
-    status: input.status,
-    created_at: at,
-    updated_at: at,
-  };
-  const { data, error } = await db.from(SUBMETERS).insert(row).select().single();
-  if (error) {
-    const msg = String((error as { message?: string }).message ?? "");
-    if (msg.toLowerCase().includes("duplicate")) {
-      throw new Error("That submeter number already exists on this account.");
-    }
-    throw new Error(`Unable to save the submeter: ${msg}`);
-  }
-  return rowToSubmeter(data);
-}
-
-export async function updateWaterSubmeter(
-  id: string,
-  input: Omit<SubmeterDraftInput, "accountId">,
-): Promise<WaterSubmeter> {
-  const db = requireDb();
-  const row = {
-    submeter_name: input.submeterName,
-    submeter_number: input.submeterNumber,
-    assigned_office: input.assignedOffice,
-    assigned_department: input.assignedDepartment?.trim() || null,
-    assigned_facility: input.assignedFacility?.trim() || null,
-    assigned_user: input.assignedUser?.trim() || null,
-    remarks: input.remarks?.trim() || null,
-    status: input.status,
-    updated_at: nowIso(),
-  };
-  return rowToSubmeter(unwrap(await db.from(SUBMETERS).update(row).eq("id", id).select().single()));
-}
-
-export interface SubmeterAssignmentInput {
-  assignedOffice: string;
-  assignedDepartment?: string;
-  assignedFacility?: string;
-  assignedUser?: string;
-}
-
-/**
- * Reassigns a submeter without touching its identity, status or billing
- * history — used when a meter changes hands between offices or custodians.
- */
-export async function assignWaterSubmeter(
-  id: string,
-  input: SubmeterAssignmentInput,
-): Promise<WaterSubmeter> {
-  const db = requireDb();
-  const row = {
-    assigned_office: input.assignedOffice,
-    assigned_department: input.assignedDepartment?.trim() || null,
-    assigned_facility: input.assignedFacility?.trim() || null,
-    assigned_user: input.assignedUser?.trim() || null,
-    updated_at: nowIso(),
-  };
-  return rowToSubmeter(unwrap(await db.from(SUBMETERS).update(row).eq("id", id).select().single()));
-}
-
-/**
- * Archiving keeps the submeter and its billing history for reporting; only
- * active submeters count toward the account's live totals. Historical billing
- * records are never deleted.
- */
-export async function archiveWaterSubmeter(
-  id: string,
-  status: SubmeterStatus,
-): Promise<WaterSubmeter> {
-  const db = requireDb();
-  return rowToSubmeter(
-    unwrap(
-      await db
-        .from(SUBMETERS)
-        .update({ status, updated_at: nowIso() })
-        .eq("id", id)
-        .select()
-        .single(),
-    ),
-  );
-}
-
-/** Deletes submeters; their bills cascade in the database. */
-export async function deleteWaterSubmeters(ids: string[]): Promise<void> {
-  const db = requireDb();
-  unwrap(await db.from(SUBMETERS).delete().in("id", ids));
-}
-
-/* ---------------- submeter bills ---------------- */
-
-export interface SubmeterBillFilters {
-  submeterId?: string;
-  year?: number;
-  month?: number;
-}
-
-export async function listWaterSubmeterBills(
-  filters: SubmeterBillFilters = {},
-): Promise<WaterSubmeterBill[]> {
-  const db = requireDb();
-  let q = db
-    .from(SUBMETER_BILLS)
-    .select("*")
-    .order("billing_year", { ascending: false })
-    .order("billing_month", { ascending: false });
-  if (filters.submeterId) q = q.eq("submeter_id", filters.submeterId);
-  if (filters.year) q = q.eq("billing_year", filters.year);
-  if (filters.month) q = q.eq("billing_month", filters.month);
-  return (await fetchAll((from, to) => q.range(from, to))).map(rowToSubmeterBill);
-}
-
-export interface SubmeterBillDraftInput {
-  submeterId: string;
-  billingMonth: number;
-  billingYear: number;
-  consumption: number;
-  amount: number;
-  remarks?: string;
-}
-
-export async function createWaterSubmeterBill(
-  input: SubmeterBillDraftInput,
-): Promise<WaterSubmeterBill> {
-  const db = requireDb();
-  const row = {
-    id: `wsb-${input.submeterId}-${input.billingYear}-${String(input.billingMonth).padStart(2, "0")}`,
-    submeter_id: input.submeterId,
-    billing_month: input.billingMonth,
-    billing_year: input.billingYear,
-    consumption: input.consumption,
-    amount: input.amount,
-    remarks: input.remarks?.trim() || null,
-    created_at: nowIso(),
-  };
-  const { data, error } = await db.from(SUBMETER_BILLS).insert(row).select().single();
-  if (error) {
-    const msg = String((error as { message?: string }).message ?? "");
-    if (msg.toLowerCase().includes("duplicate")) {
-      throw new Error("A bill for that submeter and billing period already exists.");
-    }
-    throw new Error(`Unable to record the bill: ${msg}`);
-  }
-  return rowToSubmeterBill(data);
-}
-
-export async function updateWaterSubmeterBill(
-  id: string,
-  input: Pick<SubmeterBillDraftInput, "consumption" | "amount" | "remarks">,
-): Promise<WaterSubmeterBill> {
-  const db = requireDb();
-  const row = {
-    consumption: input.consumption,
-    amount: input.amount,
-    remarks: input.remarks?.trim() || null,
-  };
-  return rowToSubmeterBill(
-    unwrap(await db.from(SUBMETER_BILLS).update(row).eq("id", id).select().single()),
-  );
-}
-
-export async function deleteWaterSubmeterBills(ids: string[]): Promise<void> {
-  const db = requireDb();
-  unwrap(await db.from(SUBMETER_BILLS).delete().in("id", ids));
-}
-
-/* ---------------- meter readings ---------------- */
-
-function rowToReading(r: any): WaterMeterReading {
-  return {
-    id: r.id,
-    submeterId: r.submeter_id,
-    readingDate: r.reading_date,
-    previousReading: Number(r.previous_reading ?? 0),
-    currentReading: Number(r.current_reading ?? 0),
-    consumption: Number(r.consumption ?? 0),
-    amount: Number(r.amount ?? 0),
-    remarks: r.remarks ?? undefined,
-    createdAt: r.created_at,
-  };
-}
-
-export interface MeterReadingFilters {
-  submeterId?: string;
-}
-
-/** Readings newest first, so the first row is always the latest. */
-export async function listWaterMeterReadings(
-  filters: MeterReadingFilters = {},
-): Promise<WaterMeterReading[]> {
-  const db = requireDb();
-  let q = db.from(READINGS).select("*").order("reading_date", { ascending: false });
-  if (filters.submeterId) q = q.eq("submeter_id", filters.submeterId);
-  return (await fetchAll((from, to) => q.range(from, to))).map(rowToReading);
-}
-
-export interface MeterReadingDraftInput {
-  submeterId: string;
-  readingDate: string;
-  /** Carried forward from the previous reading; the form does not ask for it. */
-  previousReading: number;
-  currentReading: number;
-  amount: number;
-  remarks?: string;
-}
-
-/**
- * Records a reading. Consumption is a generated column — the database derives
- * it from current − previous, so it is never sent from the client.
- */
-export async function createWaterMeterReading(
-  input: MeterReadingDraftInput,
-): Promise<WaterMeterReading> {
-  const db = requireDb();
-  const row = {
-    id: `wmr-${input.submeterId}-${Date.now()}`,
-    submeter_id: input.submeterId,
-    reading_date: input.readingDate,
-    previous_reading: input.previousReading,
-    current_reading: input.currentReading,
-    amount: input.amount,
-    remarks: input.remarks?.trim() || null,
-    created_at: nowIso(),
-  };
-  const { data, error } = await db.from(READINGS).insert(row).select().single();
-  if (error) {
-    const msg = String((error as { message?: string }).message ?? "");
-    if (msg.includes("water_reading_not_backwards")) {
-      throw new Error("The current reading cannot be lower than the previous reading.");
-    }
-    throw new Error(`Unable to record the reading: ${msg}`);
-  }
-  return rowToReading(data);
-}
-
-export async function updateWaterMeterReading(
-  id: string,
-  input: Omit<MeterReadingDraftInput, "submeterId">,
-): Promise<WaterMeterReading> {
-  const db = requireDb();
-  const row = {
-    reading_date: input.readingDate,
-    previous_reading: input.previousReading,
-    current_reading: input.currentReading,
-    amount: input.amount,
-    remarks: input.remarks?.trim() || null,
-  };
-  const { data, error } = await db.from(READINGS).update(row).eq("id", id).select().single();
-  if (error) {
-    const msg = String((error as { message?: string }).message ?? "");
-    if (msg.includes("water_reading_not_backwards")) {
-      throw new Error("The current reading cannot be lower than the previous reading.");
-    }
-    throw new Error(`Unable to update the reading: ${msg}`);
-  }
-  return rowToReading(data);
-}
-
-export async function deleteWaterMeterReadings(ids: string[]): Promise<void> {
-  const db = requireDb();
-  unwrap(await db.from(READINGS).delete().in("id", ids));
-}
+export const listWaterAccounts = pick("listWaterAccounts");
+export const getWaterAccount = pick("getWaterAccount");
+export const createWaterAccount = pick("createWaterAccount");
+export const updateWaterAccount = pick("updateWaterAccount");
+export const deleteWaterAccounts = pick("deleteWaterAccounts");
+export const archiveWaterAccount = pick("archiveWaterAccount");
+export const correctWaterSubmeterBill = pick("correctWaterSubmeterBill");
+export const correctWaterMeterReading = pick("correctWaterMeterReading");
+export const listWaterBills = pick("listWaterBills");
+export const createWaterBill = pick("createWaterBill");
+export const updateWaterBill = pick("updateWaterBill");
+export const deleteWaterBills = pick("deleteWaterBills");
+export const correctWaterBill = pick("correctWaterBill");
+export const voidWaterBill = pick("voidWaterBill");
+export const listWaterSubmeters = pick("listWaterSubmeters");
+export const createWaterSubmeter = pick("createWaterSubmeter");
+export const updateWaterSubmeter = pick("updateWaterSubmeter");
+export const assignWaterSubmeter = pick("assignWaterSubmeter");
+export const archiveWaterSubmeter = pick("archiveWaterSubmeter");
+export const deleteWaterSubmeters = pick("deleteWaterSubmeters");
+export const listWaterSubmeterBills = pick("listWaterSubmeterBills");
+export const createWaterSubmeterBill = pick("createWaterSubmeterBill");
+export const updateWaterSubmeterBill = pick("updateWaterSubmeterBill");
+export const deleteWaterSubmeterBills = pick("deleteWaterSubmeterBills");
+export const voidWaterSubmeterBill = pick("voidWaterSubmeterBill");
+export const listWaterMeterReadings = pick("listWaterMeterReadings");
+export const createWaterMeterReading = pick("createWaterMeterReading");
+export const updateWaterMeterReading = pick("updateWaterMeterReading");
+export const deleteWaterMeterReadings = pick("deleteWaterMeterReadings");
+export const voidWaterMeterReading = pick("voidWaterMeterReading");

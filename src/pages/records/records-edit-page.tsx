@@ -48,6 +48,17 @@ export function RecordsEditPage() {
     );
   }
 
+  if (schedule.status === "Cancelled") {
+    return (
+      <PageTransition className="space-y-6">
+        <PageHeader title="This form is voided" description="A voided form keeps its number and history and can no longer be changed." />
+        <Button variant="outline" onClick={() => navigate(`/records/${schedule.id}`)}>
+          Back to the form
+        </Button>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition className="space-y-6">
       <PageHeader

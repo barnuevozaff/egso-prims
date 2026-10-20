@@ -19,7 +19,7 @@ import {
   Textarea,
   toast,
 } from "@/components";
-import { createFuelTrip, updateFuelTrip, type TripDraftInput } from "@/features/fuel/api";
+import { createFuelTrip, correctFuelTrip, type TripDraftInput } from "@/features/fuel/api";
 import { useFuelTrips } from "@/features/fuel/hooks";
 import type { FuelTrip, FuelVehicle } from "@/features/fuel/types";
 import {
@@ -44,6 +44,8 @@ const tripSchema = z.object({
   beginningFuel: z.number({ error: "Enter the beginning fuel" }).min(0, "Cannot be negative"),
   fuelAdded: z.number({ error: "Enter the fuel added" }).min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type TripValues = z.infer<typeof tripSchema>;
@@ -139,6 +141,7 @@ export function FuelTripForm({
       beginningFuel: 0,
       fuelAdded: 0,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -161,6 +164,7 @@ export function FuelTripForm({
       beginningFuel: trip?.beginningFuel ?? active?.currentFuelBalance ?? 0,
       fuelAdded: trip?.fuelAdded ?? 0,
       remarks: trip?.remarks ?? "",
+      correctionReason: "",
     });
     carriedFrom.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,6 +237,10 @@ export function FuelTripForm({
   const blocked = hasTripErrors(check);
 
   const submit = form.handleSubmit(async (v) => {
+    if (isEdit && !v.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     if (blocked) {
       toast.error(Object.values(check.errors)[0] ?? "Please correct the trip details.");
       return;
@@ -258,8 +266,8 @@ export function FuelTripForm({
         remarks: v.remarks,
       };
       if (isEdit) {
-        await updateFuelTrip(trip!.id, payload);
-        toast.success(`Trip ${trip!.controlNo} updated`);
+        await correctFuelTrip(trip!.id, payload, v.correctionReason!.trim());
+        toast.success(`Trip ${trip!.controlNo} corrected — the previous values are kept in its history`);
       } else {
         const saved = await createFuelTrip(payload);
         toast.success(`Trip ${saved.controlNo} recorded`);
@@ -277,7 +285,7 @@ export function FuelTripForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="lg">
       <DrawerHeader
-        title={isEdit ? `Edit Trip ${trip?.controlNo}` : "Add Trip"}
+        title={isEdit ? `Correct Trip ${trip?.controlNo}` : "Add Trip"}
         description={
           selected
             ? `${vehicleLabel(selected)} · ${selected.plateNumber} · ${selected.kmPerLiter} km/L · ${selected.tankCapacity} L tank`
@@ -471,6 +479,16 @@ export function FuelTripForm({
               {...form.register("remarks")}
             />
           </Field>
+          {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
         </div>
       </DrawerBody>
       <DrawerFooter>
@@ -480,7 +498,7 @@ export function FuelTripForm({
           </Button>
           <Button onClick={submit} loading={submitting} disabled={blocked}>
             <Save />
-            {isEdit ? "Save Changes" : "Save Trip"}
+            {isEdit ? "Save Correction" : "Save Trip"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

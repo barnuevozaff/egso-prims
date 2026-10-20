@@ -21,7 +21,7 @@ import {
 import { formatPHP } from "@/lib/format";
 import {
   createFuelOdometerReading,
-  updateFuelOdometerReading,
+  correctFuelOdometerReading,
 } from "@/features/fuel/api";
 import { kmPerLiter, vehicleLabel } from "@/features/fuel/lib";
 import type { FuelOdometerReading, FuelVehicle } from "@/features/fuel/types";
@@ -34,6 +34,8 @@ const odometerSchema = z.object({
   fuelCost: z.number({ error: "Enter the fuel cost" }).min(0, "Cannot be negative"),
   fuelLiters: z.number({ error: "Enter the litres drawn" }).min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type OdometerValues = z.infer<typeof odometerSchema>;
@@ -82,6 +84,7 @@ export function FuelOdometerForm({
       fuelCost: 0,
       fuelLiters: 0,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -93,6 +96,7 @@ export function FuelOdometerForm({
       fuelCost: reading?.fuelCost ?? 0,
       fuelLiters: reading?.fuelLiters ?? 0,
       remarks: reading?.remarks ?? "",
+      correctionReason: "",
     });
   }, [open, reading, previousOdometer, form]);
 
@@ -102,6 +106,10 @@ export function FuelOdometerForm({
   const efficiency = kmPerLiter(distance, Number.isFinite(liters) ? liters : 0);
 
   const submit = form.handleSubmit(async (values) => {
+    if (isEdit && !values.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     if (!vehicle) return;
     if (values.currentOdometer < previousOdometer) {
       form.setError("currentOdometer", {
@@ -120,8 +128,8 @@ export function FuelOdometerForm({
         remarks: values.remarks,
       };
       if (isEdit) {
-        await updateFuelOdometerReading(reading!.id, payload);
-        toast.success("Odometer reading updated");
+        await correctFuelOdometerReading(reading!.id, payload, values.correctionReason!.trim());
+        toast.success("Reading corrected — the previous values are kept in its history");
       } else {
         await createFuelOdometerReading({ vehicleId: vehicle.id, ...payload });
         toast.success("Odometer reading recorded");
@@ -139,7 +147,7 @@ export function FuelOdometerForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="md">
       <DrawerHeader
-        title={isEdit ? "Edit Odometer Reading" : "Add Odometer Reading"}
+        title={isEdit ? "Correct Odometer Reading" : "Add Odometer Reading"}
         description={vehicle ? `${vehicleLabel(vehicle)} · ${vehicle.plateNumber}` : undefined}
         onClose={() => onOpenChange(false)}
       />
@@ -237,6 +245,16 @@ export function FuelOdometerForm({
               {...form.register("remarks")}
             />
           </Field>
+          {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
         </div>
       </DrawerBody>
       <DrawerFooter>
@@ -246,7 +264,7 @@ export function FuelOdometerForm({
           </Button>
           <Button onClick={submit} loading={submitting}>
             <Save />
-            {isEdit ? "Save Changes" : "Record Reading"}
+            {isEdit ? "Save Correction" : "Record Reading"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

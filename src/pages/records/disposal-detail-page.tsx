@@ -1,18 +1,18 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Printer, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Printer } from "lucide-react";
 
 import {
   Button,
-  DeleteModal,
   PageHeader,
   PageTransition,
   Spinner,
   StatusBadge,
-  toast,
   type DocumentStatus,
 } from "@/components";
-import { deleteRequest } from "@/features/records/disposal-api";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
+import { voidRequest } from "@/features/records/disposal-api";
 import { useDisposalRequest } from "@/features/records/disposal-hooks";
 import {
   DisposalPrintForm,
@@ -20,6 +20,7 @@ import {
 } from "@/features/records/components/disposal-print-form";
 import { PaperSheet } from "@/features/shared/paper-sheet";
 import { FiledLocation } from "@/features/records/components/room/filed-location";
+import { VoidButton, VoidedNotice, VoidRecordDialog } from "@/features/shared/void-record";
 
 /**
  * One request for authority to dispose, shown as NAP Form No. 3.
@@ -32,22 +33,9 @@ import { FiledLocation } from "@/features/records/components/room/filed-location
 export function DisposalDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: request, loading } = useDisposalRequest(id);
-  const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-
-  const remove = async () => {
-    if (!id) return;
-    setDeleting(true);
-    try {
-      await deleteRequest(id);
-      toast.success("Disposal request deleted");
-      navigate("/records/disposal");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to delete the request");
-      setDeleting(false);
-    }
-  };
+  const { user } = useAuth();
+  const { data: request, loading, refresh } = useDisposalRequest(id);
+  const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   if (loading) {
     return (
@@ -88,20 +76,25 @@ export function DisposalDetailPage() {
                 <Printer className="mr-2 h-4 w-4" />
                 Print
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate(`/records/disposal/${request.id}/edit`)}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-              <Button variant="outline" onClick={() => setConfirmDelete(true)}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
+              {can(user, "manage:records") && request.status !== "Cancelled" && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/records/disposal/${request.id}/edit`)}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                  <VoidButton onClick={() => setConfirmVoid(true)} />
+                </>
+              )}
             </div>
           }
         />
+
+        {request.status === "Cancelled" && (
+          <VoidedNotice voidedAt={request.voidedAt} voidedBy={request.voidedBy} voidReason={request.voidReason} />
+        )}
 
         <PaperSheet>
           <DisposalRequestSheet request={request} />
@@ -112,13 +105,13 @@ export function DisposalDetailPage() {
 
       <DisposalPrintForm request={request} />
 
-      <DeleteModal
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        onConfirm={remove}
-        loading={deleting}
-        title={`Delete ${request.requestNo}?`}
-        description="The request and all of its record series are removed. This cannot be undone."
+      <VoidRecordDialog
+        open={confirmVoid}
+        onOpenChange={setConfirmVoid}
+        title={`Void ${request.requestNo}?`}
+        description="The form becomes Cancelled. Its number, lines and filing history are kept — an approved form stays where it was filed — and the reason is recorded with your name and the time."
+        onVoid={(reason) => voidRequest(request.id, reason)}
+        onDone={() => void refresh()}
       />
     </>
   );

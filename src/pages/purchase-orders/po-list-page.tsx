@@ -12,7 +12,6 @@ import {
 import {
   Button,
   CurrencyDisplay,
-  DeleteModal,
   DepartmentChip,
   DocumentNumber,
   DropdownFilter,
@@ -28,14 +27,17 @@ import {
   TableCard,
   toast,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import {
-  deletePurchaseOrders,
+  cancelPurchaseOrder,
   exportPurchaseOrdersCsv,
 } from "@/features/purchase-orders/api";
 import { usePurchaseOrders } from "@/features/purchase-orders/hooks";
 import { formatDate } from "@/features/purchase-orders/lib";
 import {
   PO_STATUSES,
+  canVoidPO,
   poTotal,
   poSupplierName,
   type POStatus,
@@ -43,12 +45,14 @@ import {
 } from "@/features/purchase-orders/types";
 import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
+import { VoidDialog } from "@/features/shared/void-dialog";
 import { PODrawer } from "@/features/purchase-orders/components/po-drawer";
 
 const ALL = "__all";
 
 export function POListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ALL);
@@ -78,7 +82,7 @@ export function POListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseOrder[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
+  const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -100,20 +104,9 @@ export function POListPage() {
     toast.success(`Exported ${rows.length} purchase order${rows.length === 1 ? "" : "s"}`);
   };
 
-  const removeRows = async (rows: PurchaseOrder[]) => {
-    try {
-      await deletePurchaseOrders(rows.map((r) => r.id));
-    } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
-      toast.error(e instanceof Error ? e.message : "Unable to delete purchase orders");
-      return;
-    }
-    setRowSelection({});
-    toast.success(`Deleted ${rows.length} purchase order${rows.length === 1 ? "" : "s"}`);
-    refreshAll();
-  };
+  // Numbered orders are voided, never deleted. Only orders not yet issued
+  // to the supplier can be; the rest are left out of the count.
+  const voidable = selectedRows.filter(canVoidPO);
 
   const columns = React.useMemo<ColumnDef<PurchaseOrder, unknown>[]>(
     () => [
@@ -301,18 +294,25 @@ export function POListPage() {
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => window.print()}
-        onDelete={() => setConfirmBulkDelete(true)}
+        onVoid={
+          can(user, "manage:purchase-orders") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined
+        }
         onClear={() => setRowSelection({})}
       />
 
-      <DeleteModal
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Delete ${selectedRows.length} purchase order${selectedRows.length === 1 ? "" : "s"}?`}
-        description="Selected orders and their attachments, comments, and history will be permanently removed."
-        onConfirm={async () => {
-          await removeRows(selectedRows);
-          setConfirmBulkDelete(false);
+      <VoidDialog
+        open={confirmVoid}
+        onOpenChange={setConfirmVoid}
+        noun="purchase order"
+        rows={voidable}
+        selectedCount={selectedRows.length}
+        numberOf={(po) => po.poNumber}
+        voidOne={(po, reason) =>
+          cancelPurchaseOrder(po.id, { reason, by: user?.name ?? "Staff", office: user?.office })
+        }
+        onDone={() => {
+          setRowSelection({});
+          refreshAll();
         }}
       />
 

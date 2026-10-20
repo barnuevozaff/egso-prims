@@ -20,8 +20,8 @@ import {
 import {
   createEnergyBill,
   createEnergySubmeterBill,
-  updateEnergyBill,
-  updateEnergySubmeterBill,
+  correctEnergyBill,
+  correctEnergySubmeterBill,
 } from "@/features/energy/api";
 import {
   MONTHS,
@@ -41,6 +41,8 @@ const billSchema = z.object({
   amount: z.number({ error: "Enter the billed amount" }).positive("Must be more than 0"),
   kwh: z.number({ error: "Enter the kilowatt-hour reading" }).min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type BillValues = z.infer<typeof billSchema>;
@@ -86,6 +88,7 @@ export function EnergyBillForm({
       amount: 0,
       kwh: 0,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -98,21 +101,26 @@ export function EnergyBillForm({
       amount: existing?.amount ?? 0,
       kwh: measure ?? 0,
       remarks: existing?.remarks ?? "",
+      correctionReason: "",
     });
   }, [open, bill, submeterBill, existing, forSubmeter, form]);
 
   const submit = form.handleSubmit(async (values) => {
+    if (isEdit && !values.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     if (!account && !submeter) return;
     setSubmitting(true);
     try {
       if (forSubmeter) {
         if (isEdit) {
-          await updateEnergySubmeterBill(submeterBill!.id, {
-            amount: values.amount,
-            consumption: values.kwh,
-            remarks: values.remarks,
-          });
-          toast.success("Submeter billing record updated");
+          await correctEnergySubmeterBill(
+            submeterBill!.id,
+            { amount: values.amount, consumption: values.kwh, remarks: values.remarks },
+            values.correctionReason!.trim(),
+          );
+          toast.success("Submeter bill corrected — the previous values are kept in its history");
         } else {
           await createEnergySubmeterBill({
             submeterId: submeter!.id,
@@ -127,12 +135,12 @@ export function EnergyBillForm({
           );
         }
       } else if (isEdit) {
-        await updateEnergyBill(bill!.id, {
-          amount: values.amount,
-          kwh: values.kwh,
-          remarks: values.remarks,
-        });
-        toast.success("Billing record updated");
+        await correctEnergyBill(
+          bill!.id,
+          { amount: values.amount, kwh: values.kwh, remarks: values.remarks },
+          values.correctionReason!.trim(),
+        );
+        toast.success("Bill corrected — the previous values are kept in its history");
       } else {
         await createEnergyBill({ accountId: account!.id, ...values });
         toast.success(`${MONTHS[values.billingMonth - 1]} ${values.billingYear} bill recorded`);
@@ -150,7 +158,7 @@ export function EnergyBillForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="md">
       <DrawerHeader
-        title={isEdit ? "Edit Billing Record" : "Record Monthly Bill"}
+        title={isEdit ? "Correct Billing Record" : "Record Monthly Bill"}
         description={
           submeter
             ? `${submeterLabel(submeter)} · ${submeter.submeterNumber}`
@@ -235,9 +243,19 @@ export function EnergyBillForm({
             />
           </Field>
           {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
+          {isEdit && (
             <p className="rounded-lg bg-neutral-50 px-3 py-2.5 text-[11.5px] leading-relaxed text-neutral-500">
-              The billing period cannot be changed. Delete the record and re-enter it if the month
-              or year was recorded incorrectly.
+              The billing period cannot be changed. If the month or year was recorded
+              incorrectly, void this bill and record it again.
             </p>
           )}
         </div>
@@ -249,7 +267,7 @@ export function EnergyBillForm({
           </Button>
           <Button onClick={submit} loading={submitting}>
             <Save />
-            {isEdit ? "Save Changes" : "Record Bill"}
+            {isEdit ? "Save Correction" : "Record Bill"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

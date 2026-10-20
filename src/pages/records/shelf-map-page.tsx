@@ -17,6 +17,8 @@ import {
   Skeleton,
   toast,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import { useRecordsRoom } from "@/features/records/shelf-hooks";
 import { createShelf, deleteShelf, updateShelf } from "@/features/records/shelf-api";
 import {
@@ -289,6 +291,7 @@ function ShelfCard({
   onRenameShelf,
   onDeleteShelf,
   onOpenBox,
+  canManage,
 }: {
   shelf: ShelfWithLevels;
   boxesOnShelf: number;
@@ -299,18 +302,24 @@ function ShelfCard({
   onRenameShelf: (name: string) => void;
   onDeleteShelf: () => void;
   onOpenBox: (box: RecordBox) => void;
+  /** Administrators rename and remove shelves; everyone else reads the room. */
+  canManage: boolean;
 }) {
   return (
     <ContainerCard className="w-full max-w-3xl overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <InlineText
-            value={shelf.name}
-            placeholder="Shelf name"
-            ariaLabel="Shelf name"
-            className="text-[15px] font-semibold text-neutral-900"
-            onCommit={onRenameShelf}
-          />
+          {canManage ? (
+            <InlineText
+              value={shelf.name}
+              placeholder="Shelf name"
+              ariaLabel="Shelf name"
+              className="text-[15px] font-semibold text-neutral-900"
+              onCommit={onRenameShelf}
+            />
+          ) : (
+            <div className="truncate px-1.5 text-[15px] font-semibold text-neutral-900">{shelf.name}</div>
+          )}
           {shelf.location ? (
             <div className="truncate px-1.5 text-[12.5px] text-neutral-500">{shelf.location}</div>
           ) : null}
@@ -318,15 +327,17 @@ function ShelfCard({
         <span className="shrink-0 text-[12.5px] tabular-nums text-neutral-600">
           {boxesOnShelf} of {POSITIONS_PER_SHELF} boxes occupied
         </span>
-        <IconButton
-          size="icon-sm"
-          aria-label={`Remove ${shelf.name}`}
-          title={`Remove ${shelf.name}`}
-          onClick={onDeleteShelf}
-          className="bg-transparent text-neutral-400 hover:text-neutral-900"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </IconButton>
+        {canManage && (
+          <IconButton
+            size="icon-sm"
+            aria-label={`Remove ${shelf.name}`}
+            title={`Remove ${shelf.name}`}
+            onClick={onDeleteShelf}
+            className="bg-transparent text-neutral-400 hover:text-neutral-900"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </IconButton>
+        )}
       </div>
 
       {/* The rack. The slotted uprights run the full height beside the
@@ -464,6 +475,8 @@ function RoomSkeleton() {
 
 export function ShelfMapPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canManage = can(user, "manage:records");
   const { shelves, boxes, contents, loading, failed, refresh } = useRecordsRoom();
   const still = useReducedMotion() ?? false;
 
@@ -625,10 +638,12 @@ export function ShelfMapPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Schedules
               </Button>
-              <Button onClick={() => setNewShelfOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Shelf
-              </Button>
+              {canManage && (
+                <Button onClick={() => setNewShelfOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Shelf
+                </Button>
+              )}
             </div>
           }
         />
@@ -647,8 +662,12 @@ export function ShelfMapPage() {
             <EmptyState
               icon={Layers}
               title="The room has no shelves yet"
-              description="The first approved disposition schedule, inventory or disposal request brings a shelf with it. You can also add one now."
-              action={{ label: "Add Shelf", onClick: () => setNewShelfOpen(true) }}
+              description={
+                canManage
+                  ? "The first approved disposition schedule, inventory or disposal request brings a shelf with it. You can also add one now."
+                  : "The first approved disposition schedule, inventory or disposal request brings a shelf with it."
+              }
+              action={canManage ? { label: "Add Shelf", onClick: () => setNewShelfOpen(true) } : undefined}
             />
           </ContainerCard>
         ) : (
@@ -764,6 +783,7 @@ export function ShelfMapPage() {
                     }
                     onDeleteShelf={() => setShelfToRemove(openShelf)}
                     onOpenBox={(b) => setOpenBoxId(b.id)}
+                    canManage={canManage}
                   />
                 </div>
               )}
@@ -821,6 +841,7 @@ export function ShelfMapPage() {
         onViewRecord={viewRecord}
         onViewLocation={() => viewLocation(openBox ?? undefined)}
         onChanged={() => void refresh()}
+        canManage={canManage}
       />
 
       <ConfirmationModal

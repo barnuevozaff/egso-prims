@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { countRows, requireDb, unwrap } from "@/lib/db";
+import { countRecords, loadStockLevels } from "@/features/shared/record-counts";
 import { useRealtimeRefresh } from "@/features/shared/use-realtime";
 import { PENDING_PR_STATUSES } from "@/features/purchase-requests/types";
 import { stockStatusOf } from "@/features/inventory/types";
@@ -38,10 +38,7 @@ const EMPTY: NavCounts = {
  * fetched, and the classification stays in the one function that owns it.
  */
 async function countStockAlerts(): Promise<number> {
-  const db = requireDb();
-  const rows = unwrap(
-    await db.from("inventory_items").select("on_hand, reorder_level, critical_level"),
-  ) as { on_hand: number; reorder_level: number; critical_level: number }[];
+  const rows = await loadStockLevels();
 
   return rows.filter(
     (r) =>
@@ -55,9 +52,9 @@ async function countStockAlerts(): Promise<number> {
 
 export async function loadNavCounts(): Promise<NavCounts> {
   const [pendingPRs, pendingPOs, pendingReservations, stockAlerts] = await Promise.all([
-    countRows("purchase_requests", PENDING_PR_STATUSES),
-    countRows("purchase_orders", ["Pending Approval"]),
-    countRows("reservations", ["Pending"]),
+    countRecords("purchase_requests", PENDING_PR_STATUSES),
+    countRecords("purchase_orders", ["Pending Approval"]),
+    countRecords("reservations", ["Pending"]),
     countStockAlerts(),
   ]);
   return { pendingPRs, pendingPOs, pendingReservations, stockAlerts };

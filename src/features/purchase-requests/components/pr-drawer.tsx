@@ -20,6 +20,8 @@ import { setPurchaseRequestStatus } from "@/features/purchase-requests/api";
 import { usePurchaseRequest } from "@/features/purchase-requests/hooks";
 import { canRaisePO, nextApprovalStatus } from "@/features/purchase-requests/lib";
 import { departmentByCode } from "@/features/purchase-requests/types";
+import { useAuth } from "@/features/auth/auth-context";
+import { can, canEditPurchaseRequest } from "@/features/auth/types";
 import { PRPrintSheet } from "@/features/shared/procurement-sheets";
 import { PRDetailPanels } from "@/features/purchase-requests/components/pr-detail-panels";
 
@@ -44,18 +46,26 @@ export function PRDrawer({
   const [confirmReturn, setConfirmReturn] = React.useState(false);
   const [acting, setActing] = React.useState(false);
 
-  const next = pr ? nextApprovalStatus(pr.status) : null;
+  const { user } = useAuth();
   const terminal = pr ? ["Rejected", "Cancelled", "Completed"].includes(pr.status) : false;
-  const canGeneratePO = !!pr && canRaisePO(pr.status);
+  const canGeneratePO = !!pr && canRaisePO(pr.status) && can(user, "manage:purchase-orders");
+  // Deciding — approving, returning, completing — needs an Administrator or
+  // an authorised approver; submitting a draft needs its owner or a decider.
+  // firestore.rules enforce the same, whatever is shown here.
+  const decides = can(user, "approve:purchase-requests");
+  const edits = !!pr && canEditPurchaseRequest(user, pr);
+  const candidate = pr ? nextApprovalStatus(pr.status) : null;
+  const next = candidate === "Submitted" ? (edits ? candidate : null) : decides ? candidate : null;
+  const canReturn = decides && !!pr && (pr.status === "Submitted" || pr.status === "Approved");
+  const actor = { by: user?.name ?? "Staff", office: user?.office ?? "General Services Office" };
+  // Submitting a draft is not an approval, so it is not labelled as one.
+  const actionLabel = next === "Completed" ? "Mark Completed" : next === "Submitted" ? "Submit" : "Approve";
 
   const approve = async () => {
     if (!pr || !next) return;
     setActing(true);
     try {
-      const updated = await setPurchaseRequestStatus(pr.id, next, {
-        by: "Administrator",
-        office: "General Services Office",
-      });
+      const updated = await setPurchaseRequestStatus(pr.id, next, actor);
       setData(updated);
       toast.success(`${pr.prNumber} moved to ${next}`);
       onChanged?.();
@@ -71,8 +81,7 @@ export function PRDrawer({
     setActing(true);
     try {
       const updated = await setPurchaseRequestStatus(pr.id, "Draft", {
-        by: "Administrator",
-        office: "General Services Office",
+        ...actor,
         remarks: "Returned to requester for revision",
       });
       setData(updated);
@@ -131,10 +140,12 @@ export function PRDrawer({
                 <Printer />
                 Print
               </Button>
-              <Button variant="secondary" onClick={() => onEdit?.(pr.id)}>
-                <Pencil />
-                Edit
-              </Button>
+              {edits && !terminal && (
+                <Button variant="secondary" onClick={() => onEdit?.(pr.id)}>
+                  <Pencil />
+                  Edit
+                </Button>
+              )}
               {canGeneratePO && (
                 <Button
                   variant="secondary"
@@ -146,7 +157,7 @@ export function PRDrawer({
                   Generate PO
                 </Button>
               )}
-              {!terminal && (
+              {canReturn && (
                 <Button variant="outline" onClick={() => setConfirmReturn(true)}>
                   <Undo2 />
                   Return
@@ -155,7 +166,7 @@ export function PRDrawer({
               {next && (
                 <Button onClick={() => setConfirmApprove(true)}>
                   <CheckCircle2 />
-                  {next === "Completed" ? "Mark Completed" : "Approve"}
+                  {actionLabel}
                 </Button>
               )}
             </DrawerActions>
@@ -168,7 +179,7 @@ export function PRDrawer({
             icon={CheckCircle2}
             title={next === "Completed" ? "Mark as completed?" : `Advance to ${next}?`}
             description={`${pr.prNumber} will move from “${pr.status}” to “${next}”. This is recorded in the approval timeline.`}
-            confirmLabel={next === "Completed" ? "Mark Completed" : "Approve"}
+            confirmLabel={actionLabel}
             loading={acting}
             onConfirm={approve}
           />

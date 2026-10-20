@@ -181,7 +181,9 @@ export function AppraisalForm({
   const [datePrepared, setDatePrepared] = React.useState<Date | undefined>(
     initial ? new Date(`${initial.datePrepared}T00:00:00`) : new Date(),
   );
-  const [status, setStatus] = React.useState<ScheduleStatus>(initial?.status ?? "Draft");
+  const [status, setStatus] = React.useState<ScheduleStatus>(
+    initial?.status && initial.status !== "Cancelled" ? initial.status : "Draft",
+  );
   const [records, setRecords] = React.useState<InventoryRecordDraft[]>(
     initial?.records.map((r) => ({
       itemNumber: r.itemNumber,

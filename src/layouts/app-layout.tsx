@@ -40,6 +40,8 @@ import {
 import { ConfirmationModal } from "@/components/modal/modals";
 import { toast } from "@/components/feedback/toaster";
 import { useAuth } from "@/features/auth/auth-context";
+import { can, type Permission } from "@/features/auth/types";
+import { initialsOf } from "@/lib/initials";
 import { useNotifications } from "@/features/notifications/hooks";
 import { NotificationDrawer } from "@/features/notifications/components/notification-drawer";
 import { useAppearanceSync, useBranding } from "@/features/config/use-appearance";
@@ -61,6 +63,12 @@ interface ModuleNavItem {
   badgeColor?: "blue" | "green" | "orange";
   /** Show the count as a presence dot rather than a number. */
   countAsDot?: boolean;
+  /**
+   * Shown only to roles granted this permission. The route keeps its own
+   * guard (PermissionRoute), and firestore.rules decide what data is
+   * actually readable; hiding the link only spares people a dead end.
+   */
+  permission?: Permission;
 }
 
 // Single top-level modules (unchanged — remain plain nav items).
@@ -89,7 +97,7 @@ const violationItem: ModuleNavItem = {
   label: "Ordinance violations",
   to: "/violations",
 };
-const reportsItem: ModuleNavItem = { icon: BarChart3, label: "Reports", to: "/reports" };
+const reportsItem: ModuleNavItem = { icon: BarChart3, label: "Reports", to: "/reports", permission: "view:reports" };
 
 // The two collapsible groups. Children keep their existing icons/badges/dots.
 const procurementChildren: ModuleNavItem[] = [
@@ -150,8 +158,8 @@ const NAV_SECTIONS: { label?: string; items: ModuleNavItem[] }[] = [
 ];
 
 const systemNav: (ModuleNavItem & { trailing?: React.ReactNode })[] = [
-  { icon: History, label: "Audit trail", to: "/audit" },
-  { icon: Settings, label: "Settings", to: "/settings" },
+  { icon: History, label: "Audit trail", to: "/audit", permission: "view:audit" },
+  { icon: Settings, label: "Settings", to: "/settings", permission: "manage:settings" },
 ];
 
 /** Every path the sidebar leads to, so an item can tell when a deeper one owns
@@ -186,21 +194,13 @@ function isActive(pathname: string, to?: string) {
  * an empty queue should read as quiet, not as a `0` to decode.
  */
 function withCount(item: ModuleNavItem, counts: NavCounts): ModuleNavItem {
-  const { countKey, badgeColor, countAsDot, ...rest } = item;
+  const { countKey, badgeColor, countAsDot, permission: _permission, ...rest } = item;
   if (!countKey) return rest;
   const value = counts[countKey];
   if (value <= 0) return rest;
   return countAsDot
     ? { ...rest, dot: "orange" }
     : { ...rest, badge: { text: String(value), color: badgeColor ?? "blue" } };
-}
-
-/** Initials from a display name: "Juan Dela Cruz" → "JD", "Mayor" → "M". */
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const letters = parts.length === 1 ? [parts[0][0]] : [parts[0][0], parts[parts.length - 1][0]];
-  return letters.join("").toUpperCase();
 }
 
 function AppSidebar({
@@ -218,6 +218,12 @@ function AppSidebar({
   const { pathname } = useLocation();
   const branding = useBranding();
   const counts = useNavCounts();
+  const { user } = useAuth();
+  const allowed = (item: ModuleNavItem) => !item.permission || can(user, item.permission);
+  const sections = NAV_SECTIONS.map((sec) => ({ ...sec, items: sec.items.filter(allowed) })).filter(
+    (sec) => sec.items.length > 0,
+  );
+  const system = systemNav.filter(allowed);
 
   /** Navigates, then lets the mobile drawer close itself behind the new route. */
   const go = React.useCallback(
@@ -248,22 +254,26 @@ function AppSidebar({
         subtitle={branding.organizationName}
       />
       <SidebarContent>
-        {NAV_SECTIONS.map((sec, i) => (
+        {sections.map((sec, i) => (
           <SidebarGroup key={sec.label ?? `top-${i}`} label={sec.label}>
             {sec.items.map(renderItem)}
           </SidebarGroup>
         ))}
-        <SidebarDivider />
-        <SidebarGroup>
-          {systemNav.map(({ to, ...item }) => (
-            <SidebarItem
-              key={item.label}
-              {...item}
-              active={isActive(pathname, to)}
-              onClick={to ? () => go(to) : undefined}
-            />
-          ))}
-        </SidebarGroup>
+        {system.length > 0 && (
+          <>
+            <SidebarDivider />
+            <SidebarGroup>
+              {system.map(({ to, permission: _permission, ...item }) => (
+                <SidebarItem
+                  key={item.label}
+                  {...item}
+                  active={isActive(pathname, to)}
+                  onClick={to ? () => go(to) : undefined}
+                />
+              ))}
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
       {/* No account block here: Settings is in the list above and Sign Out
           is in the profile menu at the top right, where it was a third copy. */}
@@ -366,7 +376,9 @@ function AppTopBar({
             detail={user?.office ?? "General Services Office"}
             initials={initialsOf(user?.name ?? "Administrator")}
             items={[
-              { label: "Settings", icon: Settings, onClick: () => navigate("/settings") },
+              ...(can(user, "manage:settings")
+                ? [{ label: "Settings", icon: Settings, onClick: () => navigate("/settings") }]
+                : []),
               { label: "Sign Out", icon: LogOut, destructive: true, onClick: onRequestSignOut },
             ]}
           />

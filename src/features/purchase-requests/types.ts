@@ -130,6 +130,8 @@ export interface ApprovalRecord {
   office?: string;
   at?: string;
   remarks?: string;
+  /** The signed-in account that took the step (Firebase). */
+  byUid?: string;
 }
 
 export interface PurchaseRequest {
@@ -147,6 +149,11 @@ export interface PurchaseRequest {
   comments: PRComment[];
   history: PRHistoryEntry[];
   approvals: ApprovalRecord[];
+  /**
+   * The staff account that raised the request; absent for requests filed on
+   * the public portal and for records saved before ownership was kept.
+   */
+  createdByUid?: string;
   createdAt: string;
   updatedAt: string;
 }

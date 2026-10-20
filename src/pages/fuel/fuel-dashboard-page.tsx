@@ -275,10 +275,11 @@ export function FuelDashboardPage() {
     try {
       await deleteFuelVehicles(rows.map((r) => r.id));
     } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
+      // Records that hold official records are kept (approved 2026-10-21);
+      // the others may have been deleted, so the table is refreshed either way.
       toast.error(e instanceof Error ? e.message : "Unable to delete the vehicles");
+      setRowSelection({});
+      refreshAll();
       return;
     }
     setRowSelection({});
@@ -668,7 +669,7 @@ export function FuelDashboardPage() {
         open={confirmBulkDelete}
         onOpenChange={setConfirmBulkDelete}
         title={`Delete ${selectedRows.length} vehicle${selectedRows.length === 1 ? "" : "s"}?`}
-        description="The vehicles and all of their trips will be permanently removed."
+        description="Only vehicles with no trips, purchases or odometer readings are deleted. A vehicle that holds records is kept — set it Inactive instead."
         onConfirm={async () => {
           await removeVehicles(selectedRows.map((r) => r.vehicle));
           setConfirmBulkDelete(false);

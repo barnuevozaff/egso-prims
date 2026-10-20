@@ -12,7 +12,6 @@ import {
 
 import {
   Button,
-  DeleteModal,
   DepartmentChip,
   DocumentNumber,
   DropdownFilter,
@@ -28,11 +27,14 @@ import {
   TableCard,
   toast,
 } from "@/components";
-import { deleteRequests, exportRequestsCsv } from "@/features/ris/api";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
+import { cancelRequest, exportRequestsCsv } from "@/features/ris/api";
 import { useRequests } from "@/features/ris/hooks";
 import { formatDate } from "@/features/ris/lib";
 import {
   RIS_STATUSES,
+  VOIDABLE_RIS_STATUSES,
   risTotalIssued,
   type RISStatus,
   type RequestForIssuance,
@@ -42,12 +44,14 @@ import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/type
 /** Statuses at which the slip has actually been issued from stock. */
 const ISSUED_STATUSES: RISStatus[] = ["Released", "Completed"];
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
+import { VoidDialog } from "@/features/shared/void-dialog";
 import { RISDrawer } from "@/features/ris/components/ris-drawer";
 
 const ALL = "__all";
 
 export function RISListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ALL);
@@ -75,7 +79,7 @@ export function RISListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<RequestForIssuance[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
+  const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -97,20 +101,12 @@ export function RISListPage() {
     toast.success(`Exported ${rows.length} slip${rows.length === 1 ? "" : "s"}`);
   };
 
-  const removeRows = async (rows: RequestForIssuance[]) => {
-    try {
-      await deleteRequests(rows.map((r) => r.id));
-    } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
-      toast.error(e instanceof Error ? e.message : "Unable to delete the slips");
-      return;
-    }
-    setRowSelection({});
-    toast.success(`Deleted ${rows.length} slip${rows.length === 1 ? "" : "s"}`);
-    refreshAll();
-  };
+  // Numbered slips are voided, never deleted. A Released slip is voided by
+  // an Administrator only, and its stock is returned; Completed is final.
+  const voidable = selectedRows.filter(
+    (r) => VOIDABLE_RIS_STATUSES.includes(r.status) && (r.status !== "Released" || user?.role === "Administrator"),
+  );
+  const releasedSelected = voidable.some((r) => r.status === "Released");
 
   const columns = React.useMemo<ColumnDef<RequestForIssuance, unknown>[]>(
     () => [
@@ -284,18 +280,26 @@ export function RISListPage() {
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => window.print()}
-        onDelete={() => setConfirmBulkDelete(true)}
+        onVoid={can(user, "manage:ris") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined}
         onClear={() => setRowSelection({})}
       />
 
-      <DeleteModal
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Delete ${selectedRows.length} slip${selectedRows.length === 1 ? "" : "s"}?`}
-        description="Selected slips and their attachments, comments, and history will be permanently removed."
-        onConfirm={async () => {
-          await removeRows(selectedRows);
-          setConfirmBulkDelete(false);
+      <VoidDialog
+        open={confirmVoid}
+        onOpenChange={setConfirmVoid}
+        noun="slip"
+        rows={voidable}
+        selectedCount={selectedRows.length}
+        numberOf={(r) => r.risNumber}
+        voidOne={(r, reason) => cancelRequest(r.id, { reason, by: user?.name ?? "Staff", office: user?.office })}
+        extraNote={
+          releasedSelected
+            ? "Stock a released slip took is returned to inventory, with a Return line on each item's stock card."
+            : undefined
+        }
+        onDone={() => {
+          setRowSelection({});
+          refreshAll();
         }}
       />
 

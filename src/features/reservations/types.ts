@@ -21,6 +21,9 @@ export const RESERVATION_STATUSES: ReservationStatus[] = [
   "Cancelled",
 ];
 
+/** Bookings that can still be voided, freeing their slot. */
+export const VOIDABLE_RESERVATION_STATUSES: ReservationStatus[] = ["Draft", "Pending", "Approved"];
+
 /** Statuses that occupy a facility's time slot. */
 export const BLOCKING_STATUSES: ReservationStatus[] = ["Pending", "Approved"];
 

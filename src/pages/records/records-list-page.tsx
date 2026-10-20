@@ -15,6 +15,8 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import { useSchedules } from "@/features/records/hooks";
 import { SCHEDULE_STATUSES, type DispositionSchedule } from "@/features/records/types";
 
@@ -36,6 +38,7 @@ const listDate = (iso: string) => {
  */
 export function RecordsListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState(ALL);
 
@@ -93,10 +96,12 @@ export function RecordsListPage() {
               <Layers className="mr-2 h-4 w-4" />
               Records Room
             </Button>
-            <Button onClick={() => navigate("/records/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Schedule
-            </Button>
+            {can(user, "manage:records") && (
+              <Button onClick={() => navigate("/records/new")}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Schedule
+              </Button>
+            )}
           </div>
         }
       />
@@ -117,6 +122,7 @@ export function RecordsListPage() {
               options={[
                 { value: ALL, label: "All statuses" },
                 ...SCHEDULE_STATUSES.map((s) => ({ value: s, label: s })),
+                { value: "Cancelled", label: "Cancelled" },
               ]}
             />
           </FilterBar>
@@ -134,7 +140,9 @@ export function RecordsListPage() {
             description:
               "A schedule declares how long each record series is kept, as required by RA 9470 s. 2007.",
             icon: Archive,
-            action: { label: "New Schedule", onClick: () => navigate("/records/new") },
+            action: can(user, "manage:records")
+              ? { label: "New Schedule", onClick: () => navigate("/records/new") }
+              : undefined,
           }}
         />
       </TableCard>

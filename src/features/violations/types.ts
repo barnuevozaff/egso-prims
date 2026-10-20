@@ -38,6 +38,10 @@ export const PAYMENT_METHODS: string[] = ["Cash", "Check", "Bank Transfer", "Onl
 
 /** A person on record with the General Services Office. */
 export interface Violator {
+  /** Archived (approved 2026-10-21): kept with everything it holds, marked no longer in use. */
+  archived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   id: string;
   fullName: string;
   contactNumber?: string;
@@ -49,6 +53,9 @@ export interface Violator {
 
 /** One recorded violation, owned by a violator profile. */
 export interface Violation {
+  /** When and by whom the ticket was cancelled (Firebase; approved 2026-10-21). */
+  cancelledAt?: string;
+  cancelledBy?: string;
   id: string;
   violatorId: string;
   violationNo: string;

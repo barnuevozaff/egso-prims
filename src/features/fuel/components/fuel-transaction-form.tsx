@@ -20,7 +20,7 @@ import {
   toast,
 } from "@/components";
 import { formatPHP } from "@/lib/format";
-import { createFuelTransaction, updateFuelTransaction } from "@/features/fuel/api";
+import { createFuelTransaction, correctFuelTransaction } from "@/features/fuel/api";
 import { FUEL_TYPES, type FuelTransaction, type FuelVehicle } from "@/features/fuel/types";
 import { vehicleLabel } from "@/features/fuel/lib";
 
@@ -35,6 +35,8 @@ const txnSchema = z.object({
   driver: z.string().optional(),
   odometer: z.number().min(0, "Cannot be negative").optional(),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type TxnValues = z.infer<typeof txnSchema>;
@@ -77,6 +79,7 @@ export function FuelTransactionForm({
       driver: "",
       odometer: undefined,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -91,6 +94,7 @@ export function FuelTransactionForm({
       driver: transaction?.driver ?? "",
       odometer: transaction?.odometer,
       remarks: transaction?.remarks ?? "",
+      correctionReason: "",
     });
   }, [open, transaction, vehicle, form]);
 
@@ -109,6 +113,10 @@ export function FuelTransactionForm({
   const total = (Number.isFinite(liters) ? liters : 0) * (Number.isFinite(price) ? price : 0);
 
   const submit = form.handleSubmit(async (values) => {
+    if (isEdit && !values.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     const targetId = vehicle?.id ?? values.vehicleId;
     if (!targetId) return;
     setSubmitting(true);
@@ -123,8 +131,8 @@ export function FuelTransactionForm({
         remarks: values.remarks,
       };
       if (isEdit) {
-        await updateFuelTransaction(transaction!.id, payload);
-        toast.success("Fuel transaction updated");
+        await correctFuelTransaction(transaction!.id, payload, values.correctionReason!.trim());
+        toast.success("Fuel transaction corrected — the previous values are kept in its history");
       } else {
         await createFuelTransaction({ vehicleId: targetId, ...payload });
         toast.success("Fuel transaction recorded");
@@ -142,7 +150,7 @@ export function FuelTransactionForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="md">
       <DrawerHeader
-        title={isEdit ? "Edit Fuel Transaction" : "Record Fuel Transaction"}
+        title={isEdit ? "Correct Fuel Transaction" : "Record Fuel Transaction"}
         description={vehicle ? `${vehicleLabel(vehicle)} · ${vehicle.plateNumber}` : undefined}
         onClose={() => onOpenChange(false)}
       />
@@ -259,6 +267,16 @@ export function FuelTransactionForm({
               {...form.register("remarks")}
             />
           </Field>
+          {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
         </div>
       </DrawerBody>
       <DrawerFooter>
@@ -268,7 +286,7 @@ export function FuelTransactionForm({
           </Button>
           <Button onClick={submit} loading={submitting}>
             <Save />
-            {isEdit ? "Save Changes" : "Record Transaction"}
+            {isEdit ? "Save Correction" : "Record Transaction"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

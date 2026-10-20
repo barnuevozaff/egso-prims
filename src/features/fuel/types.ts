@@ -1,3 +1,5 @@
+import type { FinalizedRecord } from "@/features/shared/revisions";
+
 /** Fuel Consumption domain types. Shapes mirror the Supabase schema. */
 
 export type VehicleStatus = "Active" | "Inactive";
@@ -33,7 +35,7 @@ export type TripSource = "Manual" | "Trip Ticket";
  * balance are computed by the database from the base columns, so the figures
  * can never drift from what the form showed.
  */
-export interface FuelTrip {
+export interface FuelTrip extends FinalizedRecord {
   id: string;
   /** Sheet control number, e.g. 2026-07-0021. */
   controlNo: string;
@@ -79,6 +81,8 @@ export interface FuelTrip {
 
 /** Filters accepted by the trip list endpoint. */
 export interface FuelTripFilters {
+  /** Voided records are left out of lists and totals unless asked for (history views). */
+  includeVoided?: boolean;
   search?: string;
   vehicleId?: string;
   officeCode?: string;
@@ -105,7 +109,7 @@ export interface VehicleTripHistory {
 
 export const TRIP_STATUSES: TripStatus[] = ["Completed", "Draft"];
 
-export interface FuelTransaction {
+export interface FuelTransaction extends FinalizedRecord {
   id: string;
   /** Centrally generated document number, e.g. FC-2026-000001. */
   docNumber?: string;
@@ -124,7 +128,7 @@ export interface FuelTransaction {
 }
 
 /** One odometer reading for a vehicle. */
-export interface FuelOdometerReading {
+export interface FuelOdometerReading extends FinalizedRecord {
   id: string;
   vehicleId: string;
   /** ISO date the odometer was read. */
@@ -202,6 +206,8 @@ export interface OverallComparison {
 
 /** Filters accepted by the transaction list endpoint. */
 export interface FuelTransactionFilters {
+  /** Voided records are left out of lists and totals unless asked for (history views). */
+  includeVoided?: boolean;
   vehicleId?: string;
   year?: number;
   month?: number;

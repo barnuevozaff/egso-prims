@@ -17,7 +17,7 @@ import { stockStatusOf, type InventoryItem } from "@/features/inventory/types";
 import { useAuth } from "@/features/auth/auth-context";
 import { listReservations } from "@/features/reservations/api";
 import { facilityById, type Reservation } from "@/features/reservations/types";
-import { countRows } from "@/lib/db";
+import { countRecords } from "@/features/shared/record-counts";
 import { formatPHP } from "@/lib/format";
 import { useRealtimeRefresh } from "@/features/shared/use-realtime";
 import { reportLoadFailure } from "@/features/shared/load-guard";
@@ -56,8 +56,8 @@ function useDashboardData() {
       const [prs, pos, risPending, risReleased, items, reservations] = await Promise.all([
         listPurchaseRequests(),
         listPurchaseOrders(),
-        countRows("ris_requests", ["Pending Approval"]),
-        countRows("ris_requests", ["Released", "Completed"]),
+        countRecords("ris_requests", ["Pending Approval"]),
+        countRecords("ris_requests", ["Released", "Completed"]),
         listInventoryItems(),
         listReservations(),
       ]);

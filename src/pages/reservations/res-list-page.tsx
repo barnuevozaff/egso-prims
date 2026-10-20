@@ -14,7 +14,6 @@ import {
 
 import {
   Button,
-  DeleteModal,
   DepartmentChip,
   DocumentNumber,
   DropdownFilter,
@@ -30,12 +29,15 @@ import {
   TableCard,
   toast,
 } from "@/components";
-import { deleteReservations, exportReservationsCsv } from "@/features/reservations/api";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
+import { cancelReservation, exportReservationsCsv } from "@/features/reservations/api";
 import { useReservations } from "@/features/reservations/hooks";
 import { formatDate } from "@/features/reservations/lib";
 import {
   FACILITIES,
   RESERVATION_STATUSES,
+  VOIDABLE_RESERVATION_STATUSES,
   facilityName,
   formatTime,
   type Reservation,
@@ -43,6 +45,7 @@ import {
 } from "@/features/reservations/types";
 import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
+import { VoidDialog } from "@/features/shared/void-dialog";
 import { ResDrawer } from "@/features/reservations/components/res-drawer";
 import { ReservationCalendar } from "@/features/reservations/components/reservation-calendar";
 
@@ -50,6 +53,7 @@ const ALL = "__all";
 
 export function ResListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [search, setSearch] = React.useState("");
   const [facility, setFacility] = React.useState(ALL);
@@ -82,7 +86,7 @@ export function ResListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<Reservation[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
+  const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -109,20 +113,8 @@ export function ResListPage() {
     toast.success(`Exported ${rows.length} reservation${rows.length === 1 ? "" : "s"}`);
   };
 
-  const removeRows = async (rows: Reservation[]) => {
-    try {
-      await deleteReservations(rows.map((r) => r.id));
-    } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
-      toast.error(e instanceof Error ? e.message : "Unable to delete the reservations");
-      return;
-    }
-    setRowSelection({});
-    toast.success(`Deleted ${rows.length} reservation${rows.length === 1 ? "" : "s"}`);
-    refreshAll();
-  };
+  // Numbered bookings are voided, never deleted; closed ones are left out.
+  const voidable = selectedRows.filter((r) => VOIDABLE_RESERVATION_STATUSES.includes(r.status));
 
   const columns = React.useMemo<ColumnDef<Reservation, unknown>[]>(
     () => [
@@ -311,18 +303,22 @@ export function ResListPage() {
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => window.print()}
-        onDelete={() => setConfirmBulkDelete(true)}
+        onVoid={can(user, "manage:reservations") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined}
         onClear={() => setRowSelection({})}
       />
 
-      <DeleteModal
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Delete ${selectedRows.length} reservation${selectedRows.length === 1 ? "" : "s"}?`}
-        description="Selected reservations and their attachments, comments, and history will be permanently removed."
-        onConfirm={async () => {
-          await removeRows(selectedRows);
-          setConfirmBulkDelete(false);
+      <VoidDialog
+        open={confirmVoid}
+        onOpenChange={setConfirmVoid}
+        noun="reservation"
+        rows={voidable}
+        selectedCount={selectedRows.length}
+        numberOf={(r) => r.resNumber}
+        voidOne={(r, reason) => cancelReservation(r.id, { reason, by: user?.name ?? "Staff", office: user?.office })}
+        extraNote="The facility is freed for those dates."
+        onDone={() => {
+          setRowSelection({});
+          refreshAll();
         }}
       />
 

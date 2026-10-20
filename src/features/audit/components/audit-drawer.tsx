@@ -34,6 +34,7 @@ import { departmentByCode } from "@/features/purchase-requests/types";
 import { CommentThread } from "@/features/shared/comment-thread";
 import { HistoryFeed, type HistoryEntry } from "@/features/shared/history-feed";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { useAuth } from "@/features/auth/auth-context";
 
 const fmt = (iso: string) => format(new Date(iso), "d MMM yyyy · h:mm:ss a");
 
@@ -95,6 +96,7 @@ export function AuditDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { user } = useAuth();
   const [entry, setEntry] = React.useState<AuditEntry | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [related, setRelated] = React.useState<AuditEntry[]>([]);
@@ -274,8 +276,8 @@ export function AuditDrawer({
                     onSubmit={async (text) => {
                       setEntry(
                         await addAuditComment(entry.id, {
-                          author: "Administrator",
-                          office: "General Services Office",
+                          author: user?.name ?? "Staff",
+                          office: user?.office ?? "General Services Office",
                           text,
                         }),
                       );

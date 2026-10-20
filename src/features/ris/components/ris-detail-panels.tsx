@@ -14,6 +14,7 @@ import { RISOverview } from "@/features/ris/components/ris-overview";
 import { AttachmentList } from "@/features/shared/attachment-list";
 import { CommentThread } from "@/features/shared/comment-thread";
 import { HistoryFeed } from "@/features/shared/history-feed";
+import { useAuth } from "@/features/auth/auth-context";
 
 /** Full RIS body: overview, items issued, tabbed timeline/attachments/comments/history. */
 export function RISDetailPanels({
@@ -23,6 +24,7 @@ export function RISDetailPanels({
   ris: RequestForIssuance;
   onUpdated: (ris: RequestForIssuance) => void;
 }) {
+  const { user } = useAuth();
   return (
     <div className="space-y-5">
       <RISOverview ris={ris} />
@@ -66,8 +68,8 @@ export function RISDetailPanels({
             onSubmit={async (text) => {
               onUpdated(
                 await addRequestComment(ris.id, {
-                  author: "Administrator",
-                  office: "General Services Office",
+                  author: user?.name ?? "Staff",
+                  office: user?.office ?? "General Services Office",
                   text,
                 }),
               );

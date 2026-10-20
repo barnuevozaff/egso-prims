@@ -2,7 +2,10 @@
 
 Purchase Request & Inventory Management System for the General Services Office,
 Municipality of Alaminos, Laguna. The owner is Zaf; he writes in Taglish and
-reads replies in Taglish.
+reads replies in Taglish. "Zaf" is the same developer who now works on this
+project from their own device and accounts (earlier sessions ran on a
+friend's device and account); there is no separate developer, and the whole
+project — Records Management included — is theirs (clarified 2026-10-20).
 
 Stack (locked): React 19, TypeScript, Vite, Tailwind v4, shadcn/ui, Supabase,
 Motion, React Hook Form + Zod, TanStack Table, React Router, Lucide.
@@ -87,13 +90,19 @@ Next, one screen at a time, same patterns, screenshot the live page after
 each: Purchase orders, Requisition & issue slips, Inventory (cut its six
 KPI cards), Facility reservations (calendar chips need facility names and a
 legend), Ordinance violations, Energy/Water/Fuel (an unbilled account still
-shows "No Change"), Reports, Audit trail, Settings, then the detail drawers,
+shows "No Change"; each submeter needs a per-month bill history in its
+drawer, with Correct, History and Void per bill — the server and API already
+void submeter bills, approved 2026-10-21, mockup first), Reports, Audit
+trail, Settings, then the detail drawers,
 the admin forms, and phone layouts (lists need cards, not sideways scroll).
 Zaf rates the system under 70% of production grade; ask him what he still
 wants to achieve before deciding what is "done".
 
-**Do not touch Records Management** (src/features/records, src/pages/records,
-migration 049): someone else is building it and its workflow is not settled.
+Records Management (src/features/records, src/pages/records) belongs to the
+same developer and is migrated to Firebase (docs/firebase/README.md,
+"Records Management"). Migration 049 is not in the repository and the code
+does not need it. Change Records' business rules only with the developer's
+approval, as for any module.
 
 ## Rules that bite
 

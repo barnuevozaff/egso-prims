@@ -1,0 +1,25 @@
+{
+  "name": "gso-prims-functions",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --dir test",
+    "test:emulator": "vitest run test-emulator/events.emulator.test.ts test-emulator/functions.emulator.test.ts --testTimeout=60000 --fileParallelism=false && vitest run --dir test-emulator --exclude \"**/events.emulator.test.ts\" --exclude \"**/functions.emulator.test.ts\" --testTimeout=60000 --fileParallelism=false",
+    "test:migration": "vitest run --dir test-migration --fileParallelism=false"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~6.0.2",
+    "vitest": "5.0.2"
+  }
+}

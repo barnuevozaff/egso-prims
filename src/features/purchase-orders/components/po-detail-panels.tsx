@@ -18,6 +18,7 @@ import { PRItemsTable } from "@/features/purchase-requests/components/pr-items-t
 import { AttachmentList } from "@/features/shared/attachment-list";
 import { CommentThread } from "@/features/shared/comment-thread";
 import { HistoryFeed } from "@/features/shared/history-feed";
+import { useAuth } from "@/features/auth/auth-context";
 
 /** Full PO body: overview, ordered items, financial summary, tabbed panels. */
 export function PODetailPanels({
@@ -27,6 +28,7 @@ export function PODetailPanels({
   po: PurchaseOrder;
   onUpdated: (po: PurchaseOrder) => void;
 }) {
+  const { user } = useAuth();
   const subtotal = poTotal(po);
   return (
     <div className="space-y-5">
@@ -104,8 +106,8 @@ export function PODetailPanels({
             onSubmit={async (text) => {
               onUpdated(
                 await addPurchaseOrderComment(po.id, {
-                  author: "Administrator",
-                  office: "General Services Office",
+                  author: user?.name ?? "Staff",
+                  office: user?.office ?? "General Services Office",
                   text,
                 }),
               );

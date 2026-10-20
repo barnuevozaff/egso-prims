@@ -16,6 +16,13 @@
  */
 export type ScheduleStatus = "Draft" | "Submitted" | "Approved" | "Returned";
 
+/**
+ * A saved form's status: the form's own four, or Cancelled once voided. A
+ * voided form keeps its number, lines and filing history and cannot be
+ * changed; it is never deleted.
+ */
+export type RecordsDocStatus = ScheduleStatus | "Cancelled";
+
 export const SCHEDULE_STATUSES: ScheduleStatus[] = [
   "Draft",
   "Submitted",
@@ -67,7 +74,12 @@ export interface DispositionSchedule {
   agencyAddress: string;
   /** Field 4, as yyyy-MM-dd. */
   datePrepared: string;
-  status: ScheduleStatus;
+  status: RecordsDocStatus;
+  /** Set when the form was voided (approved policy, 2026-10-20). */
+  voidReason?: string;
+  voidedAt?: string;
+  /** The Administrator who voided it (email). */
+  voidedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,7 +101,7 @@ export interface ScheduleInput {
 export interface ScheduleListFilters {
   /** Matches schedule number, agency name or any series title. */
   search?: string;
-  status?: ScheduleStatus | "All";
+  status?: RecordsDocStatus | "All";
 }
 
 /** The agency block this office files under, used to prefill a new schedule. */

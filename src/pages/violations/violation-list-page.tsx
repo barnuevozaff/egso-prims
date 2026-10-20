@@ -57,6 +57,7 @@ export function ViolationListPage() {
   const [status, setStatus] = React.useState(ALL);
   const [violationType, setViolationType] = React.useState(ALL);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
+  const [standing, setStanding] = React.useState<"active" | "archived">("active");
 
   const filters = React.useMemo(
     () => ({
@@ -69,7 +70,13 @@ export function ViolationListPage() {
     [search, status, violationType, dateRange],
   );
 
-  const { data, allProfiles, loading, refresh } = useViolatorProfiles(filters);
+  const { data: matching, allProfiles, loading, refresh } = useViolatorProfiles(filters);
+  // Archived profiles keep their tickets and history (approved 2026-10-21).
+  const data = React.useMemo(
+    () => matching.filter((p) => (standing === "archived") === (p.violator.archived === true)),
+    [matching, standing],
+  );
+  const activeProfiles = React.useMemo(() => allProfiles.filter((p) => !p.violator.archived), [allProfiles]);
 
   // Summary cards read the whole register, independent of the filters.
   const stats = React.useMemo(() => summarize(allProfiles), [allProfiles]);
@@ -156,19 +163,19 @@ export function ViolationListPage() {
    * cascades — so the confirmation says so before it happens.
    */
   const removeProfiles = async (rows: ViolatorProfile[]) => {
-    const tickets = rows.reduce((sum, p) => sum + p.totalViolations, 0);
     try {
       await deleteViolators(rows.map((p) => p.violator.id));
       setRowSelection({});
       // The open drawer may have just been deleted out from under itself.
       if (rows.some((p) => p.violator.id === activeId)) setDrawerOpen(false);
-      toast.success(
-        `Deleted ${rows.length} violator profile${rows.length === 1 ? "" : "s"}` +
-          (tickets > 0 ? ` and ${tickets} violation${tickets === 1 ? "" : "s"}` : ""),
-      );
+      toast.success(`Deleted ${rows.length} violator profile${rows.length === 1 ? "" : "s"}`);
       void refresh();
     } catch (e) {
+      // Profiles with tickets are kept (approved 2026-10-21); the others may
+      // have been deleted, so the list is refreshed either way.
       toast.error(e instanceof Error ? e.message : "Unable to delete the selected profiles");
+      setRowSelection({});
+      void refresh();
     }
   };
 
@@ -357,6 +364,15 @@ export function ViolationListPage() {
                 ]}
               />
               <DateFilter label="Date Issued" value={dateRange} onChange={setDateRange} />
+              <DropdownFilter
+                label="Profiles"
+                value={standing}
+                onChange={(v) => setStanding(v as "active" | "archived")}
+                options={[
+                  { value: "active", label: "Active profiles" },
+                  { value: "archived", label: "Archived profiles" },
+                ]}
+              />
             </FilterBar>
           }
         >
@@ -377,10 +393,17 @@ export function ViolationListPage() {
             onRowClick={openProfile}
             emptyState={{
               icon: ScrollText,
-              title: "No violator profiles found",
-              description:
-                "Try adjusting the filters, or record a violation — the violator's profile is created automatically.",
-              action: { label: "Add Violation", onClick: addViolation },
+              ...(standing === "archived"
+                ? {
+                    title: "No archived profiles",
+                    description: "Profiles archived from their drawer appear here, with all their tickets.",
+                  }
+                : {
+                    title: "No violator profiles found",
+                    description:
+                      "Try adjusting the filters, or record a violation — the violator's profile is created automatically.",
+                    action: { label: "Add Violation", onClick: addViolation },
+                  }),
             }}
           />
         </TableCard>
@@ -404,11 +427,7 @@ export function ViolationListPage() {
         open={confirmBulkDelete}
         onOpenChange={setConfirmBulkDelete}
         title={`Delete ${selectedRows.length} violator profile${selectedRows.length === 1 ? "" : "s"}?`}
-        description={
-          `Every violation and payment record belonging to ` +
-          `${selectedRows.length === 1 ? "this violator" : "these violators"} will be permanently removed ` +
-          `(${selectedRows.reduce((s, p) => s + p.totalViolations, 0)} in total).`
-        }
+        description="Only profiles with no tickets are deleted. A profile with tickets is kept — tickets are never deleted; archive the profile from its drawer instead."
         onConfirm={async () => {
           await removeProfiles(selectedRows);
           setConfirmBulkDelete(false);
@@ -455,7 +474,7 @@ export function ViolationListPage() {
         open={violationFormOpen}
         onOpenChange={setViolationFormOpen}
         violator={formViolator}
-        profiles={allProfiles}
+        profiles={activeProfiles}
         violation={editingViolation}
         onSaved={refresh}
       />

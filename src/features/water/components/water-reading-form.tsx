@@ -19,7 +19,7 @@ import {
   toast,
 } from "@/components";
 import { formatPHP } from "@/lib/format";
-import { createWaterMeterReading, updateWaterMeterReading } from "@/features/water/api";
+import { createWaterMeterReading, correctWaterMeterReading } from "@/features/water/api";
 import { submeterLabel } from "@/features/water/lib";
 import type { WaterMeterReading, WaterSubmeter } from "@/features/water/types";
 
@@ -30,6 +30,8 @@ const readingSchema = z.object({
     .min(0, "Cannot be negative"),
   amount: z.number({ error: "Enter the billed amount" }).min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type ReadingValues = z.infer<typeof readingSchema>;
@@ -77,6 +79,7 @@ export function WaterReadingForm({
       currentReading: 0,
       amount: 0,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -87,6 +90,7 @@ export function WaterReadingForm({
       currentReading: reading?.currentReading ?? previousReading,
       amount: reading?.amount ?? 0,
       remarks: reading?.remarks ?? "",
+      correctionReason: "",
     });
   }, [open, reading, previousReading, form]);
 
@@ -95,6 +99,10 @@ export function WaterReadingForm({
     (Number.isFinite(current) ? current : 0) - previousReading;
 
   const submit = form.handleSubmit(async (values) => {
+    if (isEdit && !values.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     if (!submeter) return;
     if (values.currentReading < previousReading) {
       form.setError("currentReading", {
@@ -112,8 +120,8 @@ export function WaterReadingForm({
         remarks: values.remarks,
       };
       if (isEdit) {
-        await updateWaterMeterReading(reading!.id, payload);
-        toast.success("Meter reading updated");
+        await correctWaterMeterReading(reading!.id, payload, values.correctionReason!.trim());
+        toast.success("Reading corrected — the previous values are kept in its history");
       } else {
         await createWaterMeterReading({ submeterId: submeter.id, ...payload });
         toast.success("Meter reading recorded");
@@ -131,7 +139,7 @@ export function WaterReadingForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="md">
       <DrawerHeader
-        title={isEdit ? "Edit Meter Reading" : "Add Meter Reading"}
+        title={isEdit ? "Correct Meter Reading" : "Add Meter Reading"}
         description={
           submeter ? `${submeterLabel(submeter)} · ${submeter.submeterNumber}` : undefined
         }
@@ -215,6 +223,16 @@ export function WaterReadingForm({
               {...form.register("remarks")}
             />
           </Field>
+          {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
         </div>
       </DrawerBody>
       <DrawerFooter>
@@ -224,7 +242,7 @@ export function WaterReadingForm({
           </Button>
           <Button onClick={submit} loading={submitting}>
             <Save />
-            {isEdit ? "Save Changes" : "Record Reading"}
+            {isEdit ? "Save Correction" : "Record Reading"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

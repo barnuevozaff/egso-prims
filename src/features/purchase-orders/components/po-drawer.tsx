@@ -33,6 +33,8 @@ import { canAcknowledgePO, canIssuePO, nextPOStatus } from "@/features/purchase-
 import { poSupplierName } from "@/features/purchase-orders/types";
 import { PODetailPanels } from "@/features/purchase-orders/components/po-detail-panels";
 import { POPrintSheet } from "@/features/shared/procurement-sheets";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 
 /** Right slide-over showing the full purchase order. */
 export function PODrawer({
@@ -48,6 +50,7 @@ export function PODrawer({
   onChanged?: () => void;
   onEdit?: (poId: string) => void;
 }) {
+  const { user } = useAuth();
   const { data: po, loading, setData } = usePurchaseOrder(open ? poId : null);
   const [confirmApprove, setConfirmApprove] = React.useState(false);
   const [confirmReturn, setConfirmReturn] = React.useState(false);
@@ -61,7 +64,7 @@ export function PODrawer({
     setActing(true);
     try {
       const updated = await setPurchaseOrderStatus(po.id, next, {
-        by: "Administrator",
+        by: user?.name ?? "Staff",
         office: "General Services Office",
       });
       setData(updated);
@@ -79,7 +82,7 @@ export function PODrawer({
     setActing(true);
     try {
       const updated = await setPurchaseOrderStatus(po.id, "Draft", {
-        by: "Administrator",
+        by: user?.name ?? "Staff",
         office: "General Services Office",
         remarks: "Returned for revision",
       });
@@ -182,10 +185,14 @@ export function PODrawer({
                 <Printer />
                 Print
               </Button>
-              <Button variant="secondary" onClick={() => onEdit?.(po.id)}>
-                <Pencil />
-                Edit
-              </Button>
+              {/* A voided document is closed for editing (firestore.rules), and
+                  only roles that manage the module reach the edit page. */}
+              {po.status !== "Cancelled" && can(user, "manage:purchase-orders") && (
+                <Button variant="secondary" onClick={() => onEdit?.(po.id)}>
+                  <Pencil />
+                  Edit
+                </Button>
+              )}
               {canIssuePO(po) && (
                 <Button variant="secondary" onClick={() => setConfirmIssue(true)}>
                   <Send />

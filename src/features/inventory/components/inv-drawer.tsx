@@ -32,6 +32,7 @@ import { InvOverview } from "@/features/inventory/components/inv-overview";
 import { StockCardTable } from "@/features/inventory/components/inv-stock-card";
 import { supplierById } from "@/features/purchase-orders/types";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { useAuth } from "@/features/auth/auth-context";
 
 /** Right slide-over: item overview + stock card + attachments/comments/history. */
 export function InvDrawer({
@@ -47,6 +48,7 @@ export function InvDrawer({
   onChanged?: () => void;
   onEdit?: (itemId: string) => void;
 }) {
+  const { user } = useAuth();
   const { data: item, loading, setData } = useInventoryItem(open ? itemId : null);
   const stockCard = useStockCard(open ? itemId : null);
   const [deliveries, setDeliveries] = React.useState<PurchaseOrder[]>([]);
@@ -125,8 +127,8 @@ export function InvDrawer({
                     comments={item.comments}
                     onSubmit={async (text) => {
                       const updated = await addInventoryComment(item.id, {
-                        author: "Administrator",
-                        office: "General Services Office",
+                        author: user?.name ?? "Staff",
+                        office: user?.office ?? "General Services Office",
                         text,
                       });
                       setData(updated);

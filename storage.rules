@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// GSO PRIMS — Cloud Storage security rules (project egso-b2c0a).
+//
+// Attachments live at attachments/{document number or item code}/{file},
+// the same layout as the Supabase "attachments" bucket.
+//
+// Supabase served that bucket publicly. Here only staff may read through the
+// SDK; the download URL saved on a record (getDownloadURL) carries its own
+// token and keeps working for anyone holding the link, as the public URL did.
+// Roles come from the `role` custom claim — see firestore.rules.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function role() {
+      return request.auth != null ? request.auth.token.get('role', '') : '';
+    }
+
+    function isStaff() {
+      return role() in ['Administrator', 'Department User', 'Viewer'];
+    }
+
+    function canUpload() {
+      return role() in ['Administrator', 'Department User'];
+    }
+
+    // The upload pickers accept PDFs and images (accept="application/pdf,image/*").
+    // Raster images only: an SVG can carry script.
+    function isAllowedFile() {
+      return request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType == 'application/pdf'
+            || request.resource.contentType.matches('image/(png|jpeg|gif|webp|bmp|tiff|heic|heif)'));
+    }
+
+    match /attachments/{folder}/{file} {
+      allow read: if isStaff();
+      // Uploads never overwrite (upsert: false in lib/storage.ts today).
+      // `resource == null` is what enforces it: Storage evaluates an upload
+      // onto an existing path as a create too, which would let a file on a
+      // record be silently replaced.
+      allow create: if resource == null && canUpload() && isAllowedFile();
+      allow delete: if canUpload();
+    }
+
+    // Anything else in the bucket: no access.
+  }
+}

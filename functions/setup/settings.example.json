@@ -1,0 +1,12 @@
+{
+  "organization_name": "Municipality of Alaminos, Laguna",
+  "office_name": "General Services Office",
+  "province": "Laguna",
+  "municipality_address": "CONFIRM WITH THE OFFICE",
+  "contact_number": "CONFIRM WITH THE OFFICE",
+  "official_email": "CONFIRM WITH THE OFFICE",
+  "currency": "PHP",
+  "padding_length": 6,
+  "year_reset": true,
+  "separator": "-"
+}

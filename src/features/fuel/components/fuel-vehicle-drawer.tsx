@@ -1,13 +1,12 @@
 import * as React from "react";
 import { format } from "date-fns";
-import { Building2, Fuel, Gauge, Pencil, Plus, Route, Trash2 } from "lucide-react";
+import { Ban, Building2, Fuel, Gauge, History, Pencil, Plus, Route } from "lucide-react";
 
 import {
   BarChartContainer,
   Caption,
   Button,
   CurrencyDisplay,
-  DeleteModal,
   Drawer,
   DrawerActions,
   DrawerBody,
@@ -28,12 +27,11 @@ import {
   TableHeaderRow,
   TableRow,
   chartPalette,
-  toast,
 } from "@/components";
 import {
-  deleteFuelOdometerReadings,
-  deleteFuelTransactions,
-  deleteFuelTrips,
+  voidFuelOdometerReading,
+  voidFuelTransaction,
+  voidFuelTrip,
 } from "@/features/fuel/api";
 import {
   useFuelOdometerReadings,
@@ -58,6 +56,9 @@ import {
   type FuelVehicle,
 } from "@/features/fuel/types";
 import { departmentByCode } from "@/features/purchase-requests/types";
+import { useAuth } from "@/features/auth/auth-context";
+import { activeOnly, hasHistory } from "@/features/shared/revisions";
+import { RecordHistoryDialog, VoidRecordDialog } from "@/features/shared/void-record";
 
 /** Right slide-over: vehicle details, movement, and full transaction history. */
 export function FuelVehicleDrawer({
@@ -67,11 +68,11 @@ export function FuelVehicleDrawer({
   month,
   year,
   onEdit,
-  onAddTrip,
+  onAddTrip: addTrip,
   onEditTrip,
-  onAddTransaction,
+  onAddTransaction: addTransaction,
   onEditTransaction,
-  onAddReading,
+  onAddReading: addReading,
   onEditReading,
   onChanged,
 }: {
@@ -91,44 +92,61 @@ export function FuelVehicleDrawer({
   onChanged?: () => void;
 }) {
   const { data: transactions, loading, refresh } = useFuelTransactions(
-    vehicle ? { vehicleId: vehicle.id } : { vehicleId: "__none__" },
+    vehicle ? { vehicleId: vehicle.id, includeVoided: true } : { vehicleId: "__none__" },
   );
   const odometer = useFuelOdometerReadings(
     React.useMemo(
-      () => (vehicle ? { vehicleId: vehicle.id } : { vehicleId: "__none__" }),
+      () => ({ vehicleId: vehicle ? vehicle.id : "__none__", includeVoided: true }),
       [vehicle],
     ),
   );
   const trips = useFuelTrips(
     React.useMemo(
-      () => (vehicle ? { vehicleId: vehicle.id } : { vehicleId: "__none__" }),
+      () => (vehicle ? { vehicleId: vehicle.id, includeVoided: true } : { vehicleId: "__none__" }),
       [vehicle],
     ),
   );
-  const [pendingDelete, setPendingDelete] = React.useState<FuelTransaction | null>(null);
-  const [pendingTripDelete, setPendingTripDelete] = React.useState<FuelTrip | null>(null);
-  const [pendingReadingDelete, setPendingReadingDelete] =
+  // Voided purchases and trips stay in these histories but no longer count.
+  const activeTransactions = activeOnly(transactions);
+  const [pendingTxnVoid, setPendingTxnVoid] = React.useState<FuelTransaction | null>(null);
+  const [pendingTripVoid, setPendingTripVoid] = React.useState<FuelTrip | null>(null);
+  const [historyFor, setHistoryFor] = React.useState<{
+    title: string;
+    record: FuelTrip | FuelTransaction | FuelOdometerReading;
+  } | null>(null);
+  const { user } = useAuth();
+  // Voiding a finalized record is the Administrator's (policy 2026-10-20).
+  const isAdmin = user?.role === "Administrator";
+  const [pendingReadingVoid, setPendingReadingVoid] =
     React.useState<FuelOdometerReading | null>(null);
+  // An inactive vehicle takes no new trips, purchases or readings until it
+  // is set Active again (approved 2026-10-21); its history stays.
+  const closed = !!vehicle && vehicle.status !== "Active";
+  const onAddTrip = closed ? undefined : addTrip;
+  const onAddTransaction = closed ? undefined : addTransaction;
+  const onAddReading = closed ? undefined : addReading;
 
   const readings = React.useMemo(
     () => (vehicle ? odometerOf(odometer.data, vehicle.id) : []),
     [odometer.data, vehicle],
   );
+  // Voided readings stay in the history, marked, but leave the totals.
   const odoTotals = React.useMemo(() => {
-    const distance = readings.reduce((s, r) => s + r.distance, 0);
-    const liters = readings.reduce((s, r) => s + r.fuelLiters, 0);
-    return { distance, liters, cost: readings.reduce((s, r) => s + r.fuelCost, 0) };
+    const counted = activeOnly(readings);
+    const distance = counted.reduce((s, r) => s + r.distance, 0);
+    const liters = counted.reduce((s, r) => s + r.fuelLiters, 0);
+    return { distance, liters, cost: counted.reduce((s, r) => s + r.fuelCost, 0) };
   }, [readings]);
 
   // Lifetime rollup across every recorded trip for this vehicle.
   const history = React.useMemo(
-    () => (vehicle ? buildVehicleHistory(vehicle, trips.data) : null),
+    () => (vehicle ? buildVehicleHistory(vehicle, activeOnly(trips.data)) : null),
     [vehicle, trips.data],
   );
 
-  const comparison = vehicle ? buildComparisons([vehicle], transactions, month, year)[0] : null;
+  const comparison = vehicle ? buildComparisons([vehicle], activeTransactions, month, year)[0] : null;
   const periods = trailingPeriods(month, year, 6);
-  const series = monthlyTotals(transactions, periods);
+  const series = monthlyTotals(activeTransactions, periods);
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="wide">
@@ -148,6 +166,9 @@ export function FuelVehicleDrawer({
             <div className="mt-2 flex items-center gap-2">
               <StatusBadge status={vehicle.status} />
               {comparison && <StatusBadge status={comparison.status} />}
+              {closed && (
+                <Caption className="text-[11.5px]">Set it Active to record new trips, purchases or readings.</Caption>
+              )}
             </div>
           </DrawerHeader>
 
@@ -339,6 +360,11 @@ export function FuelVehicleDrawer({
                               className="whitespace-nowrap py-2.5 font-medium tabular-nums text-neutral-800"
                             >
                               {t.controlNo}
+                              {t.voided && (
+                                <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">
+                                  Voided
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="whitespace-nowrap py-2.5 text-neutral-600">
                               {format(new Date(t.tripDate), "d MMM yyyy")}
@@ -400,24 +426,36 @@ export function FuelVehicleDrawer({
                             </TableCell>
                             <TableCell className="py-2.5 text-right">
                               <span className="inline-flex items-center gap-1">
-                                {onEditTrip && (
+                                {onEditTrip && !t.voided && (
                                   <IconButton
-                                    aria-label={`Edit trip ${t.controlNo}`}
-                                    variant="danger"
+                                    aria-label={`Correct trip ${t.controlNo}`}
+                                    variant="ghost"
                                     size="icon-sm"
                                     onClick={() => onEditTrip(vehicle, t)}
                                   >
                                     <Pencil />
                                   </IconButton>
                                 )}
-                                <IconButton
-                                  aria-label={`Delete trip ${t.controlNo}`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => setPendingTripDelete(t)}
-                                >
-                                  <Trash2 />
-                                </IconButton>
+                                {hasHistory(t) && (
+                                  <IconButton
+                                    aria-label={`History of trip ${t.controlNo}`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setHistoryFor({ title: `Trip ${t.controlNo} — history`, record: t })}
+                                  >
+                                    <History />
+                                  </IconButton>
+                                )}
+                                {!t.voided && isAdmin && (
+                                  <IconButton
+                                    aria-label={`Void trip ${t.controlNo}`}
+                                    variant="danger"
+                                    size="icon-sm"
+                                    onClick={() => setPendingTripVoid(t)}
+                                  >
+                                    <Ban />
+                                  </IconButton>
+                                )}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -607,6 +645,11 @@ export function FuelVehicleDrawer({
                               className="whitespace-nowrap py-2.5 font-medium text-neutral-800"
                             >
                               {format(new Date(r.readingDate), "d MMM yyyy")}
+                              {r.voided && (
+                                <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">
+                                  Voided
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="py-2.5 text-right tabular-nums text-neutral-500">
                               {r.previousOdometer.toLocaleString("en-PH", {
@@ -635,24 +678,36 @@ export function FuelVehicleDrawer({
                             </TableCell>
                             <TableCell className="py-2.5 text-right">
                               <span className="inline-flex items-center gap-1">
-                                {onEditReading && (
+                                {onEditReading && !r.voided && (
                                   <IconButton
-                                    aria-label={`Edit reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
-                                    variant="danger"
+                                    aria-label={`Correct the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="ghost"
                                     size="icon-sm"
                                     onClick={() => onEditReading(vehicle, r)}
                                   >
                                     <Pencil />
                                   </IconButton>
                                 )}
-                                <IconButton
-                                  aria-label={`Delete reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => setPendingReadingDelete(r)}
-                                >
-                                  <Trash2 />
-                                </IconButton>
+                                {hasHistory(r) && (
+                                  <IconButton
+                                    aria-label={`History of the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setHistoryFor({ title: `Odometer reading of ${format(new Date(r.readingDate), "d MMM yyyy")} — history`, record: r })}
+                                  >
+                                    <History />
+                                  </IconButton>
+                                )}
+                                {!r.voided && isAdmin && (
+                                  <IconButton
+                                    aria-label={`Void the reading of ${format(new Date(r.readingDate), "d MMM yyyy")}`}
+                                    variant="danger"
+                                    size="icon-sm"
+                                    onClick={() => setPendingReadingVoid(r)}
+                                  >
+                                    <Ban />
+                                  </IconButton>
+                                )}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -667,10 +722,12 @@ export function FuelVehicleDrawer({
               <section>
                 <div className="mb-2 flex items-center justify-between">
                   <SectionTitle as="h3">Fuel Transactions</SectionTitle>
-                  <Button variant="secondary" size="xs" onClick={() => onAddTransaction(vehicle)}>
-                    <Plus />
-                    Record Transaction
-                  </Button>
+                  {onAddTransaction && (
+                    <Button variant="secondary" size="xs" onClick={() => onAddTransaction(vehicle)}>
+                      <Plus />
+                      Record Transaction
+                    </Button>
+                  )}
                 </div>
                 {loading ? (
                   <SkeletonText lines={5} />
@@ -679,10 +736,11 @@ export function FuelVehicleDrawer({
                     icon={Fuel}
                     title="No fuel transactions yet"
                     description="Record the first fuel transaction for this vehicle."
-                    action={{
-                      label: "Record Transaction",
-                      onClick: () => onAddTransaction(vehicle),
-                    }}
+                    action={
+                      onAddTransaction
+                        ? { label: "Record Transaction", onClick: () => onAddTransaction(vehicle) }
+                        : undefined
+                    }
                   />
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-neutral-200">
@@ -710,6 +768,11 @@ export function FuelVehicleDrawer({
                                   {t.docNumber}
                                 </span>
                               )}
+                              {t.voided && (
+                                <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">
+                                  Voided
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="py-2.5 text-right tabular-nums text-neutral-700">
                               {t.liters.toLocaleString("en-PH", { maximumFractionDigits: 2 })}
@@ -735,22 +798,36 @@ export function FuelVehicleDrawer({
                             </TableCell>
                             <TableCell className="py-2.5 text-right">
                               <span className="inline-flex items-center gap-1">
-                                <IconButton
-                                  aria-label={`Edit transaction of ${format(new Date(t.txnDate), "d MMM yyyy")}`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => onEditTransaction(vehicle, t)}
-                                >
-                                  <Pencil />
-                                </IconButton>
-                                <IconButton
-                                  aria-label={`Delete transaction of ${format(new Date(t.txnDate), "d MMM yyyy")}`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => setPendingDelete(t)}
-                                >
-                                  <Trash2 />
-                                </IconButton>
+                                {!t.voided && (
+                                  <IconButton
+                                    aria-label={`Correct transaction of ${format(new Date(t.txnDate), "d MMM yyyy")}`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => onEditTransaction(vehicle, t)}
+                                  >
+                                    <Pencil />
+                                  </IconButton>
+                                )}
+                                {hasHistory(t) && (
+                                  <IconButton
+                                    aria-label={`History of transaction ${t.docNumber ?? format(new Date(t.txnDate), "d MMM yyyy")}`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setHistoryFor({ title: `${t.docNumber ?? "Fuel transaction"} — history`, record: t })}
+                                  >
+                                    <History />
+                                  </IconButton>
+                                )}
+                                {!t.voided && isAdmin && (
+                                  <IconButton
+                                    aria-label={`Void transaction of ${format(new Date(t.txnDate), "d MMM yyyy")}`}
+                                    variant="danger"
+                                    size="icon-sm"
+                                    onClick={() => setPendingTxnVoid(t)}
+                                  >
+                                    <Ban />
+                                  </IconButton>
+                                )}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -776,10 +853,12 @@ export function FuelVehicleDrawer({
                 <Pencil />
                 Edit Vehicle
               </Button>
-              <Button variant="secondary" onClick={() => onAddTransaction(vehicle)}>
-                <Plus />
-                Record Transaction
-              </Button>
+              {onAddTransaction && (
+                <Button variant="secondary" onClick={() => onAddTransaction(vehicle)}>
+                  <Plus />
+                  Record Transaction
+                </Button>
+              )}
               {onAddTrip && (
                 <Button onClick={() => onAddTrip(vehicle)}>
                   <Plus />
@@ -789,63 +868,53 @@ export function FuelVehicleDrawer({
             </DrawerActions>
           </DrawerFooter>
 
-          <DeleteModal
-            open={!!pendingDelete}
-            onOpenChange={(o) => !o && setPendingDelete(null)}
-            title={
-              pendingDelete
-                ? `Delete the ${format(new Date(pendingDelete.txnDate), "d MMM yyyy")} transaction?`
-                : "Delete fuel transaction?"
-            }
-            description="The transaction will be permanently removed and comparisons will be recalculated."
-            onConfirm={async () => {
-              if (pendingDelete) {
-                await deleteFuelTransactions([pendingDelete.id]);
-                toast.success("Fuel transaction deleted");
-                setPendingDelete(null);
-                void refresh();
-                onChanged?.();
-              }
+          <VoidRecordDialog
+            open={!!pendingTxnVoid}
+            onOpenChange={(o) => !o && setPendingTxnVoid(null)}
+            title={pendingTxnVoid ? `Void ${pendingTxnVoid.docNumber ?? "this fuel transaction"}?` : "Void fuel transaction?"}
+            description="The purchase keeps its number and values and stays in this history, but no longer counts in totals or comparisons."
+            onVoid={(reason) => voidFuelTransaction(pendingTxnVoid!.id, reason)}
+            onDone={() => {
+              setPendingTxnVoid(null);
+              void refresh();
+              onChanged?.();
             }}
           />
 
-          <DeleteModal
-            open={!!pendingTripDelete}
-            onOpenChange={(o) => !o && setPendingTripDelete(null)}
-            title={
-              pendingTripDelete
-                ? `Delete trip ${pendingTripDelete.controlNo}?`
-                : "Delete trip?"
-            }
-            description="The trip will be permanently removed and the vehicle's fuel balance recalculated from its remaining trips."
-            onConfirm={async () => {
-              if (pendingTripDelete) {
-                await deleteFuelTrips([pendingTripDelete.id]);
-                toast.success("Trip deleted");
-                setPendingTripDelete(null);
-                void trips.refresh();
-                onChanged?.();
-              }
+          <VoidRecordDialog
+            open={!!pendingTripVoid}
+            onOpenChange={(o) => !o && setPendingTripVoid(null)}
+            title={pendingTripVoid ? `Void trip ${pendingTripVoid.controlNo}?` : "Void trip?"}
+            description="The trip keeps its control number and values and stays in this history, but no longer counts; the vehicle's fuel balance is taken from its remaining trips."
+            onVoid={(reason) => voidFuelTrip(pendingTripVoid!.id, reason)}
+            onDone={() => {
+              setPendingTripVoid(null);
+              void trips.refresh();
+              onChanged?.();
             }}
           />
 
-          <DeleteModal
-            open={!!pendingReadingDelete}
-            onOpenChange={(o) => !o && setPendingReadingDelete(null)}
+          <RecordHistoryDialog
+            open={!!historyFor}
+            onOpenChange={(o) => !o && setHistoryFor(null)}
+            title={historyFor?.title ?? "History"}
+            record={historyFor?.record ?? null}
+          />
+
+          <VoidRecordDialog
+            open={!!pendingReadingVoid}
+            onOpenChange={(o) => !o && setPendingReadingVoid(null)}
             title={
-              pendingReadingDelete
-                ? `Delete the ${format(new Date(pendingReadingDelete.readingDate), "d MMM yyyy")} reading?`
-                : "Delete odometer reading?"
+              pendingReadingVoid
+                ? `Void the odometer reading of ${format(new Date(pendingReadingVoid.readingDate), "d MMM yyyy")}?`
+                : "Void odometer reading?"
             }
-            description="The reading will be permanently removed. Later readings keep their own recorded previous values and are not recalculated."
-            onConfirm={async () => {
-              if (pendingReadingDelete) {
-                await deleteFuelOdometerReadings([pendingReadingDelete.id]);
-                toast.success("Odometer reading deleted");
-                setPendingReadingDelete(null);
-                void odometer.refresh();
-                onChanged?.();
-              }
+            description="The reading keeps its values and stays in this history, marked voided with your reason, your name and the time. It no longer counts in totals. Later readings keep their own recorded previous values."
+            onVoid={(reason) => voidFuelOdometerReading(pendingReadingVoid!.id, reason)}
+            onDone={() => {
+              setPendingReadingVoid(null);
+              void odometer.refresh();
+              onChanged?.();
             }}
           />
         </>

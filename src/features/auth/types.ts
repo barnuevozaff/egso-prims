@@ -10,43 +10,64 @@ export interface AuthUser {
   name: string;
   role: Role;
   office: string;
+  /**
+   * A Department User the Administrator has authorised to decide on purchase
+   * requests (the `approver` claim, set by setStaffRole). Firebase only;
+   * firestore.rules enforce it whatever the screen shows.
+   */
+  approver?: boolean;
 }
 
 /** Fine-grained permissions the UI can guard on. */
 export type Permission =
   | "view:dashboard"
   | "manage:purchase-requests"
+  | "approve:purchase-requests"
   | "manage:purchase-orders"
   | "manage:ris"
   | "manage:inventory"
   | "manage:reservations"
+  | "manage:records"
   | "view:reports"
   | "view:audit"
   | "manage:settings";
 
 /**
- * Role → permission matrix. Only Administrator is active today; the other
- * roles are placeholders whose grants will be finalized with User Management.
+ * Role → permission matrix. Mirrors firestore.rules, which is what actually
+ * enforces it: these grants only decide what the screens offer.
  */
 const ROLE_PERMISSIONS: Record<Role, Permission[] | "*"> = {
   Administrator: "*",
   "Department User": [
-    // Placeholder grant set — not yet in use.
     "view:dashboard",
     "manage:purchase-requests",
     "manage:ris",
     "manage:reservations",
   ],
-  Viewer: [
-    // Placeholder grant set — not yet in use.
-    "view:dashboard",
-    "view:reports",
-  ],
+  Viewer: ["view:dashboard", "view:reports"],
 };
 
 /** True when the user's role grants the permission. */
 export function can(user: AuthUser | null, permission: Permission): boolean {
   if (!user) return false;
+  // Approving is granted per person, not per role.
+  if (permission === "approve:purchase-requests") {
+    return user.role === "Administrator" || (user.role === "Department User" && user.approver === true);
+  }
   const grants = ROLE_PERMISSIONS[user.role];
   return grants === "*" || grants.includes(permission);
+}
+
+/**
+ * Whether the user may edit, submit or void this purchase request: deciders
+ * may act on any, a Department User only on the requests they raised.
+ * Requests filed on the public portal have no owner, so only deciders act on
+ * them. Matches canEditPR() in firestore.rules.
+ */
+export function canEditPurchaseRequest(
+  user: AuthUser | null,
+  pr: { createdByUid?: string },
+): boolean {
+  if (can(user, "approve:purchase-requests")) return true;
+  return !!user && user.role === "Department User" && !!pr.createdByUid && pr.createdByUid === user.id;
 }

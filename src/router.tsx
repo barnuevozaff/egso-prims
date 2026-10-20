@@ -3,7 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppLayout } from "@/layouts/app-layout";
 import { PortalLayout } from "@/layouts/portal-layout";
-import { ProtectedRoute } from "@/features/auth/components/guards";
+import { PermissionRoute, ProtectedRoute } from "@/features/auth/components/guards";
 import { RouteError } from "@/components/feedback/route-error";
 
 /**
@@ -235,21 +235,21 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <DashboardPage /> },
           { path: "purchase-requests", element: <PRListPage /> },
-          { path: "purchase-requests/new", element: <PRCreatePage /> },
+          { path: "purchase-requests/new", element: <PermissionRoute permission="manage:purchase-requests"><PRCreatePage /></PermissionRoute> },
           { path: "purchase-requests/:id", element: <PRDetailPage /> },
-          { path: "purchase-requests/:id/edit", element: <PREditPage /> },
+          { path: "purchase-requests/:id/edit", element: <PermissionRoute permission="manage:purchase-requests"><PREditPage /></PermissionRoute> },
           { path: "purchase-orders", element: <POListPage /> },
-          { path: "purchase-orders/new", element: <POCreatePage /> },
-          { path: "purchase-orders/:id/edit", element: <POEditPage /> },
+          { path: "purchase-orders/new", element: <PermissionRoute permission="manage:purchase-orders"><POCreatePage /></PermissionRoute> },
+          { path: "purchase-orders/:id/edit", element: <PermissionRoute permission="manage:purchase-orders"><POEditPage /></PermissionRoute> },
           { path: "ris", element: <RISListPage /> },
-          { path: "ris/new", element: <RISCreatePage /> },
-          { path: "ris/:id/edit", element: <RISEditPage /> },
+          { path: "ris/new", element: <PermissionRoute permission="manage:ris"><RISCreatePage /></PermissionRoute> },
+          { path: "ris/:id/edit", element: <PermissionRoute permission="manage:ris"><RISEditPage /></PermissionRoute> },
           { path: "inventory", element: <InventoryListPage /> },
-          { path: "inventory/new", element: <InventoryCreatePage /> },
-          { path: "inventory/:id/edit", element: <InventoryEditPage /> },
+          { path: "inventory/new", element: <PermissionRoute permission="manage:inventory"><InventoryCreatePage /></PermissionRoute> },
+          { path: "inventory/:id/edit", element: <PermissionRoute permission="manage:inventory"><InventoryEditPage /></PermissionRoute> },
           { path: "reservations", element: <ResListPage /> },
-          { path: "reservations/new", element: <ResCreatePage /> },
-          { path: "reservations/:id/edit", element: <ResEditPage /> },
+          { path: "reservations/new", element: <PermissionRoute permission="manage:reservations"><ResCreatePage /></PermissionRoute> },
+          { path: "reservations/:id/edit", element: <PermissionRoute permission="manage:reservations"><ResEditPage /></PermissionRoute> },
           { path: "violations", element: <ViolationListPage /> },
           { path: "energy", element: <EnergyDashboardPage /> },
           { path: "energy/summary", element: <EnergySummaryPage /> },
@@ -260,23 +260,23 @@ export const router = createBrowserRouter([
           { path: "fuel", element: <FuelDashboardPage /> },
           { path: "fuel/summary", element: <FuelSummaryPage /> },
           { path: "records", element: <RecordsListPage /> },
-          { path: "records/new", element: <RecordsCreatePage /> },
+          { path: "records/new", element: <PermissionRoute permission="manage:records"><RecordsCreatePage /></PermissionRoute> },
           // Declared before "records/:id" so the static segment is unmistakable:
           // an inventory route must never be read as a schedule id.
           { path: "records/shelves", element: <ShelfMapPage /> },
           { path: "records/inventory", element: <RecordsInventoryListPage /> },
-          { path: "records/inventory/new", element: <RecordsInventoryCreatePage /> },
+          { path: "records/inventory/new", element: <PermissionRoute permission="manage:records"><RecordsInventoryCreatePage /></PermissionRoute> },
           { path: "records/inventory/:id", element: <RecordsInventoryDetailPage /> },
-          { path: "records/inventory/:id/edit", element: <RecordsInventoryEditPage /> },
+          { path: "records/inventory/:id/edit", element: <PermissionRoute permission="manage:records"><RecordsInventoryEditPage /></PermissionRoute> },
           { path: "records/disposal", element: <DisposalListPage /> },
-          { path: "records/disposal/new", element: <DisposalCreatePage /> },
+          { path: "records/disposal/new", element: <PermissionRoute permission="manage:records"><DisposalCreatePage /></PermissionRoute> },
           { path: "records/disposal/:id", element: <DisposalDetailPage /> },
-          { path: "records/disposal/:id/edit", element: <DisposalEditPage /> },
+          { path: "records/disposal/:id/edit", element: <PermissionRoute permission="manage:records"><DisposalEditPage /></PermissionRoute> },
           { path: "records/:id", element: <RecordsDetailPage /> },
-          { path: "records/:id/edit", element: <RecordsEditPage /> },
-          { path: "reports", element: <ReportsPage /> },
-          { path: "audit", element: <AuditListPage /> },
-          { path: "settings", element: <SettingsPage /> },
+          { path: "records/:id/edit", element: <PermissionRoute permission="manage:records"><RecordsEditPage /></PermissionRoute> },
+          { path: "reports", element: <PermissionRoute permission="view:reports"><ReportsPage /></PermissionRoute> },
+          { path: "audit", element: <PermissionRoute permission="view:audit"><AuditListPage /></PermissionRoute> },
+          { path: "settings", element: <PermissionRoute permission="manage:settings"><SettingsPage /></PermissionRoute> },
         ],
       },
     ],

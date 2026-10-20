@@ -21,6 +21,15 @@ export const PO_STATUSES: POStatus[] = [
   "Cancelled",
 ];
 
+/**
+ * Stages an order can still be voided from — and only while it has not been
+ * issued to the supplier. A Released or Completed order is final.
+ */
+export const VOIDABLE_PO_STATUSES: POStatus[] = ["Draft", "Pending Approval", "Approved"];
+
+export const canVoidPO = (po: Pick<PurchaseOrder, "status" | "issuedAt">) =>
+  VOIDABLE_PO_STATUSES.includes(po.status) && !po.issuedAt;
+
 export interface Supplier {
   id: string;
   name: string;

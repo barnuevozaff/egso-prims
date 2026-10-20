@@ -5,9 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emulators": "vite --mode emulators",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "emulators:stop": "node scripts/stop-emulators.mjs",
+    "emulators": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:start --project demo-egso-prims",
+    "test:unit": "vitest run tests/unit",
+    "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
+    "test:rules": "npm run emulators:stop && firebase emulators:exec --only firestore,storage --project demo-egso-prims \"vitest run tests/rules\"",
+    "test:functions": "npm --prefix functions test",
+    "test:integration": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:exec --only auth,firestore,functions,storage --project demo-egso-prims \"vitest run --config vitest.integration.config.ts\"",
+    "test:e2e": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:exec --only auth,firestore,functions,storage --project demo-egso-prims \"vitest run --config vitest.e2e.config.ts\"",
+    "test:migration": "npm run emulators:stop && firebase emulators:exec --only firestore --project demo-egso-prims \"npm --prefix functions run test:migration\"",
+    "test:functions:emulator": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:exec --only auth,firestore,functions --project demo-egso-prims \"npm --prefix functions run test:emulator\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -19,6 +30,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "firebase": "^12.19.0",
     "lucide-react": "^1.25.0",
     "motion": "^12.42.2",
     "pdfjs-dist": "^5.6.205",
@@ -37,12 +49,15 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "playwright-core": "1.63.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "5.0.2"
   }
 }

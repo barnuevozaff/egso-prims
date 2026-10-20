@@ -79,6 +79,7 @@ export function WaterDashboardPage() {
   const [year, setYear] = React.useState(now.getFullYear());
   const [search, setSearch] = React.useState("");
   const [location, setLocation] = React.useState(ALL);
+  const [standing, setStanding] = React.useState<"active" | "archived">("active");
 
   const accountFilters = React.useMemo(
     () => ({
@@ -91,6 +92,14 @@ export function WaterDashboardPage() {
   const accounts = useWaterAccounts(accountFilters);
   // Unfiltered registers drive the KPIs and comparisons.
   const allAccounts = useWaterAccounts(React.useMemo(() => ({}), []));
+  // Archived accounts keep their bills, which still count in the year's
+  // expense, but leave the register, the counts and the month's comparison
+  // (approved 2026-10-21); the Accounts filter shows them.
+  const activeAccounts = React.useMemo(() => allAccounts.data.filter((a) => !a.archived), [allAccounts.data]);
+  const shownAccounts = React.useMemo(
+    () => accounts.data.filter((a) => (standing === "archived") === (a.archived === true)),
+    [accounts.data, standing],
+  );
   const bills = useWaterBills(React.useMemo(() => ({}), []));
   const submeters = useWaterSubmeters(React.useMemo(() => ({}), []));
   const submeterBills = useWaterSubmeterBills(React.useMemo(() => ({}), []));
@@ -108,12 +117,12 @@ export function WaterDashboardPage() {
 
   /* ---------------- computations ---------------- */
   const comparisons = React.useMemo(
-    () => buildComparisons(accounts.data, bills.data, month, year),
-    [accounts.data, bills.data, month, year],
+    () => buildComparisons(shownAccounts, bills.data, month, year),
+    [shownAccounts, bills.data, month, year],
   );
   const overallAll = React.useMemo(
-    () => buildOverall(buildComparisons(allAccounts.data, bills.data, month, year)),
-    [allAccounts.data, bills.data, month, year],
+    () => buildOverall(buildComparisons(activeAccounts, bills.data, month, year)),
+    [activeAccounts, bills.data, month, year],
   );
 
   const yearTotal = React.useMemo(
@@ -123,10 +132,10 @@ export function WaterDashboardPage() {
 
   const ranked = React.useMemo(
     () =>
-      buildComparisons(allAccounts.data, bills.data, month, year)
+      buildComparisons(activeAccounts, bills.data, month, year)
         .filter((c) => c.current !== null)
         .sort((a, b) => (b.current ?? 0) - (a.current ?? 0)),
-    [allAccounts.data, bills.data, month, year],
+    [activeAccounts, bills.data, month, year],
   );
   const highest = ranked[0];
   const lowest = ranked[ranked.length - 1];
@@ -218,10 +227,11 @@ export function WaterDashboardPage() {
     try {
       await deleteWaterAccounts(rows.map((r) => r.id));
     } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
+      // Records that hold official records are kept (approved 2026-10-21);
+      // the others may have been deleted, so the table is refreshed either way.
       toast.error(e instanceof Error ? e.message : "Unable to delete the accounts");
+      setRowSelection({});
+      refreshAll();
       return;
     }
     setRowSelection({});
@@ -440,7 +450,7 @@ export function WaterDashboardPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           label="Registered Accounts"
-          value={allAccounts.data.length}
+          value={activeAccounts.length}
           icon={Gauge}
           loading={allAccounts.loading}
         />
@@ -584,6 +594,15 @@ export function WaterDashboardPage() {
                     ...locations.map((l) => ({ value: l, label: l })),
                   ]}
                 />
+                <DropdownFilter
+                  label="Accounts"
+                  value={standing}
+                  onChange={(v) => setStanding(v as "active" | "archived")}
+                  options={[
+                    { value: "active", label: "Active accounts" },
+                    { value: "archived", label: "Archived accounts" },
+                  ]}
+                />
               </FilterBar>
             }
           >
@@ -602,13 +621,20 @@ export function WaterDashboardPage() {
               onSelectedRowsChange={setSelectedRows}
               getRowId={(c) => c.account.id}
               onRowClick={(c) => openAccount(c.account)}
-              emptyState={{
-                icon: Droplets,
-                title: "No water accounts found",
-                description:
-                  "Register a water account to begin recording monthly consumption.",
-                action: { label: "New Account", onClick: openNewAccount },
-              }}
+              emptyState={
+                standing === "archived"
+                  ? {
+                      icon: Droplets,
+                      title: "No archived accounts",
+                      description: "Accounts archived from their drawer appear here, with all their bills.",
+                    }
+                  : {
+                      icon: Droplets,
+                      title: "No water accounts found",
+                      description: "Register a water account to begin recording monthly consumption.",
+                      action: { label: "New Account", onClick: openNewAccount },
+                    }
+              }
             />
           </TableCard>
         </div>
@@ -626,7 +652,7 @@ export function WaterDashboardPage() {
         open={confirmBulkDelete}
         onOpenChange={setConfirmBulkDelete}
         title={`Delete ${selectedRows.length} account${selectedRows.length === 1 ? "" : "s"}?`}
-        description="The accounts and all of their monthly billing records will be permanently removed."
+        description="Only accounts with no bills or submeters are deleted. An account that holds bills is kept — its billing records are never deleted; archive it from its drawer instead."
         onConfirm={async () => {
           await removeAccounts(selectedRows.map((c) => c.account));
           setConfirmBulkDelete(false);
@@ -698,10 +724,14 @@ export function WaterDashboardPage() {
           setSubmeterDetailOpen(false);
           if (submeterAccount) openEditSubmeter(submeterAccount, s);
         }}
-        onAddReading={(s) => {
-          setSubmeterDetailOpen(false);
-          openNewReading(s);
-        }}
+        onAddReading={
+          submeterAccount?.archived
+            ? undefined
+            : (s) => {
+                setSubmeterDetailOpen(false);
+                openNewReading(s);
+              }
+        }
         onEditReading={(s, r) => {
           setSubmeterDetailOpen(false);
           openEditReading(s, r);

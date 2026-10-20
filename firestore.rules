@@ -1,0 +1,581 @@
+rules_version = '2';
+
+// GSO PRIMS — Cloud Firestore security rules (project egso-b2c0a).
+//
+// Everything is denied unless a rule below allows it.
+//
+// Who is who comes only from the `role` custom claim, which the Admin SDK sets
+// (functions/ or a local admin script). Nothing a browser writes into a
+// document can make someone an administrator.
+//
+// Roles mirror ROLE_PERMISSIONS in src/features/auth/types.ts:
+//   Administrator    everything
+//   Department User  manages purchase requests, RIS and reservations
+//   Viewer           reads only
+//
+// The public portal (no sign-in) may only:
+//   - read one purchase request, purchase order, RIS or reservation by its
+//     document number (Track page, "Filed on this computer"). It may not list
+//     a collection, so nobody can download the whole register.
+// Portal submissions and stock suggestions go through callable Cloud
+// Functions, which validate input and write with the Admin SDK. Numbered
+// documents are created only by those functions, staff's included.
+// Collections written only by Cloud Functions (audit_logs, document_counters,
+// rate_limits) have no client write rule at all.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- who is asking ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn() ? request.auth.token.get('role', '') : '';
+    }
+
+    function isAdmin() {
+      return role() == 'Administrator';
+    }
+
+    function isStaff() {
+      return role() in ['Administrator', 'Department User', 'Viewer'];
+    }
+
+    // Administrator, or a Department User for the three modules that role
+    // manages.
+    function canManage(module) {
+      return isAdmin()
+        || (role() == 'Department User'
+            && module in ['purchase_requests', 'ris_requests', 'reservations']);
+    }
+
+    // ---------- what is being written ----------
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // None of `fields` change on this update.
+    function keeps(fields) {
+      return !incoming().diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Only `fields` change on this update.
+    function changesOnly(fields) {
+      return incoming().diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // Numbered documents use their number as the document ID, so Firestore
+    // itself guarantees no two share a number. They are created only by the
+    // create functions (functions/src/documents/create.ts), which allocate the
+    // number and write the document in one transaction; no browser, staff or
+    // public, creates one directly.
+    // Every staff write carries the writer's own account — updated_by_uid,
+    // or created_by_uid on a new record — and nobody can write under another
+    // account. The audit trail names that account (functions/src/audit.ts),
+    // so who did what never rests on the trigger alone.
+    function signsWrite() {
+      return incoming().get('updated_by_uid', '') == request.auth.uid;
+    }
+
+    function signsCreation() {
+      return incoming().get('created_by_uid', '') == request.auth.uid;
+    }
+
+    function numberedUpdate(numberField, statuses) {
+      return keeps(['id', numberField, 'created_at', 'created_by_uid'])
+        && incoming().status in statuses
+        && signsWrite();
+    }
+
+    function statusChange(from, to) {
+      return resource.data.status == from && incoming().status == to;
+    }
+
+    function keepsStatus() {
+      return incoming().status == resource.data.status;
+    }
+
+    // ---------- purchase requests: ownership, decisions, voiding ----------
+    // Deciding on a request — approving, rejecting, returning it for
+    // revision, marking it completed — is the Administrator's, or a
+    // Department User's granted the `approver` claim (setStaffRole).
+    // A Department User edits, submits and voids only requests they raised
+    // (created_by_uid, set by the create function); portal requests have no
+    // owner, so only deciders act on them. Viewers only read.
+    //
+    // Only the workflow's own steps are allowed, for Administrators too:
+    //   Draft → Submitted → Approved → Completed, Submitted → Rejected,
+    //   Submitted or Approved → Draft (returned), and voiding (→ Cancelled)
+    //   from Draft or Submitted by the owner, from any open stage by a decider.
+    // A numbered request is never deleted; it is voided, keeping its number,
+    // record and history. Each status change is signed by the account taking
+    // it, and a void carries its reason.
+
+    function canApprovePR() {
+      return isAdmin()
+        || (role() == 'Department User' && request.auth.token.get('approver', false) == true);
+    }
+
+    function ownsPR() {
+      return role() == 'Department User'
+        && resource.data.get('created_by_uid', '') == request.auth.uid;
+    }
+
+    function canEditPR() {
+      return canApprovePR() || ownsPR();
+    }
+
+    // The approval step a status change appends, signed by this account.
+    function lastStep() {
+      return incoming().approvals[incoming().approvals.size() - 1];
+    }
+
+    function signsNewStep() {
+      return incoming().approvals is list
+        && incoming().approvals.size() == resource.data.get('approvals', []).size() + 1
+        && lastStep().step == incoming().status
+        && lastStep().get('byUid', '') == request.auth.uid;
+    }
+
+    function voidsWithReason() {
+      return signsNewStep()
+        && lastStep().get('remarks', '') is string
+        && lastStep().remarks.size() > 0
+        && lastStep().remarks.size() <= 500;
+    }
+
+    function prStatusChangeAllowed() {
+      return (statusChange('Draft', 'Submitted') && canEditPR())
+        || (statusChange('Submitted', 'Approved') && canApprovePR())
+        || (statusChange('Submitted', 'Rejected') && canApprovePR())
+        || (statusChange('Submitted', 'Draft') && canApprovePR())
+        || (statusChange('Approved', 'Draft') && canApprovePR())
+        || (statusChange('Approved', 'Completed') && canApprovePR())
+        || (incoming().status == 'Cancelled'
+            && voidsWithReason()
+            && ((resource.data.status in ['Draft', 'Submitted'] && ownsPR())
+                || (resource.data.status in ['Draft', 'Submitted', 'Approved'] && canApprovePR())));
+    }
+
+    // Closed requests keep their content; only the comment thread grows.
+    function prEditAllowed() {
+      return resource.data.status in ['Draft', 'Submitted', 'Approved']
+        ? canEditPR()
+        : canEditPR() && changesOnly(['comments', 'history', 'updated_at', 'updated_by_uid']);
+    }
+
+    // ---------- procurement and supply: public read by number ----------
+    // Purchase orders, slips and bookings are numbered official documents:
+    // never deleted, only voided (→ Cancelled), keeping the number, record
+    // and history. A void carries its reason in a step signed by the account
+    // taking it, every other status change is signed too, and a voided
+    // document stays voided — only its comment thread can still grow.
+
+    function voidedStaysVoided() {
+      return resource.data.status != 'Cancelled'
+        || (keepsStatus() && changesOnly(['comments', 'history', 'updated_at', 'updated_by_uid']));
+    }
+
+    // An order issued to the supplier, Released or Completed is final.
+    function poVoidAllowed() {
+      return resource.data.status in ['Draft', 'Pending Approval', 'Approved']
+        && resource.data.get('issued_at', null) == null
+        && voidsWithReason();
+    }
+
+    // Before release no stock has moved. A Released slip is voided only by
+    // the voidReleasedRis function, which returns its stock in the same
+    // transaction; a Completed slip is final.
+    function risVoidAllowed() {
+      return resource.data.status in ['Draft', 'Pending Approval', 'Approved'] && voidsWithReason();
+    }
+
+    function signedStatusChange(voidAllowed) {
+      return keepsStatus() || (signsNewStep() && (incoming().status != 'Cancelled' || voidAllowed));
+    }
+
+    match /purchase_requests/{id} {
+      allow get: if true;
+      allow list: if isStaff();
+      allow update: if numberedUpdate('pr_number',
+             ['Draft', 'Submitted', 'Approved', 'Rejected', 'Cancelled', 'Completed'])
+        && (keepsStatus()
+              ? prEditAllowed()
+              : prStatusChangeAllowed() && signsNewStep());
+    }
+
+    match /purchase_orders/{id} {
+      allow get: if true;
+      allow list: if isStaff();
+      allow update: if canManage('purchase_orders')
+        && numberedUpdate('po_number',
+             ['Draft', 'Pending Approval', 'Approved', 'Released', 'Completed', 'Cancelled'])
+        && voidedStaysVoided()
+        && signedStatusChange(poVoidAllowed());
+    }
+
+    match /ris_requests/{id} {
+      allow get: if true;
+      allow list: if isStaff();
+      allow update: if canManage('ris_requests')
+        && numberedUpdate('ris_number',
+             ['Draft', 'Pending Approval', 'Approved', 'Released', 'Completed', 'Cancelled'])
+        && keeps(['stock_reversed_at', 'stock_reversed_by_uid'])
+        && voidedStaysVoided()
+        && signedStatusChange(risVoidAllowed());
+    }
+
+    // A booking's slot — facility, date, times — changes only through the
+    // updateReservation function, which checks for a double booking in the
+    // same transaction. Statuses only move forward, so a refused or
+    // cancelled booking cannot quietly take its slot back; a Draft (none are
+    // created any more) cannot be approved without that check either.
+    function resStatusChangeAllowed() {
+      return keepsStatus()
+        || (resource.data.status == 'Pending' && incoming().status in ['Approved', 'Rejected', 'Cancelled'])
+        || (resource.data.status == 'Draft' && incoming().status in ['Rejected', 'Cancelled'])
+        || statusChange('Approved', 'Completed')
+        || statusChange('Approved', 'Cancelled');
+    }
+
+    match /reservations/{id} {
+      allow get: if true;
+      allow list: if isStaff();
+      allow update: if canManage('reservations')
+        && numberedUpdate('res_number',
+             ['Draft', 'Pending', 'Approved', 'Rejected', 'Completed', 'Cancelled'])
+        && keeps(['facility_id', 'date', 'start_time', 'end_time'])
+        && resStatusChangeAllowed()
+        && voidedStaysVoided()
+        && signedStatusChange(voidsWithReason());
+    }
+
+    // ---------- inventory: one item per item code ----------
+    // Firestore has no unique constraint, so each item claims its code in
+    // unique_keys/inventory_items.item_code:{code}, written in the same
+    // transaction as the item (src/features/inventory/api.firebase.ts). An
+    // item cannot be saved under a code another item has claimed.
+
+    function itemCodeClaim(code) {
+      return /databases/$(database)/documents/unique_keys/$('inventory_items.item_code:' + code);
+    }
+
+    function claimsItsCode(id) {
+      return incoming().item_code is string
+        && incoming().item_code.matches('^[^/]{1,60}$')
+        && existsAfter(itemCodeClaim(incoming().item_code))
+        && getAfter(itemCodeClaim(incoming().item_code)).data.doc_id == id;
+    }
+
+    match /inventory_items/{id} {
+      allow read: if isStaff();
+      allow create: if isAdmin() && claimsItsCode(id) && signsCreation() && signsWrite();
+      allow update: if isAdmin() && keeps(['id', 'created_at', 'created_by_uid'])
+        && (keeps(['item_code']) || claimsItsCode(id))
+        && signsWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- violators: one profile per person ----------
+    // Postgres held a unique index on name_key, the normalised name. Each
+    // profile claims its key in unique_keys/violators.name_key:{key}, in the
+    // same transaction as the profile (src/features/violations/api.firebase.ts,
+    // and the recordViolation function).
+
+    function nameClaim(key) {
+      return /databases/$(database)/documents/unique_keys/$('violators.name_key:' + key);
+    }
+
+    function claimsItsName(id) {
+      return incoming().name_key is string
+        && incoming().name_key.matches('^[^/]{1,300}$')
+        && existsAfter(nameClaim(incoming().name_key))
+        && getAfter(nameClaim(incoming().name_key)).data.doc_id == id;
+    }
+
+    // ---------- unique_keys: the claims ----------
+
+    function holderPath(collection, docId) {
+      return /databases/$(database)/documents/$(collection)/$(docId);
+    }
+
+    // Every value Postgres held unique, as the key of its claim. "/" cannot
+    // appear in a document ID, so it is written %2F (claimKey in
+    // src/lib/firestore.ts builds the same key).
+    function isClaimed(collection) {
+      return collection in ['inventory_items', 'violators', 'energy_accounts', 'water_accounts',
+                            'fuel_vehicles', 'energy_submeters', 'water_submeters'];
+    }
+
+    function enc(value) {
+      return string(value).replace('/', '%2F');
+    }
+
+    function claimKeyOf(collection, d) {
+      return collection == 'inventory_items' ? 'inventory_items.item_code:' + d.item_code
+        : collection == 'violators' ? 'violators.name_key:' + d.name_key
+        : collection == 'fuel_vehicles' ? 'fuel_vehicles.plate_number:' + enc(d.plate_number)
+        : collection in ['energy_accounts', 'water_accounts']
+            ? collection + '.account_number:' + enc(d.account_number)
+        : collection + '.submeter_number:' + d.account_id + '~' + enc(d.submeter_number);
+    }
+
+    // The document the claim names holds this key once the write is done.
+    function claimHeldBy(key, collection, docId) {
+      return docId is string
+        && isClaimed(collection)
+        && existsAfter(holderPath(collection, docId))
+        && key == claimKeyOf(collection, getAfter(holderPath(collection, docId)).data);
+    }
+
+    // The document being written holds the claim on its own value.
+    function claimsItsKey(collection, id) {
+      return existsAfter(/databases/$(database)/documents/unique_keys/$(claimKeyOf(collection, incoming())))
+        && getAfter(/databases/$(database)/documents/unique_keys/$(claimKeyOf(collection, incoming()))).data.doc_id == id;
+    }
+
+    match /unique_keys/{key} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && claimHeldBy(key, incoming().collection, incoming().doc_id);
+      // A stale claim (its holder deleted, or now holding another value) is
+      // taken over by the document that now has the value. A live claim never
+      // moves.
+      allow update: if isAdmin()
+        && incoming().collection == resource.data.collection
+        && claimHeldBy(key, incoming().collection, incoming().doc_id)
+        && !claimHeldBy(key, resource.data.collection, resource.data.doc_id);
+      // Released only when its holder is gone or now uses another key.
+      allow delete: if isAdmin()
+        && !claimHeldBy(key, resource.data.get('collection', 'inventory_items'), resource.data.doc_id);
+    }
+
+    // ---------- staff-only operational collections ----------
+    // Read by every staff role (dashboards and reports), written by
+    // Administrators. Child collections carry their parent's ID
+    // (account_id, submeter_id, vehicle_id, violator_id, item_id); cascading
+    // deletes run in Cloud Functions.
+
+    function isOperational(collection) {
+      return collection in [
+        'suppliers', 'stock_card',
+        'energy_accounts', 'energy_bills', 'energy_submeters', 'energy_submeter_bills',
+        'water_accounts', 'water_bills', 'water_submeters', 'water_submeter_bills',
+        'water_meter_readings',
+        'fuel_vehicles', 'fuel_transactions', 'fuel_odometer_readings', 'fuel_trips',
+        'violators', 'violations'
+      ];
+    }
+
+    // Numbered records — bills (EC, WC), fuel transactions (FC), trips
+    // (monthly control numbers), violation tickets (VT) — are created only by
+    // Cloud Functions (functions/src/documents/numbered-records.ts), which
+    // number and save them in one transaction. Their numbers never change.
+    // So are the unnumbered entries (approved 2026-10-21): createUtilityEntry
+    // checks that their submeter, account or vehicle is open and keeps one
+    // active submeter bill per month (functions/src/documents/utility-entries.ts).
+    function functionCreated(collection) {
+      return collection in ['energy_bills', 'water_bills', 'fuel_transactions', 'fuel_trips', 'violations',
+                            'energy_submeter_bills', 'water_submeter_bills',
+                            'water_meter_readings', 'fuel_odometer_readings'];
+    }
+
+    // Finalized utility records (approved policy, 2026-10-20) are never
+    // edited in place or deleted from the browser: a correction keeps the
+    // previous values in the record's revisions and a void keeps the record,
+    // both through Cloud Functions (functions/src/documents/utility-records.ts).
+    function functionOwned(collection) {
+      return collection in ['energy_bills', 'water_bills', 'fuel_transactions', 'fuel_trips'];
+    }
+
+    // Unnumbered entries keep their correction history too (approved
+    // 2026-10-21): corrected only through correctUtilityRecord.
+    function correctedByFunction(collection) {
+      return collection in ['energy_submeter_bills', 'water_submeter_bills',
+                            'water_meter_readings', 'fuel_odometer_readings'];
+    }
+
+    // Records that hold official records, and the numbered tickets, are never
+    // deleted from the browser: a holder is deleted by deleteRecordHolders
+    // only while it holds nothing, and is archived (or set Inactive)
+    // otherwise; a ticket is cancelled with its reason. Submeter bills and
+    // readings are corrected or voided through Cloud Functions instead.
+    function neverDeletedHere(collection) {
+      return collection in ['energy_accounts', 'water_accounts', 'energy_submeters', 'water_submeters',
+                            'fuel_vehicles', 'violators', 'violations',
+                            'energy_submeter_bills', 'water_submeter_bills',
+                            'water_meter_readings', 'fuel_odometer_readings'];
+    }
+
+    // An archived account takes no new submeters (approved 2026-10-21).
+    function accountOpen(accounts, accountId) {
+      let path = /databases/$(database)/documents/$(accounts)/$(accountId);
+      return !exists(path) || get(path).data.get('archived', false) != true;
+    }
+
+    function submeterAccountOpen(collection) {
+      return (collection != 'energy_submeters' || accountOpen('energy_accounts', incoming().account_id))
+        && (collection != 'water_submeters' || accountOpen('water_accounts', incoming().account_id));
+    }
+
+    // A ticket is cancelled with its reason, signed by the account cancelling it.
+    function cancelsWithReason() {
+      return resource.data.payment_status == 'Cancelled'
+        || incoming().payment_status != 'Cancelled'
+        || (incoming().get('cancel_reason', '') is string
+            && incoming().cancel_reason.size() > 0
+            && incoming().cancel_reason.size() <= 500
+            && incoming().get('cancelled_by_uid', '') == request.auth.uid
+            && incoming().get('cancelled_at', '') is string);
+    }
+
+    // What Postgres checked with constraints and generated columns.
+    function consistent(collection, id) {
+      let d = incoming();
+      return (collection != 'water_meter_readings'
+               || (d.current_reading is number && d.previous_reading is number
+                   && d.current_reading >= d.previous_reading
+                   && d.consumption == d.current_reading - d.previous_reading))
+        && (collection != 'fuel_odometer_readings'
+               || (d.current_odometer is number && d.previous_odometer is number
+                   && d.current_odometer >= d.previous_odometer
+                   && d.distance == d.current_odometer - d.previous_odometer))
+        && (collection != 'fuel_trips'
+               || (d.ending_odometer is number && d.beginning_odometer is number
+                   && d.ending_odometer >= d.beginning_odometer))
+        && (collection != 'fuel_transactions'
+               || (d.liters is number && d.price_per_liter is number
+                   && d.total_amount == d.liters * d.price_per_liter))
+        && (collection != 'violations'
+               || (d.amount is number && d.amount > 0
+                   && d.amount_paid is number && d.amount_paid >= 0 && d.amount_paid <= d.amount
+                   && d.outstanding_balance == d.amount - d.amount_paid
+                   && d.payment_status in ['Pending', 'Paid', 'Cancelled']))
+        && (collection != 'violators' || claimsItsName(id));
+    }
+
+    // A settled ticket keeps its amount and cannot be cancelled; a cancelled
+    // one cannot take a payment.
+    function violationChangeAllowed() {
+      return (resource.data.payment_status != 'Paid'
+               || (keeps(['amount']) && incoming().payment_status == 'Paid'))
+        && (resource.data.payment_status != 'Cancelled' || incoming().payment_status != 'Paid');
+    }
+
+    match /{collection}/{id} {
+      allow read: if isOperational(collection) && isStaff();
+      // Every write is signed by the writer's own account (stock-card lines
+      // are only ever created, and carry created_by_uid alone).
+      allow create: if isOperational(collection) && isAdmin()
+        && !functionCreated(collection)
+        && signsCreation()
+        && (collection == 'stock_card' || signsWrite())
+        && consistent(collection, id)
+        && submeterAccountOpen(collection)
+        && (!isClaimed(collection) || collection == 'violators' || claimsItsKey(collection, id));
+      allow update: if isOperational(collection) && isAdmin()
+        && !functionOwned(collection)
+        && !correctedByFunction(collection)
+        && keeps(['id', 'created_at', 'created_by_uid', 'doc_number', 'control_no', 'violation_no',
+                  'archived', 'archived_at', 'archived_by', 'archived_by_uid'])
+        && (collection != 'violators' || keeps(['name_key']) || claimsItsName(id))
+        && (!(collection in ['energy_accounts', 'water_accounts', 'fuel_vehicles', 'energy_submeters', 'water_submeters'])
+            || keeps(['account_number', 'plate_number', 'submeter_number', 'account_id'])
+            || claimsItsKey(collection, id))
+        && (keeps(['account_id']) || submeterAccountOpen(collection))
+        && (collection != 'violations' || (violationChangeAllowed() && cancelsWithReason()))
+        && signsWrite()
+        && (collection == 'violators' || consistent(collection, id));
+      allow delete: if isOperational(collection) && isAdmin()
+        && !functionOwned(collection) && !neverDeletedHere(collection);
+    }
+
+    // ---------- settings ----------
+
+    match /system_configuration/{id} {
+      allow read: if isStaff();
+      allow create, update: if isAdmin()
+        && incoming().category is string
+        && incoming().key is string;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- notifications ----------
+    // Created by Cloud Functions on the same events as today's database
+    // triggers. Staff may mark them read or clear them.
+
+    match /notifications/{id} {
+      allow read: if isStaff();
+      allow update: if isStaff()
+        && changesOnly(['is_read'])
+        && incoming().is_read is bool;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- audit trail ----------
+    // Append-only. Entries are written only by Cloud Functions; nobody can
+    // edit or delete one from the app, Administrators included. The one
+    // change allowed is the Audit trail screen's comment thread, and only by
+    // adding a single new comment at the end, signed by whoever adds it:
+    // earlier comments cannot be edited, reordered or removed.
+    // (No screen deletes audit entries; deleteAuditEntries in
+    // src/features/audit/api.ts is unused.)
+
+    function addsOneOwnComment() {
+      let before = resource.data.get('comments', []);
+      let after = incoming().get('comments', []);
+      let added = after[after.size() - 1];
+      return changesOnly(['comments'])
+        && after is list
+        && after.size() == before.size() + 1
+        // An empty range (no earlier comments) is checked separately: the
+        // rules engine evaluates after[0:0] as index -1 and fails.
+        && (before.size() == 0 || after[0:before.size()] == before)
+        && added is map
+        && added.get('author_uid', '') == request.auth.uid
+        && added.get('text', '') is string
+        && added.text.size() > 0
+        && added.text.size() <= 2000;
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && addsOneOwnComment();
+    }
+
+    // ---------- Records Management ----------
+    // Read by every staff role. The three forms (RDS, RIA, RAD) with their
+    // lines, numbers and Records Room filing, and adding or removing a shelf
+    // and moving a box, go only through Cloud Functions
+    // (functions/src/records/), which keep one box per position, five levels
+    // per shelf and one place per document in one transaction. The browser
+    // may only rename a shelf and correct a box's printed label.
+    // record_box_positions (the position claims) has no client access.
+
+    function isRecords(collection) {
+      return collection in [
+        'disposition_schedules', 'record_series',
+        'inventory_appraisals', 'inventory_records',
+        'disposal_requests', 'disposal_items',
+        'record_shelves', 'record_shelf_levels',
+        'record_boxes', 'record_box_contents'
+      ];
+    }
+
+    match /{collection}/{id} {
+      allow read: if isRecords(collection) && isStaff();
+      allow update: if isAdmin() && signsWrite()
+        && ((collection == 'record_shelves'
+              && changesOnly(['name', 'location', 'updated_at', 'updated_by_uid'])
+              && incoming().name is string && incoming().name.size() > 0)
+            || (collection == 'record_boxes'
+              && changesOnly(['label_override', 'updated_at', 'updated_by_uid'])));
+    }
+
+    // document_counters and anything not named above: no client access.
+  }
+}

@@ -15,6 +15,8 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import { useDisposalRequests } from "@/features/records/disposal-hooks";
 import type { DisposalRequest } from "@/features/records/disposal-types";
 import { SCHEDULE_STATUSES } from "@/features/records/types";
@@ -37,6 +39,7 @@ const listDate = (iso: string) => {
  */
 export function DisposalListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState(ALL);
 
@@ -95,10 +98,12 @@ export function DisposalListPage() {
         title="Request for Authority to Dispose of Records"
         description="NAP Form No. 3. No public record may be destroyed without the prior written authority of the National Archives."
         actions={
-          <Button onClick={() => navigate("/records/disposal/new")}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Request
-          </Button>
+          can(user, "manage:records") ? (
+            <Button onClick={() => navigate("/records/disposal/new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Request
+            </Button>
+          ) : undefined
         }
       />
 
@@ -118,6 +123,7 @@ export function DisposalListPage() {
               options={[
                 { value: ALL, label: "All statuses" },
                 ...SCHEDULE_STATUSES.map((s) => ({ value: s, label: s })),
+                { value: "Cancelled", label: "Cancelled" },
               ]}
             />
           </FilterBar>
@@ -135,7 +141,9 @@ export function DisposalListPage() {
             description:
               "A request asks the National Archives for written authority before any record is destroyed.",
             icon: FileCheck2,
-            action: { label: "New Request", onClick: () => navigate("/records/disposal/new") },
+            action: can(user, "manage:records")
+              ? { label: "New Request", onClick: () => navigate("/records/disposal/new") }
+              : undefined,
           }}
         />
       </TableCard>

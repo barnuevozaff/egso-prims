@@ -35,9 +35,23 @@ export function ProtectedRoute() {
 }
 
 /**
- * Role/permission guard for sections inside protected pages. Only
- * Administrator is active today; the other roles are wired but unused.
+ * Route guard for pages a role may not open (Settings, the Audit trail,
+ * create and edit forms). Sends the person to the dashboard instead of
+ * showing a page whose every request firestore.rules would refuse.
  */
+export function PermissionRoute({
+  permission,
+  children,
+}: {
+  permission: Permission;
+  children: React.ReactNode;
+}) {
+  const { user } = useAuth();
+  if (!can(user, permission)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** Role/permission guard for sections inside protected pages. */
 export function RequireRole({
   roles,
   permission,

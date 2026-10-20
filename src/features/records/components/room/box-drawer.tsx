@@ -46,6 +46,7 @@ export function BoxDrawer({
   onViewRecord,
   onViewLocation,
   onChanged,
+  canManage = true,
 }: {
   box: RecordBox | null;
   location: BoxLocation | null;
@@ -56,6 +57,8 @@ export function BoxDrawer({
   onViewRecord: (c: BoxContent) => void;
   onViewLocation: () => void;
   onChanged: () => void;
+  /** Whether the viewer may move the box or correct its label (Administrators). */
+  canManage?: boolean;
 }) {
   const [view, setView] = React.useState<View>("contents");
   const [label, setLabel] = React.useState("");
@@ -136,16 +139,18 @@ export function BoxDrawer({
                   <h3 className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
                     Contents
                   </h3>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => setView("label")}>
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      Correct label
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setView("move")}>
-                      <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-                      Move Box
-                    </Button>
-                  </div>
+                  {canManage && (
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => setView("label")}>
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                        Correct label
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setView("move")}>
+                        <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
+                        Move Box
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 {contents.length === 0 ? (
                   <p className="rounded-[3px] border border-dashed border-neutral-300 px-3 py-4 text-center text-[12.5px] text-neutral-500">

@@ -2,15 +2,21 @@ import * as React from "react";
 import type { Session } from "@supabase/supabase-js";
 
 import { toast } from "@/components";
+import { dataBackend } from "@/lib/data-backend";
 import { isSupabaseConfigured, REMEMBER_KEY, supabase } from "@/lib/supabase";
 import type { AuthUser, Role } from "@/features/auth/types";
 
 /**
- * Authentication provider. Primary path is Supabase Auth (session restore,
- * auto refresh, auth-state events). When no Supabase project is configured
- * (VITE_SUPABASE_* absent), a development driver with the same interface and
- * the same session semantics takes over so the app remains fully testable.
+ * Authentication provider. With VITE_DATA_BACKEND=firebase it uses Firebase
+ * Authentication (features/auth/firebase-driver.ts, loaded on demand);
+ * otherwise Supabase Auth (session restore, auto refresh, auth-state events).
+ * When neither is configured, a development driver with the same interface
+ * and the same session semantics takes over so the app remains fully
+ * testable.
  */
+
+const useFirebaseAuth = dataBackend === "firebase";
+const loadFirebaseDriver = () => import("@/features/auth/firebase-driver");
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -27,7 +33,11 @@ export interface SignInResult {
 interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
-  /** True when real Supabase Auth is active (env configured). */
+  /**
+   * True when a real authentication service is active — Supabase Auth with
+   * its env configured, or Firebase Authentication — rather than the
+   * development driver.
+   */
   supabaseActive: boolean;
   signIn: (email: string, password: string, remember: boolean) => Promise<SignInResult>;
   signOut: () => Promise<void>;
@@ -114,9 +124,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
   const [status, setStatus] = React.useState<AuthStatus>("loading");
   const manualSignOut = React.useRef(false);
+  // While the form is signing in, it shows its own error; the session watcher
+  // must not repeat it as a toast.
+  const signingIn = React.useRef(false);
 
   // Session restore on boot.
   React.useEffect(() => {
+    if (useFirebaseAuth) {
+      let unsubscribe: (() => void) | undefined;
+      let cancelled = false;
+      let signedIn = false;
+      loadFirebaseDriver()
+        .then(({ firebaseDriver, firebaseAuthMessage }) => {
+          if (cancelled) return;
+          unsubscribe = firebaseDriver.watch((authUser, error) => {
+            if (authUser) {
+              signedIn = true;
+              setUser(authUser);
+              setStatus("authenticated");
+              return;
+            }
+            const wasManual = manualSignOut.current;
+            manualSignOut.current = false;
+            setUser(null);
+            setStatus("unauthenticated");
+            if (error && !signingIn.current) toast.error(firebaseAuthMessage(error));
+            else if (!error && signedIn && !wasManual) {
+              toast.error("Your session has expired. Please sign in again.");
+            }
+            signedIn = false;
+          });
+        })
+        .catch(() => {
+          setStatus("unauthenticated");
+          toast.error("Could not start sign-in. Check your connection and reload the page.");
+        });
+      return () => {
+        cancelled = true;
+        unsubscribe?.();
+      };
+    }
     if (supabase) {
       void supabase.auth
         .getSession()
@@ -172,6 +219,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = React.useCallback(
     async (email: string, password: string, remember: boolean): Promise<SignInResult> => {
+      if (useFirebaseAuth) {
+        const { firebaseDriver, firebaseAuthMessage } = await loadFirebaseDriver();
+        signingIn.current = true;
+        try {
+          const signedIn = await firebaseDriver.signIn(email, password, remember);
+          setUser(signedIn);
+          setStatus("authenticated");
+          return { user: signedIn };
+        } catch (e) {
+          return { error: firebaseAuthMessage(e) };
+        } finally {
+          signingIn.current = false;
+        }
+      }
       try {
         if (supabase) {
           localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
@@ -198,7 +259,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = React.useCallback(async () => {
     manualSignOut.current = true;
-    if (supabase) {
+    if (useFirebaseAuth) {
+      await (await loadFirebaseDriver()).firebaseDriver.signOut();
+    } else if (supabase) {
       await supabase.auth.signOut();
     } else {
       devDriver.signOut();
@@ -208,6 +271,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const requestPasswordReset = React.useCallback(async (email: string): Promise<SignInResult> => {
+    if (useFirebaseAuth) {
+      const { firebaseDriver, firebaseAuthMessage } = await loadFirebaseDriver();
+      try {
+        await firebaseDriver.requestPasswordReset(email);
+        return {};
+      } catch (e) {
+        return { error: firebaseAuthMessage(e) };
+      }
+    }
     if (supabase) {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/login`,
@@ -222,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       status,
-      supabaseActive: isSupabaseConfigured,
+      supabaseActive: useFirebaseAuth || isSupabaseConfigured,
       signIn,
       signOut,
       requestPasswordReset,

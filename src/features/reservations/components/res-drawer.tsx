@@ -34,6 +34,8 @@ import { CommentThread } from "@/features/shared/comment-thread";
 import { HistoryFeed } from "@/features/shared/history-feed";
 import { ResEquipmentTable } from "@/features/reservations/components/res-equipment-table";
 import { ResOverview } from "@/features/reservations/components/res-overview";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 
 /** Right slide-over showing the full facility reservation. */
 export function ResDrawer({
@@ -49,6 +51,7 @@ export function ResDrawer({
   onChanged?: () => void;
   onEdit?: (resId: string) => void;
 }) {
+  const { user } = useAuth();
   const { data: r, loading, setData } = useReservation(open ? resId : null);
   const [confirmApprove, setConfirmApprove] = React.useState(false);
   const [confirmReject, setConfirmReject] = React.useState(false);
@@ -64,8 +67,8 @@ export function ResDrawer({
     setActing(true);
     try {
       const updated = await setReservationStatus(r.id, status, {
-        by: "Administrator",
-        office: "General Services Office",
+        by: user?.name ?? "Staff",
+        office: user?.office ?? "General Services Office",
         remarks,
       });
       setData(updated);
@@ -142,8 +145,8 @@ export function ResDrawer({
                     onSubmit={async (text) => {
                       setData(
                         await addReservationComment(r.id, {
-                          author: "Administrator",
-                          office: "General Services Office",
+                          author: user?.name ?? "Staff",
+                          office: user?.office ?? "General Services Office",
                           text,
                         }),
                       );
@@ -178,10 +181,14 @@ export function ResDrawer({
                 <Printer />
                 Print
               </Button>
-              <Button variant="secondary" onClick={() => onEdit?.(r.id)}>
-                <Pencil />
-                Edit
-              </Button>
+              {/* A voided document is closed for editing (firestore.rules), and
+                  only roles that manage the module reach the edit page. */}
+              {r.status !== "Cancelled" && can(user, "manage:reservations") && (
+                <Button variant="secondary" onClick={() => onEdit?.(r.id)}>
+                  <Pencil />
+                  Edit
+                </Button>
+              )}
               {(r.status === "Pending" || r.status === "Draft") && (
                 <>
                   <Button variant="outline" onClick={() => setConfirmReject(true)}>

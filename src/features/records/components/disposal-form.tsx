@@ -111,7 +111,9 @@ export function DisposalForm({
   const [requestDate, setRequestDate] = React.useState<Date | undefined>(
     initial ? new Date(`${initial.requestDate}T00:00:00`) : new Date(),
   );
-  const [status, setStatus] = React.useState<ScheduleStatus>(initial?.status ?? "Draft");
+  const [status, setStatus] = React.useState<ScheduleStatus>(
+    initial?.status && initial.status !== "Cancelled" ? initial.status : "Draft",
+  );
   const [items, setItems] = React.useState<DisposalItemDraft[]>(
     initial?.items.map((it) => ({
       itemNumber: it.itemNumber,

@@ -1,13 +1,12 @@
 import * as React from "react";
 import { format } from "date-fns";
-import { Archive, Droplets, Gauge, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, Droplets, Gauge, History, MapPin, Pencil, Plus } from "lucide-react";
 
 import {
   BarChartContainer,
   Button,
   Caption,
   CurrencyDisplay,
-  DeleteModal,
   Drawer,
   DrawerActions,
   DrawerBody,
@@ -30,7 +29,7 @@ import {
   chartPalette,
   toast,
 } from "@/components";
-import { archiveWaterSubmeter, deleteWaterBills } from "@/features/water/api";
+import { archiveWaterAccount, archiveWaterSubmeter, voidWaterBill } from "@/features/water/api";
 import {
   useWaterBills,
   useWaterSubmeterBills,
@@ -54,6 +53,9 @@ import {
   type WaterSubmeter,
 } from "@/features/water/types";
 import { departmentByCode } from "@/features/purchase-requests/types";
+import { useAuth } from "@/features/auth/auth-context";
+import { activeOnly, hasHistory } from "@/features/shared/revisions";
+import { RecordHistoryDialog, VoidRecordDialog } from "@/features/shared/void-record";
 
 /** Right slide-over: account details, movement, and full billing history. */
 export function WaterAccountDrawer({
@@ -63,11 +65,11 @@ export function WaterAccountDrawer({
   month,
   year,
   onEdit,
-  onAddBill,
+  onAddBill: addBill,
   onEditBill,
-  onAddSubmeter,
+  onAddSubmeter: addSubmeter,
   onEditSubmeter,
-  onAddSubmeterBill,
+  onAddSubmeterBill: addSubmeterBill,
   onOpenSubmeter,
   onChanged,
 }: {
@@ -88,8 +90,10 @@ export function WaterAccountDrawer({
   onChanged?: () => void;
 }) {
   const { data: bills, loading, refresh } = useWaterBills(
-    account ? { accountId: account.id } : { accountId: "__none__" },
+    account ? { accountId: account.id, includeVoided: true } : { accountId: "__none__" },
   );
+  // A voided bill stays in the history but no longer counts.
+  const active = activeOnly(bills);
   const submeters = useWaterSubmeters(
     React.useMemo(
       () => (account ? { accountId: account.id } : { accountId: "__none__" }),
@@ -97,11 +101,39 @@ export function WaterAccountDrawer({
     ),
   );
   const submeterBills = useWaterSubmeterBills(React.useMemo(() => ({}), []));
-  const [pendingDelete, setPendingDelete] = React.useState<WaterBill | null>(null);
+  const [pendingVoid, setPendingVoid] = React.useState<WaterBill | null>(null);
+  const [historyFor, setHistoryFor] = React.useState<WaterBill | null>(null);
+  const { user } = useAuth();
+  // Voiding a finalized record is the Administrator's (policy 2026-10-20).
+  const isAdmin = user?.role === "Administrator";
+  // An archived account takes no new bills or submeters until an
+  // Administrator restores it (approved 2026-10-21); its history stays.
+  const closed = account?.archived === true;
+  const onAddBill = closed ? undefined : addBill;
+  const onAddSubmeter = closed ? undefined : addSubmeter;
+  const onAddSubmeterBill = closed ? undefined : addSubmeterBill;
+  const [archiving, setArchiving] = React.useState(false);
 
-  const comparison = account ? buildComparisons([account], bills, month, year)[0] : null;
+  /**
+   * Archiving keeps the account and everything it holds (approved
+   * 2026-10-21): an account with bills is never deleted.
+   */
+  const toggleArchive = async (archived: boolean) => {
+    if (!account) return;
+    setArchiving(true);
+    try {
+      await archiveWaterAccount(account.id, archived);
+      toast.success(archived ? "Account archived — its bills and history are kept" : "Account restored");
+      onChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to change the account");
+    }
+    setArchiving(false);
+  };
+
+  const comparison = account ? buildComparisons([account], active, month, year)[0] : null;
   const periods = trailingPeriods(month, year, 6);
-  const series = monthlyTotals(bills, periods);
+  const series = monthlyTotals(active, periods);
 
   /* Submeter list and the account totals rolled up from it. */
   const ownSubmeters = React.useMemo(
@@ -129,9 +161,15 @@ export function WaterAccountDrawer({
             description={`${account.accountNumber} · Meter ${account.meterNumber}`}
             onClose={() => onOpenChange(false)}
           >
-            {comparison && (
-              <div className="mt-2">
-                <StatusBadge status={comparison.status} />
+            {(comparison || account.archived) && (
+              <div className="mt-2 flex items-center gap-2">
+                {comparison && <StatusBadge status={comparison.status} />}
+                {account.archived && (
+                  <>
+                    <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">Archived</span>
+                    <Caption className="text-[11.5px]">Restore it to record new bills or submeters.</Caption>
+                  </>
+                )}
               </div>
             )}
           </DrawerHeader>
@@ -366,7 +404,7 @@ export function WaterAccountDrawer({
                               </TableCell>
                               <TableCell className="py-2.5 text-right">
                                 <span className="inline-flex items-center gap-1">
-                                  {onAddSubmeterBill && (
+                                  {onAddSubmeterBill && s.status === "Active" && (
                                     <IconButton
                                       aria-label={`Add bill for ${s.submeterNumber}`}
                                       variant="danger"
@@ -452,10 +490,12 @@ export function WaterAccountDrawer({
               <section>
                 <div className="mb-2 flex items-center justify-between">
                   <SectionTitle as="h3">Billing History</SectionTitle>
-                  <Button variant="secondary" size="xs" onClick={() => onAddBill(account)}>
-                    <Plus />
-                    Record Bill
-                  </Button>
+                  {onAddBill && (
+                    <Button variant="secondary" size="xs" onClick={() => onAddBill(account)}>
+                      <Plus />
+                      Record Bill
+                    </Button>
+                  )}
                 </div>
                 {loading ? (
                   <SkeletonText lines={5} />
@@ -464,7 +504,7 @@ export function WaterAccountDrawer({
                     icon={Droplets}
                     title="No billing records yet"
                     description="Record the first monthly water bill for this account."
-                    action={{ label: "Record Bill", onClick: () => onAddBill(account) }}
+                    action={onAddBill ? { label: "Record Bill", onClick: () => onAddBill(account) } : undefined}
                   />
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-neutral-200">
@@ -491,6 +531,11 @@ export function WaterAccountDrawer({
                                   {b.docNumber}
                                 </span>
                               )}
+                              {b.voided && (
+                                <span className="mt-0.5 block text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">
+                                  Voided
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="py-2.5 text-right tabular-nums text-neutral-700">
                               {b.consumption.toLocaleString("en-PH", { maximumFractionDigits: 2 })}
@@ -506,22 +551,36 @@ export function WaterAccountDrawer({
                             </TableCell>
                             <TableCell className="py-2.5 text-right">
                               <span className="inline-flex items-center gap-1">
-                                <IconButton
-                                  aria-label={`Edit ${monthName(b.billingMonth)} ${b.billingYear} bill`}
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  onClick={() => onEditBill(account, b)}
-                                >
-                                  <Pencil />
-                                </IconButton>
-                                <IconButton
-                                  aria-label={`Delete ${monthName(b.billingMonth)} ${b.billingYear} bill`}
-                                  variant="danger"
-                                  size="icon-sm"
-                                  onClick={() => setPendingDelete(b)}
-                                >
-                                  <Trash2 />
-                                </IconButton>
+                                {!b.voided && (
+                                  <IconButton
+                                    aria-label={`Correct the ${monthName(b.billingMonth)} ${b.billingYear} bill`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => onEditBill(account, b)}
+                                  >
+                                    <Pencil />
+                                  </IconButton>
+                                )}
+                                {hasHistory(b) && (
+                                  <IconButton
+                                    aria-label={`History of the ${monthName(b.billingMonth)} ${b.billingYear} bill`}
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setHistoryFor(b)}
+                                  >
+                                    <History />
+                                  </IconButton>
+                                )}
+                                {!b.voided && isAdmin && (
+                                  <IconButton
+                                    aria-label={`Void the ${monthName(b.billingMonth)} ${b.billingYear} bill`}
+                                    variant="danger"
+                                    size="icon-sm"
+                                    onClick={() => setPendingVoid(b)}
+                                  >
+                                    <Ban />
+                                  </IconButton>
+                                )}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -543,35 +602,46 @@ export function WaterAccountDrawer({
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
+              {isAdmin && (
+                <Button variant="ghost" loading={archiving} onClick={() => void toggleArchive(!account.archived)}>
+                  {account.archived ? <ArchiveRestore /> : <Archive />}
+                  {account.archived ? "Restore Account" : "Archive Account"}
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => onEdit(account)}>
                 <Pencil />
                 Edit Account
               </Button>
-              <Button onClick={() => onAddBill(account)}>
-                <Plus />
-                Record Bill
-              </Button>
+              {onAddBill && (
+                <Button onClick={() => onAddBill(account)}>
+                  <Plus />
+                  Record Bill
+                </Button>
+              )}
             </DrawerActions>
           </DrawerFooter>
 
-          <DeleteModal
-            open={!!pendingDelete}
-            onOpenChange={(o) => !o && setPendingDelete(null)}
+          <VoidRecordDialog
+            open={!!pendingVoid}
+            onOpenChange={(o) => !o && setPendingVoid(null)}
             title={
-              pendingDelete
-                ? `Delete the ${monthName(pendingDelete.billingMonth)} ${pendingDelete.billingYear} bill?`
-                : "Delete billing record?"
+              pendingVoid
+                ? `Void the ${monthName(pendingVoid.billingMonth)} ${pendingVoid.billingYear} bill?`
+                : "Void bill?"
             }
-            description="The billing record will be permanently removed and comparisons will be recalculated."
-            onConfirm={async () => {
-              if (pendingDelete) {
-                await deleteWaterBills([pendingDelete.id]);
-                toast.success("Billing record deleted");
-                setPendingDelete(null);
-                void refresh();
-                onChanged?.();
-              }
+            description="The bill keeps its number and values and stays in this history, but no longer counts in totals or comparisons. Its month becomes free, so the corrected bill can be recorded."
+            onVoid={(reason) => voidWaterBill(pendingVoid!.id, reason)}
+            onDone={() => {
+              setPendingVoid(null);
+              void refresh();
+              onChanged?.();
             }}
+          />
+          <RecordHistoryDialog
+            open={!!historyFor}
+            onOpenChange={(o) => !o && setHistoryFor(null)}
+            title={historyFor ? `${historyFor.docNumber ?? "Bill"} — history` : "History"}
+            record={historyFor}
           />
         </>
       )}

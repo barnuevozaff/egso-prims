@@ -20,8 +20,8 @@ import {
 import {
   createWaterBill,
   createWaterSubmeterBill,
-  updateWaterBill,
-  updateWaterSubmeterBill,
+  correctWaterBill,
+  correctWaterSubmeterBill,
 } from "@/features/water/api";
 import {
   MONTHS,
@@ -41,6 +41,8 @@ const billSchema = z.object({
   amount: z.number({ error: "Enter the billed amount" }).positive("Must be more than 0"),
   consumption: z.number({ error: "Enter the consumption reading" }).min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  /** Required when correcting a finalized record; kept in its revisions. */
+  correctionReason: z.string().optional(),
 });
 
 type BillValues = z.infer<typeof billSchema>;
@@ -86,6 +88,7 @@ export function WaterBillForm({
       amount: 0,
       consumption: 0,
       remarks: "",
+      correctionReason: "",
     },
   });
 
@@ -97,21 +100,26 @@ export function WaterBillForm({
       amount: existing?.amount ?? 0,
       consumption: existing?.consumption ?? 0,
       remarks: existing?.remarks ?? "",
+      correctionReason: "",
     });
   }, [open, existing, form]);
 
   const submit = form.handleSubmit(async (values) => {
+    if (isEdit && !values.correctionReason?.trim()) {
+      form.setError("correctionReason", { message: "Give the reason for this correction." });
+      return;
+    }
     if (!account && !submeter) return;
     setSubmitting(true);
     try {
       if (forSubmeter) {
         if (isEdit) {
-          await updateWaterSubmeterBill(submeterBill!.id, {
-            amount: values.amount,
-            consumption: values.consumption,
-            remarks: values.remarks,
-          });
-          toast.success("Submeter billing record updated");
+          await correctWaterSubmeterBill(
+            submeterBill!.id,
+            { amount: values.amount, consumption: values.consumption, remarks: values.remarks },
+            values.correctionReason!.trim(),
+          );
+          toast.success("Submeter bill corrected — the previous values are kept in its history");
         } else {
           await createWaterSubmeterBill({ submeterId: submeter!.id, ...values });
           toast.success(
@@ -119,12 +127,12 @@ export function WaterBillForm({
           );
         }
       } else if (isEdit) {
-        await updateWaterBill(bill!.id, {
-          amount: values.amount,
-          consumption: values.consumption,
-          remarks: values.remarks,
-        });
-        toast.success("Billing record updated");
+        await correctWaterBill(
+          bill!.id,
+          { amount: values.amount, consumption: values.consumption, remarks: values.remarks },
+          values.correctionReason!.trim(),
+        );
+        toast.success("Bill corrected — the previous values are kept in its history");
       } else {
         await createWaterBill({ accountId: account!.id, ...values });
         toast.success(`${MONTHS[values.billingMonth - 1]} ${values.billingYear} bill recorded`);
@@ -142,7 +150,7 @@ export function WaterBillForm({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} size="md">
       <DrawerHeader
-        title={isEdit ? "Edit Billing Record" : "Record Monthly Bill"}
+        title={isEdit ? "Correct Billing Record" : "Record Monthly Bill"}
         description={
           submeter
             ? `${submeterLabel(submeter)} · ${submeter.submeterNumber}`
@@ -227,9 +235,19 @@ export function WaterBillForm({
             />
           </Field>
           {isEdit && (
+            <Field
+              label="Reason for correction"
+              required
+              error={err.correctionReason?.message}
+              helper="Kept with the previous values, your name and the time."
+            >
+              <Textarea rows={2} {...form.register("correctionReason")} />
+            </Field>
+          )}
+          {isEdit && (
             <p className="rounded-lg bg-neutral-50 px-3 py-2.5 text-[11.5px] leading-relaxed text-neutral-500">
-              The billing period cannot be changed. Delete the record and re-enter it if the month
-              or year was recorded incorrectly.
+              The billing period cannot be changed. If the month or year was recorded
+              incorrectly, void this bill and record it again.
             </p>
           )}
         </div>
@@ -241,7 +259,7 @@ export function WaterBillForm({
           </Button>
           <Button onClick={submit} loading={submitting}>
             <Save />
-            {isEdit ? "Save Changes" : "Record Bill"}
+            {isEdit ? "Save Correction" : "Record Bill"}
           </Button>
         </DrawerActions>
       </DrawerFooter>

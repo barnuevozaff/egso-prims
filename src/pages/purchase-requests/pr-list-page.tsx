@@ -6,21 +6,26 @@ import { FileText, Plus } from "lucide-react";
 import {
   Button,
   CurrencyDisplay,
-  DeleteModal,
   DepartmentChip,
   DropdownFilter,
   EnterpriseTable,
   ExportButton,
+  Field,
   FilterBar,
   PageHeader,
   PageTransition,
   SearchBar,
   StatusBadge,
   TableCard,
+  Textarea,
+  WarningModal,
   toast,
 } from "@/components";
+import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
 import {
-  deletePurchaseRequests,
+  VOIDABLE_PR_STATUSES,
+  cancelPurchaseRequest,
   exportPurchaseRequestsCsv,
 } from "@/features/purchase-requests/api";
 import { usePurchaseRequests } from "@/features/purchase-requests/hooks";
@@ -40,6 +45,7 @@ const ALL = "__all";
 
 export function PRListPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ALL);
@@ -70,7 +76,10 @@ export function PRListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseRequest[]>([]);
-  const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
+  const [confirmVoid, setConfirmVoid] = React.useState(false);
+  const [voidReason, setVoidReason] = React.useState("");
+  const [voidError, setVoidError] = React.useState<string | undefined>();
+  const [voiding, setVoiding] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -92,20 +101,39 @@ export function PRListPage() {
     toast.success(`Exported ${rows.length} purchase request${rows.length === 1 ? "" : "s"}`);
   };
 
-  const removeRows = async (rows: PurchaseRequest[]) => {
-    try {
-      await deletePurchaseRequests(rows.map((r) => r.id));
-    } catch (e) {
-      // A rejected delete used to leave the rows selected, the table
-      // unchanged and nothing said — indistinguishable from a click that
-      // never landed.
-      toast.error(e instanceof Error ? e.message : "Unable to delete purchase requests");
+  /**
+   * Numbered requests are voided, never deleted: the status becomes
+   * Cancelled and the number, record and history stay. Each request is voided
+   * on its own, so one the user may not void (or one already closed) is
+   * reported without stopping the rest.
+   */
+  const voidRows = async (rows: PurchaseRequest[]) => {
+    const reason = voidReason.trim();
+    if (!reason) {
+      setVoidError("Give a reason. It is kept in each request's approval timeline.");
       return;
     }
+    setVoiding(true);
+    const failed: string[] = [];
+    for (const pr of rows) {
+      try {
+        await cancelPurchaseRequest(pr.id, { reason, by: user?.name ?? "Staff", office: user?.office });
+      } catch (e) {
+        failed.push(`${pr.prNumber}: ${e instanceof Error ? e.message : "could not be voided"}`);
+      }
+    }
+    setVoiding(false);
+    const voided = rows.length - failed.length;
+    if (voided > 0) toast.success(`Voided ${voided} purchase request${voided === 1 ? "" : "s"}`);
+    if (failed.length > 0) toast.error(failed.join(" · "));
+    setConfirmVoid(false);
+    setVoidReason("");
     setRowSelection({});
-    toast.success(`Deleted ${rows.length} purchase request${rows.length === 1 ? "" : "s"}`);
     void refresh();
   };
+
+  // Only requests still open can be voided; closed ones are left out of the count.
+  const voidable = selectedRows.filter((r) => VOIDABLE_PR_STATUSES.includes(r.status));
 
   const columns = React.useMemo<ColumnDef<PurchaseRequest, unknown>[]>(
     () => [
@@ -246,20 +274,45 @@ export function PRListPage() {
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => window.print()}
-        onDelete={() => setConfirmBulkDelete(true)}
+        onVoid={
+          can(user, "manage:purchase-requests") && voidable.length > 0
+            ? () => {
+                setVoidError(undefined);
+                setConfirmVoid(true);
+              }
+            : undefined
+        }
         onClear={() => setRowSelection({})}
       />
 
-      <DeleteModal
-        open={confirmBulkDelete}
-        onOpenChange={setConfirmBulkDelete}
-        title={`Delete ${selectedRows.length} purchase request${selectedRows.length === 1 ? "" : "s"}?`}
-        description="Selected requests and their attachments, comments, and history will be permanently removed."
-        onConfirm={async () => {
-          await removeRows(selectedRows);
-          setConfirmBulkDelete(false);
+      <WarningModal
+        open={confirmVoid}
+        onOpenChange={(open) => {
+          setConfirmVoid(open);
+          if (!open) setVoidReason("");
         }}
-      />
+        title={`Void ${voidable.length} purchase request${voidable.length === 1 ? "" : "s"}?`}
+        description={`The status becomes Cancelled. The number, the request and its history are kept, and the reason is recorded with your name.${
+          voidable.length < selectedRows.length
+            ? ` ${selectedRows.length - voidable.length} selected request${selectedRows.length - voidable.length === 1 ? " is" : "s are"} already closed and will be left as they are.`
+            : ""
+        }`}
+        confirmLabel="Void"
+        loading={voiding}
+        onConfirm={() => void voidRows(voidable)}
+      >
+        <Field label="Reason" required error={voidError} className="mt-4">
+          <Textarea
+            value={voidReason}
+            maxLength={500}
+            rows={3}
+            onChange={(e) => {
+              setVoidReason(e.target.value);
+              if (voidError) setVoidError(undefined);
+            }}
+          />
+        </Field>
+      </WarningModal>
 
       <PRDrawer
         prId={activeId}

@@ -1,6 +1,12 @@
+import type { FinalizedRecord } from "@/features/shared/revisions";
+
 /** Water Consumption domain types. Shapes mirror the Supabase schema. */
 
 export interface WaterAccount {
+  /** Archived (approved 2026-10-21): kept with everything it holds, marked no longer in use. */
+  archived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   id: string;
   accountNumber: string;
   /** Optional friendly name, e.g. "Municipal Hall — Main Building". */
@@ -11,7 +17,7 @@ export interface WaterAccount {
   updatedAt: string;
 }
 
-export interface WaterBill {
+export interface WaterBill extends FinalizedRecord {
   id: string;
   /** Centrally generated document number, e.g. WC-2026-000001. */
   docNumber?: string;
@@ -50,7 +56,7 @@ export interface WaterSubmeter {
 }
 
 /** One monthly billing record for a submeter. */
-export interface WaterSubmeterBill {
+export interface WaterSubmeterBill extends FinalizedRecord {
   id: string;
   submeterId: string;
   /** 1–12 */
@@ -65,7 +71,7 @@ export interface WaterSubmeterBill {
 }
 
 /** One monthly meter reading for a submeter. */
-export interface WaterMeterReading {
+export interface WaterMeterReading extends FinalizedRecord {
   id: string;
   submeterId: string;
   /** ISO date the meter was read. */
@@ -141,6 +147,8 @@ export interface AccountRollup {
 
 /** Filters accepted by the bill list endpoint. */
 export interface WaterBillFilters {
+  /** Voided records are left out of lists and totals unless asked for (history views). */
+  includeVoided?: boolean;
   accountId?: string;
   year?: number;
   month?: number;

@@ -10,22 +10,20 @@ import {
   Plus,
   Printer,
   Receipt,
+  Archive,
+  ArchiveRestore,
   ScrollText,
-  Trash2,
 } from "lucide-react";
 
 import {
   Button,
   Caption,
-  ConfirmationModal,
-  DeleteModal,
   Drawer,
   DrawerActions,
   DrawerBody,
   DrawerFooter,
   DrawerHeader,
   EmptyState,
-  IconButton,
   OverlineLabel,
   SectionTitle,
   Skeleton,
@@ -41,7 +39,9 @@ import {
   toast,
 } from "@/components";
 import { formatPHP } from "@/lib/format";
-import { cancelViolation, deleteViolations } from "@/features/violations/api";
+import { archiveViolator, cancelViolation } from "@/features/violations/api";
+import { useAuth } from "@/features/auth/auth-context";
+import { VoidRecordDialog } from "@/features/shared/void-record";
 import { formatDate, orDash } from "@/features/violations/lib";
 import type { Violation, ViolatorProfile } from "@/features/violations/types";
 
@@ -82,7 +82,7 @@ export function ViolatorDrawer({
   onOpenChange,
   loading = false,
   onEditProfile,
-  onAddViolation,
+  onAddViolation: addViolation,
   onEditViolation,
   onRecordPayment,
   onPrint,
@@ -102,36 +102,25 @@ export function ViolatorDrawer({
   onChanged?: () => void;
 }) {
   const [pendingCancel, setPendingCancel] = React.useState<Violation | null>(null);
-  const [cancelling, setCancelling] = React.useState(false);
-  const [pendingDelete, setPendingDelete] = React.useState<Violation | null>(null);
-  const [deleting, setDeleting] = React.useState(false);
+  const [archiving, setArchiving] = React.useState(false);
+  const { user } = useAuth();
+  // Archiving a profile is the Administrator's (approved 2026-10-21).
+  const isAdmin = user?.role === "Administrator";
+  // An archived profile takes no new tickets until an Administrator restores
+  // it; recording one never restores it (approved 2026-10-21).
+  const onAddViolation = profile?.violator.archived ? undefined : addViolation;
 
-  const voidViolation = async () => {
-    if (!pendingCancel) return;
-    setCancelling(true);
+  const toggleArchive = async (archived: boolean) => {
+    if (!profile) return;
+    setArchiving(true);
     try {
-      await cancelViolation(pendingCancel.id, "Cancelled from the violator profile");
-      toast.success(`${pendingCancel.violationNo} cancelled`);
-      setPendingCancel(null);
+      await archiveViolator(profile.violator.id, archived);
+      toast.success(archived ? "Profile archived — its tickets and history are kept" : "Profile restored");
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to cancel the violation");
+      toast.error(e instanceof Error ? e.message : "Unable to change the profile");
     }
-    setCancelling(false);
-  };
-
-  const removeViolation = async () => {
-    if (!pendingDelete) return;
-    setDeleting(true);
-    try {
-      await deleteViolations([pendingDelete.id]);
-      toast.success(`${pendingDelete.violationNo} deleted`);
-      setPendingDelete(null);
-      onChanged?.();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to delete the violation");
-    }
-    setDeleting(false);
+    setArchiving(false);
   };
 
   return (
@@ -152,6 +141,12 @@ export function ViolatorDrawer({
             >
               <div className="mt-2 flex items-center gap-2">
                 <StatusBadge status={profile.status} />
+                {profile.violator.archived && (
+                  <>
+                    <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#5b606b]">Archived</span>
+                    <Caption className="text-[11.5px]">Restore it to record new violations.</Caption>
+                  </>
+                )}
                 <Caption>
                   {profile.totalViolations} violation
                   {profile.totalViolations === 1 ? "" : "s"} on record
@@ -221,10 +216,12 @@ export function ViolatorDrawer({
                 <section>
                   <div className="mb-2 flex items-center justify-between">
                     <SectionTitle as="h3">Violation History</SectionTitle>
-                    <Button variant="secondary" size="xs" onClick={() => onAddViolation(profile)}>
-                      <Plus />
-                      Add Violation
-                    </Button>
+                    {onAddViolation && (
+                      <Button variant="secondary" size="xs" onClick={() => onAddViolation(profile)}>
+                        <Plus />
+                        Add Violation
+                      </Button>
+                    )}
                   </div>
 
                   {profile.violations.length === 0 ? (
@@ -232,10 +229,11 @@ export function ViolatorDrawer({
                       icon={ScrollText}
                       title="No violation records found."
                       description="This profile has no violations on record yet."
-                      action={{
-                        label: "Add Violation",
-                        onClick: () => onAddViolation(profile),
-                      }}
+                      action={
+                        onAddViolation
+                          ? { label: "Add Violation", onClick: () => onAddViolation(profile) }
+                          : undefined
+                      }
                     />
                   ) : (
                     <div className="overflow-hidden rounded-lg border border-neutral-200">
@@ -287,6 +285,13 @@ export function ViolatorDrawer({
                               </TableCell>
                               <TableCell>
                                 <StatusBadge status={v.paymentStatus} />
+                                {v.paymentStatus === "Cancelled" && v.cancelReason && (
+                                  <Caption className="mt-0.5 block max-w-[220px] whitespace-normal text-[10.5px]">
+                                    {v.cancelReason}
+                                    {v.cancelledBy ? ` — ${v.cancelledBy}` : ""}
+                                    {v.cancelledAt ? `, ${formatDate(v.cancelledAt)}` : ""}
+                                  </Caption>
+                                )}
                               </TableCell>
                               <TableCell className="whitespace-nowrap text-neutral-600">
                                 {v.paymentDate ? formatDate(v.paymentDate) : "—"}
@@ -324,14 +329,6 @@ export function ViolatorDrawer({
                                       View
                                     </Button>
                                   )}
-                                  <IconButton
-                                    aria-label={`Delete violation ${v.violationNo}`}
-                                    variant="danger"
-                                    size="icon-sm"
-                                    onClick={() => setPendingDelete(v)}
-                                  >
-                                    <Trash2 />
-                                  </IconButton>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -350,6 +347,16 @@ export function ViolatorDrawer({
                   <Pencil />
                   Edit Profile
                 </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    loading={archiving}
+                    onClick={() => void toggleArchive(!profile.violator.archived)}
+                  >
+                    {profile.violator.archived ? <ArchiveRestore /> : <Archive />}
+                    {profile.violator.archived ? "Restore Profile" : "Archive Profile"}
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={() => onExport(profile)}
@@ -362,42 +369,30 @@ export function ViolatorDrawer({
                   <Printer />
                   Print
                 </Button>
-                <Button onClick={() => onAddViolation(profile)}>
-                  <Plus />
-                  Add Violation
-                </Button>
+                {onAddViolation && (
+                  <Button onClick={() => onAddViolation(profile)}>
+                    <Plus />
+                    Add Violation
+                  </Button>
+                )}
               </DrawerActions>
             </DrawerFooter>
           </>
         )}
       </Drawer>
 
-      <ConfirmationModal
+      <VoidRecordDialog
         open={!!pendingCancel}
         onOpenChange={(o) => !o && setPendingCancel(null)}
-        icon={Ban}
-        tone="neutral"
         title={`Cancel ${pendingCancel?.violationNo ?? "this violation"}?`}
-        description="The violation stays on the profile as a cancelled record and stops counting toward the assessed total."
+        description="The ticket keeps its number and stays on the profile as cancelled, with your reason, your name and the time. It stops counting toward the assessed total."
         confirmLabel="Cancel Violation"
-        loading={cancelling}
-        onConfirm={voidViolation}
-      />
-
-      <DeleteModal
-        open={!!pendingDelete}
-        onOpenChange={(o) => !o && setPendingDelete(null)}
-        title={`Delete ${pendingDelete?.violationNo ?? "this violation"}?`}
-        description={
-          pendingDelete?.paymentStatus === "Paid"
-            ? `This violation is settled — deleting it also removes the payment of ${formatPHP(
-                pendingDelete.amountPaid,
-                { decimals: 2 },
-              )} under receipt ${orDash(pendingDelete.orNumber)}. To void a violation while keeping the record, cancel it instead.`
-            : "The violation will be permanently removed and the profile's totals recalculated. To keep it on record as void, cancel it instead."
-        }
-        loading={deleting}
-        onConfirm={removeViolation}
+        doneMessage="Violation cancelled"
+        onVoid={(reason) => cancelViolation(pendingCancel!.id, reason)}
+        onDone={() => {
+          setPendingCancel(null);
+          onChanged?.();
+        }}
       />
     </>
   );

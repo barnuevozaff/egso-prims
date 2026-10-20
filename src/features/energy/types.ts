@@ -1,6 +1,12 @@
+import type { FinalizedRecord } from "@/features/shared/revisions";
+
 /** Energy Consumption domain types. Shapes mirror the Supabase schema. */
 
 export interface EnergyAccount {
+  /** Archived (approved 2026-10-21): kept with everything it holds, marked no longer in use. */
+  archived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
   id: string;
   accountNumber: string;
   /** Optional friendly name, e.g. "Municipal Hall — Main Building". */
@@ -11,7 +17,7 @@ export interface EnergyAccount {
   updatedAt: string;
 }
 
-export interface EnergyBill {
+export interface EnergyBill extends FinalizedRecord {
   id: string;
   /** Centrally generated document number, e.g. EC-2026-000001. */
   docNumber?: string;
@@ -45,7 +51,7 @@ export interface EnergySubmeter {
 }
 
 /** One monthly billing record for a submeter. */
-export interface EnergySubmeterBill {
+export interface EnergySubmeterBill extends FinalizedRecord {
   id: string;
   submeterId: string;
   /** 1–12 */
@@ -120,6 +126,8 @@ export interface AccountRollup {
 
 /** Filters accepted by the bill list endpoint. */
 export interface EnergyBillFilters {
+  /** Voided records are left out of lists and totals unless asked for (history views). */
+  includeVoided?: boolean;
   accountId?: string;
   year?: number;
   month?: number;

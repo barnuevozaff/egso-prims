@@ -31,6 +31,8 @@ dist-ssr
 # is excluded from the catch-all below rather than left to the order of rules.
 .env*
 !.env.example
+# Emulator-only demo values (no secrets), for `npm run dev:emulators`.
+!.env.emulators
 
 # Vercel CLI — project link and the OIDC token it refreshes. Machine-local.
 .vercel
@@ -40,3 +42,13 @@ dist-ssr
 # the design record and are committed.
 .playwright-mcp/
 .impeccable/hook.cache.json
+
+# Firebase — build output, the CLI's deploy cache and exported emulator data
+# are machine-local. Service account keys must never be committed; these
+# patterns catch the file names the console and gcloud give them.
+functions/lib/
+.firebase/
+emulator-data/
+*-firebase-adminsdk-*.json
+service-account*.json
+serviceAccount*.json

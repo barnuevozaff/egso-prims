@@ -21,6 +21,13 @@ export const RIS_STATUSES: RISStatus[] = [
   "Cancelled",
 ];
 
+/**
+ * Stages a slip can be voided from. Before release no stock has moved; a
+ * Released slip is voided by an Administrator only, and its stock is
+ * returned in the same step (voidReleasedRis). A Completed slip is final.
+ */
+export const VOIDABLE_RIS_STATUSES: RISStatus[] = ["Draft", "Pending Approval", "Approved", "Released"];
+
 export interface RISItem {
   id: string;
   /** Stock item this line issues from; absent when the request names an
