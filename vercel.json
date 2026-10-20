@@ -4,6 +4,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
 
+  "git": {
+    "deploymentEnabled": {
+      "firebase-migration": false
+    }
+  },
+
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
 
   "headers": [
