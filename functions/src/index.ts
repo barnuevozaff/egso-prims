@@ -29,3 +29,4 @@ export { deleteDemoPurchaseRequests } from "./documents/demo-cleanup.js";
 export { approvePurchaseOrder } from "./documents/approve-po.js";
 export { ensurePurchaseOrderForPR } from "./documents/ensure-po.js";
 export { updatePurchaseOrderDetails } from "./documents/po-details.js";
+export { listOffices, manageOffice } from "./offices.js";

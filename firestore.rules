@@ -583,6 +583,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ---------- office directory (29 Oct 2026) ----------
+    // Read here by staff; the public portal gets only the active names
+    // through the listOffices function. Written only by manageOffice, which
+    // keeps names unique (office_names) and removes an office by marking it
+    // inactive, never by deleting it. office_names and office_directory have
+    // no rule: no browser reads or writes them.
+
+    match /offices/{id} {
+      allow read: if isStaff();
+    }
+
     // ---------- notifications ----------
     // Created by Cloud Functions on the same events as today's database
     // triggers. Staff may mark them read or clear them.

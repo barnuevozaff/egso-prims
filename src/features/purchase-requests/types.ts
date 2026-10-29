@@ -37,11 +37,14 @@ export interface Department {
 }
 
 /**
- * The municipal offices, as GSO lists them (15 Oct 2026). The first ten codes
- * predate the list and are on existing records, so they must stay. A record
- * whose office was typed by hand keeps its text; departmentByCode shows it as is.
+ * The office codes records were filed under before 29 Oct 2026, kept only so
+ * those records still show their office's name. They are offered nowhere:
+ * every office field and filter lists the office directory instead
+ * (src/features/offices, Settings → Office / Department Management), and new
+ * records carry the office's name. A record whose office was typed by hand
+ * keeps its text; departmentByCode shows it as is.
  */
-export const DEPARTMENTS: Department[] = [
+export const LEGACY_DEPARTMENTS: Department[] = [
   { code: "MO", name: "Office of the Municipal Mayor", color: "bg-blue-500" },
   { code: "SB", name: "Sangguniang Bayan (Office of the Vice Mayor)", color: "bg-blue-700" },
   { code: "HRMO", name: "Human Resource Management Office", color: "bg-cyan-600" },
@@ -227,7 +230,7 @@ export function prSummary(pr: Pick<PurchaseRequest, "purpose" | "items" | "prNum
 
 export function departmentByCode(code: string): Department {
   return (
-    DEPARTMENTS.find((d) => d.code === code) ?? {
+    LEGACY_DEPARTMENTS.find((d) => d.code === code) ?? {
       code,
       name: code,
       color: "bg-neutral-500",

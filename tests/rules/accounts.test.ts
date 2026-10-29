@@ -57,6 +57,21 @@ describe("every console-created account is an Administrator", () => {
     }
   });
 
+  it("the office directory is read by accounts; only the manageOffice function writes it (29 Oct 2026)", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "offices/o1"), { id: "o1", name: "General Services Office", active: true });
+    });
+    const db = session("u-console", { email: "egsoalaminos@gmail.com", firebase: { sign_in_provider: "password" } });
+    await assertSucceeds(getDocs(collection(db, "offices")));
+    await assertFails(setDoc(doc(db, "offices/o2"), { id: "o2", name: "New Office", active: true }));
+    await assertFails(updateDoc(doc(db, "offices/o1"), { active: false }));
+    await assertFails(getDoc(doc(db, "office_names/general services office")));
+    await assertFails(getDoc(doc(db, "office_directory/seed")));
+    const signedOut = env.unauthenticatedContext().firestore();
+    await assertFails(getDocs(collection(signedOut, "offices")));
+    await assertFails(getDoc(doc(signedOut, "offices/o1")));
+  });
+
   it("signed out: tracking one document still works, the register stays closed", async () => {
     const db = env.unauthenticatedContext().firestore();
     await assertSucceeds(getDoc(doc(db, "purchase_requests/PR-2026-000001")));

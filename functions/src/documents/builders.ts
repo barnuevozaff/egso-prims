@@ -29,7 +29,7 @@ function withAttachments(input: Row, at: string) {
 export function parsePurchaseRequest(raw: unknown) {
   const input = record(raw);
   return {
-    departmentCode: requiredText(input.departmentCode, "Office", 20),
+    departmentCode: requiredText(input.departmentCode, "Office", 120),
     requester: requiredText(input.requester, "Requested by", 200),
     // Required on every new request (restored 21 Oct 2026), spaces alone
     // refused. Fund, Section and FPP stay optional and print as blanks.
@@ -153,7 +153,7 @@ export function buildPurchaseOrder(
     po_number: poNumber,
     pr_number: prNumber,
     pr_official_number: source?.official_pr_number ?? null,
-    department_code: source?.department_code || requiredText(input.departmentCode, "Office", 20),
+    department_code: source?.department_code || requiredText(input.departmentCode, "Office", 120),
     requester: source?.requester || requiredText(input.requester, "Requested by", 200),
     purpose: source?.purpose || requiredText(input.purpose, "Purpose", 2000),
     supplier_name: requiredText(input.supplierName, "Supplier", 300),
@@ -212,7 +212,7 @@ export function buildRisRequest(raw: unknown, risNumber: string, at: string, asD
     division: trimmedOrNull(opt(input.division, "Division", 200)),
     fpp_code: trimmedOrNull(opt(input.fppCode, "FPP code", 100)),
     po_number: opt(input.poNumber, "Purchase order", 40) ?? null,
-    department_code: requiredText(input.departmentCode, "Office", 20),
+    department_code: requiredText(input.departmentCode, "Office", 120),
     requester: requiredText(input.requester, "Requested by", 200),
     purpose: requiredText(input.purpose, "Purpose", 2000),
     issued_by: "Administrator",
@@ -251,7 +251,7 @@ export function parseReservation(raw: unknown) {
   }
   return {
     facilityId: requiredText(input.facilityId, "Facility", 200),
-    departmentCode: requiredText(input.departmentCode, "Office", 20),
+    departmentCode: requiredText(input.departmentCode, "Office", 120),
     borrower: requiredText(input.borrower, "Requested by", 200),
     contactNumber: requiredText(input.contactNumber, "Contact number", 50),
     purpose: requiredText(input.purpose, "Purpose", 2000),

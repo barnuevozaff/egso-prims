@@ -1,25 +1,13 @@
-import * as React from "react";
-
-import { Combobox, Input } from "@/components";
-import { DEPARTMENTS } from "@/features/purchase-requests/types";
-
-const OTHER = "__other__";
-
-const isListed = (value: string) => DEPARTMENTS.some((d) => d.code === value);
-
-const OPTIONS = [
-  // The list shows codes only, as the offices call themselves; the full name
-  // is still searched, so typing "health" finds MHO.
-  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.code, keywords: [d.name] })),
-  { value: OTHER, label: "Other office…", keywords: ["other", "not listed"] },
-];
+import { Combobox } from "@/components";
+import { useOfficeOptions } from "@/features/offices/use-offices";
 
 /**
- * The requesting office: a searchable list of the municipal offices, with
- * "Other office…" for one that is not listed, which is then typed. A listed
- * office is saved as its code, another as the typed name, so a record from
- * before the list (whose office was typed) opens on "Other office…" with its
- * text in place.
+ * The requesting office: a searchable list of the offices in the office
+ * directory (Settings → Office / Department Management, 29 Oct 2026), the
+ * same list on the admin site and the public portal. The office's name is
+ * saved on the record as it reads today, so a later rename or removal never
+ * changes a document already filed. A record whose office is no longer
+ * listed keeps it (useOfficeOptions).
  */
 export function OfficeField({
   id,
@@ -27,58 +15,36 @@ export function OfficeField({
   onChange,
   onBlur,
   invalid,
-  describedBy,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
   invalid?: boolean;
+  /** The id of the field's error message. */
   describedBy?: string;
 }) {
-  const [other, setOther] = React.useState(() => value !== "" && !isListed(value));
+  const { options, status } = useOfficeOptions(value);
 
   return (
-    <div className="space-y-3">
-      <Combobox
-        id={id}
-        placeholder="Select your office…"
-        searchPlaceholder="Search office or code…"
-        emptyText="No office matches. Pick “Other office…”."
-        options={OPTIONS}
-        value={other ? OTHER : value || undefined}
-        onChange={(v) => {
-          if (v === OTHER) {
-            setOther(true);
-            onChange(isListed(value) ? "" : value);
-          } else {
-            setOther(false);
-            onChange(v);
-          }
-          onBlur?.();
-        }}
-        invalid={invalid && !other}
-        className="h-11 rounded-[10px] border-[#d4d5d2] px-3.5 text-[15px]"
-        itemClassName="min-h-11 text-[14px]"
-      />
-      {other && (
-        <div>
-          <label htmlFor={`${id}-other`} className="mb-1.5 block text-[14px] font-medium text-neutral-900">
-            Name of the office
-          </label>
-          <Input
-            id={`${id}-other`}
-            autoFocus={value === ""}
-            placeholder="e.g. Business Permits and Licensing Office"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={onBlur}
-            invalid={invalid}
-            aria-describedby={describedBy}
-            className="h-11 rounded-[10px] border-[#d4d5d2] px-3.5 text-[15px] text-neutral-900"
-          />
-        </div>
-      )}
-    </div>
+    <Combobox
+      id={id}
+      placeholder={status === "loading" && !options.length ? "Loading offices…" : "Select your office…"}
+      searchPlaceholder="Search offices…"
+      emptyText={
+        status === "error" && !options.length
+          ? "The office list could not be loaded. Check the connection and reload the page."
+          : "No office matches."
+      }
+      options={options}
+      value={value || undefined}
+      onChange={(v) => {
+        onChange(v);
+        onBlur?.();
+      }}
+      invalid={invalid}
+      className="h-11 rounded-[10px] border-[#d4d5d2] px-3.5 text-[15px]"
+      itemClassName="min-h-11 text-[14px]"
+    />
   );
 }

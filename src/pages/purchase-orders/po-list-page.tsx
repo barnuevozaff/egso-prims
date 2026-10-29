@@ -39,7 +39,8 @@ import {
   type POStatus,
   type PurchaseOrder,
 } from "@/features/purchase-orders/types";
-import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
+import { departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
 import { usePOPrint } from "@/features/purchase-orders/components/use-po-print";
@@ -83,6 +84,7 @@ export function POListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseOrder[]>([]);
+  const { options: officeOptions } = useOfficeOptions();
   const [voidRows, setVoidRows] = React.useState<PurchaseOrder[] | null>(null);
   // Prints the official Purchase Orders, never this screen.
   const { print, sheet } = usePOPrint();
@@ -219,7 +221,7 @@ export function POListPage() {
                 label="Office"
                 value={department}
                 onChange={setDepartment}
-                options={[{ value: ALL, label: "All Offices" }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name }))]}
+                options={[{ value: ALL, label: "All Offices" }, ...officeOptions]}
               />
             </FilterBar>
           }

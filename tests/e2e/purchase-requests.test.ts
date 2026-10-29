@@ -64,8 +64,8 @@ describe("purchase requests in the browser, on Firebase", () => {
     await session("portal", async (page) => {
       await page.goto(`${APP_URL}/portal/request`);
       await page.locator("#pr-office").click();
-      await page.getByPlaceholder("Search office or code…").fill("GSO");
-      await page.getByRole("option", { name: "GSO", exact: true }).click();
+      await page.getByPlaceholder("Search offices…").fill("General Services");
+      await page.getByRole("option", { name: "General Services Office", exact: true }).click();
       await page.getByLabel("Requested by").fill("Juan Dela Cruz");
       // Section and FPP are optional; the purpose is required (restored 21 Oct 2026).
       await page.getByLabel("Section").fill("Supply");
@@ -114,8 +114,8 @@ describe("purchase requests in the browser, on Firebase", () => {
     await session("portal-minimal", async (page) => {
       await page.goto(`${APP_URL}/portal/request`);
       await page.locator("#pr-office").click();
-      await page.getByPlaceholder("Search office or code…").fill("GSO");
-      await page.getByRole("option", { name: "GSO", exact: true }).click();
+      await page.getByPlaceholder("Search offices…").fill("General Services");
+      await page.getByRole("option", { name: "General Services Office", exact: true }).click();
       await page.getByLabel("Requested by").fill("Juan Dela Cruz");
       const description = page.getByLabel("Item 1 description");
       await description.fill("bond paper a4, 70gsm (test data)");

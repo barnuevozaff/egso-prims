@@ -22,6 +22,8 @@ export const AUDITED_MODULES: Record<string, string> = {
   // Settings (21 Oct 2026): a change to an official's printed name, or any
   // other setting, is recorded with who made it and the old and new value.
   system_configuration: "Settings",
+  // The office directory (29 Oct 2026): who added, renamed or removed an office.
+  offices: "Settings",
   purchase_requests: "Purchase Requests",
   purchase_orders: "Purchase Orders",
   ris_requests: "RIS",
@@ -80,6 +82,7 @@ const OWN_NUMBER: Record<string, string> = {
 
 function documentNumber(collection: string, row: Record<string, unknown>, id: string): string {
   if (collection === "system_configuration") return `${text(row.category) ?? "Settings"} · ${text(row.key) ?? id}`;
+  if (collection === "offices") return `Office · ${text(row.name) ?? id}`;
   const own = OWN_NUMBER[collection] && text(row[OWN_NUMBER[collection]]);
   if (own) return own;
   for (const f of DOCUMENT_NUMBER_FIELDS) {
@@ -226,13 +229,18 @@ export function buildAuditEntry(args: {
       ? prFieldChanges(before, after)
       : collection === "system_configuration"
         ? { before: before ? `Value: ${show(before.value)}` : "", after: after ? `Value: ${show(after.value)}` : "—" }
-        : null;
+        : collection === "offices"
+          ? {
+              before: before ? `Office: ${show(before.name)}${before.active === false ? " (removed)" : ""}` : "",
+              after: after ? `Office: ${show(after.name)}${after.active === false ? " (removed)" : ""}` : "—",
+            }
+          : null;
 
   return {
     timestamp: now.toISOString(),
     user_name: actor.user,
     user_role: actor.role,
-    department_code: "GSO",
+    department_code: "General Services Office",
     module,
     action,
     document_number: documentNumber(collection, ref, docId),

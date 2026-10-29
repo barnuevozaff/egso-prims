@@ -17,7 +17,7 @@
     "demo:save": "firebase emulators:export emulator-data --project demo-egso-prims --force",
     "test:unit": "vitest run tests/unit",
     "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
-    "test:rules": "npm run emulators:stop && firebase emulators:exec --only firestore,storage --project demo-egso-prims \"vitest run tests/rules\"",
+    "test:rules": "npm run emulators:stop && firebase emulators:exec --only firestore,storage --project demo-egso-prims \"vitest run tests/rules --hookTimeout=60000\"",
     "test:functions": "npm --prefix functions test",
     "test:integration": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:exec --only auth,firestore,functions,storage --project demo-egso-prims \"vitest run --config vitest.integration.config.ts\"",
     "test:e2e": "npm run emulators:stop && npm --prefix functions run build && firebase emulators:exec --only auth,firestore,functions,storage --project demo-egso-prims \"vitest run --config vitest.e2e.config.ts\"",

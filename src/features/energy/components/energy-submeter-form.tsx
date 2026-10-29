@@ -28,7 +28,7 @@ import {
   type SubmeterStatus,
 } from "@/features/energy/types";
 import { accountLabel } from "@/features/energy/lib";
-import { DEPARTMENTS } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
 
 const submeterSchema = z.object({
   submeterName: z.string().min(3, "Enter the submeter name"),
@@ -70,6 +70,8 @@ export function EnergySubmeterForm({
       status: "Active",
     },
   });
+  // The office directory, keeping an office this record already holds (29 Oct 2026).
+  const { options: officeOptions } = useOfficeOptions(form.watch("officeCode"));
 
   React.useEffect(() => {
     if (!open) return;
@@ -134,7 +136,7 @@ export function EnergySubmeterForm({
               render={({ field }) => (
                 <SelectField
                   placeholder="Select office…"
-                  options={DEPARTMENTS.map((d) => ({ value: d.code, label: d.name }))}
+                  options={officeOptions}
                   value={field.value || undefined}
                   onChange={field.onChange}
                   invalid={!!err.officeCode}

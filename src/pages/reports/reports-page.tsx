@@ -42,7 +42,7 @@ import {
 import { printReport } from "@/features/reports/print";
 import { useBranding } from "@/features/config/use-appearance";
 import { AnalyticsPanels } from "@/features/reports/components/analytics-panels";
-import { DEPARTMENTS } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
 import { PRDrawer } from "@/features/purchase-requests/components/pr-drawer";
 import { PODrawer } from "@/features/purchase-orders/components/po-drawer";
 import { RISDrawer } from "@/features/ris/components/ris-drawer";
@@ -119,6 +119,7 @@ export function ReportsPage() {
   );
 
   /* ---------------- drawers ---------------- */
+  const { options: officeOptions } = useOfficeOptions();
   const [drawer, setDrawer] = React.useState<{ module: FlatRow["drawerModule"]; id: string } | null>(
     null,
   );
@@ -227,7 +228,7 @@ export function ReportsPage() {
                     onChange={setDepartment}
                     options={[
                       { value: ALL, label: "All Offices" },
-                      ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                      ...officeOptions,
                     ]}
                   />
                 )}

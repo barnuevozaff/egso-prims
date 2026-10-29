@@ -28,7 +28,7 @@ import {
   type FuelVehicle,
   type VehicleStatus,
 } from "@/features/fuel/types";
-import { DEPARTMENTS } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
 
 const vehicleSchema = z.object({
   vehicleName: z.string().min(3, "Enter the vehicle name"),
@@ -81,6 +81,8 @@ export function FuelVehicleForm({
       status: "Active",
     },
   });
+  // The office directory, keeping an office this record already holds (29 Oct 2026).
+  const { options: officeOptions } = useOfficeOptions(form.watch("officeCode"));
 
   React.useEffect(() => {
     if (!open) return;
@@ -162,7 +164,7 @@ export function FuelVehicleForm({
               render={({ field }) => (
                 <SelectField
                   placeholder="Select office…"
-                  options={DEPARTMENTS.map((d) => ({ value: d.code, label: d.name }))}
+                  options={officeOptions}
                   value={field.value || undefined}
                   onChange={field.onChange}
                   invalid={!!err.officeCode}

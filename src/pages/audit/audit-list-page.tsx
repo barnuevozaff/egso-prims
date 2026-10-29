@@ -44,7 +44,8 @@ import {
   type AuditModule,
   type AuditSeverity,
 } from "@/features/audit/types";
-import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
+import { departmentByCode } from "@/features/purchase-requests/types";
 import { printReport } from "@/features/reports/print";
 import { useBranding } from "@/features/config/use-appearance";
 import { exportExcelFile } from "@/features/reports/export";
@@ -106,6 +107,7 @@ export function AuditListPage() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   /** The table stays the default; the timeline is an optional alternate view. */
+  const { options: officeOptions } = useOfficeOptions();
   const [view, setView] = React.useState<"table" | "timeline">("table");
 
   const openEntry = (id: string) => {
@@ -364,7 +366,7 @@ export function AuditListPage() {
                 onChange={setDepartment}
                 options={[
                   { value: ALL, label: "All Offices" },
-                  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                  ...officeOptions,
                 ]}
               />
               <DropdownFilter

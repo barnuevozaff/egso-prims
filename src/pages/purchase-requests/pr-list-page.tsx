@@ -36,7 +36,6 @@ import { VOIDABLE_PR_STATUSES, cancelPurchaseRequest } from "@/features/purchase
 import { usePurchaseRequests } from "@/features/purchase-requests/hooks";
 import { formatDate } from "@/features/purchase-requests/lib";
 import {
-  DEPARTMENTS,
   PR_STATUSES,
   departmentByCode,
   prTotal,
@@ -44,6 +43,7 @@ import {
   type PurchaseRequest,
   prSummary,
 } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
 import { PRBulkBar } from "@/features/purchase-requests/components/pr-bulk-bar";
 import { PRDrawer } from "@/features/purchase-requests/components/pr-drawer";
 import { usePRPrint } from "@/features/purchase-requests/components/use-pr-print";
@@ -98,6 +98,7 @@ export function PRListPage() {
   const [deleting, setDeleting] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const { options: officeOptions } = useOfficeOptions();
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const openDrawer = (pr: PurchaseRequest) => {
@@ -306,7 +307,7 @@ export function PRListPage() {
                 onChange={setDepartment}
                 options={[
                   { value: ALL, label: "All Offices" },
-                  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                  ...officeOptions,
                 ]}
               />
             </FilterBar>

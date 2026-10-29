@@ -395,6 +395,40 @@ functions and enforce App Check for Firestore and Storage in the console.
 Until then, the rate limits are the public functions' only protection
 against scripted use.
 
+## Office directory (29 Oct 2026)
+
+Every Office / Department field and filter — the PR, RIS and reservation
+forms on both sites, the list filters, the audit trail, reports, and the
+energy, water and fuel assignments — offers one list: the office directory
+in Firestore (`offices/{id}`). It started as the municipality's 31 official
+offices (`OFFICIAL_OFFICES` in `functions/src/offices.ts`), written once on
+first use; the marker `office_directory/seed` keeps a later deploy or call
+from bringing back a removed office or overwriting a renamed one.
+
+**Administrators change it in Settings → Office / Department Management**:
+Add Office, Edit (rename) and Remove, with a search and a confirmation
+before removal. Every open list follows at once; nothing is redeployed.
+
+- `listOffices` (callable, public) returns the active offices' ID and name
+  in order, and nothing else — the portal's forms load it signed out. Staff
+  read the same function; firestore.rules also let staff read `offices`.
+- `manageOffice` (callable, any account) adds an office at the end of the
+  list, renames one, or removes one. Names are unique ignoring letter case
+  and spacing (each active office claims `office_names/{key}` in the same
+  transaction), and the last office cannot be removed.
+- **Removing never deletes**: the office's document stays, marked inactive,
+  and documents filed under it keep its name. A record stores the office's
+  name as it read when filed (`department_code`, `office_code`,
+  `assigned_office`), so a rename does not change older documents either.
+  Records filed before 29 Oct 2026 carry short codes (MHO, GSO, …);
+  `LEGACY_DEPARTMENTS` in `src/features/purchase-requests/types.ts` only
+  turns those into names for display. Editing a record whose office is no
+  longer listed keeps that office, shown as "(not on the current list)".
+- Office changes appear in the audit trail under Settings, with the old and
+  new name and who made the change.
+- The free-text "Other office…" choice is gone; an office that is missing is
+  added in Settings.
+
 ## Purchase requests: decisions, ownership, voiding
 
 Deciding on a purchase request — approving, rejecting, **returning it to the

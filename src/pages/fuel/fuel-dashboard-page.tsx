@@ -62,7 +62,8 @@ import { FuelTripForm } from "@/features/fuel/components/fuel-trip-form";
 import { FuelTransactionForm } from "@/features/fuel/components/fuel-transaction-form";
 import { FuelOdometerForm } from "@/features/fuel/components/fuel-odometer-form";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
-import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
+import { departmentByCode } from "@/features/purchase-requests/types";
 
 const ALL = "__all";
 const now = new Date();
@@ -216,6 +217,7 @@ export function FuelDashboardPage() {
    * close, so saving a trip returns to the vehicle being worked on rather than
    * all the way out to the registry.
    */
+  const { options: officeOptions } = useOfficeOptions();
   const [returnVehicle, setReturnVehicle] = React.useState<FuelVehicle | null>(null);
 
   const leaveDrawerFor = (v: FuelVehicle, open: () => void) => {
@@ -607,7 +609,7 @@ export function FuelDashboardPage() {
                   onChange={setOffice}
                   options={[
                     { value: ALL, label: "All Offices" },
-                    ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                    ...officeOptions,
                   ]}
                 />
                 <DropdownFilter

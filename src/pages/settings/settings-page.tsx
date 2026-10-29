@@ -27,6 +27,7 @@ import {
   toast,
 } from "@/components";
 import { setConfigValues } from "@/features/config/api";
+import { OfficeDirectorySection } from "@/features/offices/components/office-directory";
 import { useConfiguration } from "@/features/config/hooks";
 import {
   CONFIG_DEFINITIONS,
@@ -408,10 +409,11 @@ export function SettingsPage() {
         <div>
           <SectionTitle as="h2">Office &amp; Documents</SectionTitle>
           <p className="mt-0.5 text-[11.5px] text-neutral-500">
-            Shared by all four modules: the letterhead their printed output carries, and the
-            numbering their records are issued under.
+            Shared by all four modules: the offices they serve, the letterhead their printed
+            output carries, and the numbering their records are issued under.
           </p>
         </div>
+        <OfficeDirectorySection />
         {OFFICE_SECTIONS.map(renderSection)}
       </div>
     </PageTransition>

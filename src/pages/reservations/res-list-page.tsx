@@ -43,7 +43,8 @@ import {
   type Reservation,
   type ReservationStatus,
 } from "@/features/reservations/types";
-import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
+import { departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
 import { ResDrawer } from "@/features/reservations/components/res-drawer";
@@ -89,6 +90,7 @@ export function ResListPage() {
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const { options: officeOptions } = useOfficeOptions();
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const openDrawer = (r: Reservation) => {
@@ -259,7 +261,7 @@ export function ResListPage() {
                 onChange={setDepartment}
                 options={[
                   { value: ALL, label: "All Offices" },
-                  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                  ...officeOptions,
                 ]}
               />
               <DropdownFilter

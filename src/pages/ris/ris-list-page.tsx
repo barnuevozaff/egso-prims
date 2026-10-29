@@ -39,7 +39,8 @@ import {
   type RISStatus,
   type RequestForIssuance,
 } from "@/features/ris/types";
-import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
+import { useOfficeOptions } from "@/features/offices/use-offices";
+import { departmentByCode } from "@/features/purchase-requests/types";
 
 /**
  * Whether the slip has been issued from stock: approved since 22 Oct 2026
@@ -95,6 +96,7 @@ export function RISListPage() {
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const { options: officeOptions } = useOfficeOptions();
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
 
@@ -246,7 +248,7 @@ export function RISListPage() {
                 onChange={setDepartment}
                 options={[
                   { value: ALL, label: "All Offices" },
-                  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
+                  ...officeOptions,
                 ]}
               />
             </FilterBar>
