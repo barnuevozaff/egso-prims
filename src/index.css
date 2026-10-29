@@ -331,16 +331,19 @@
   --radius-step-3xl: 4px;
   --radius-step-4xl: 4px;
 
-  --canvas: #f6f7f8;
+  /* A warm off-white ground (second pass, 20 Oct 2026). */
+  --canvas: #faf9f7;
 
-  /* Ink, not crimson (14 Oct 2026): the seal is the portal's only colour. */
-  --accent-solid: #16181d;
-  --accent-solid-hover: #000000;
+  /* Municipal red for the portal's actions, the selected service and focus.
+     #a6323b is 6.6:1 against white and white on it the same, so it carries
+     small text and button labels; the deep #84272e (8.9:1) marks the
+     government strip, the banner and the footer. The admin keeps ink. */
+  --accent-solid: #a6323b;
+  --accent-solid-hover: #782229;
   --accent-contrast: #ffffff;
-  /* 6.9:1 against white: a focus ring you can see. */
-  --accent-ring: #5b606b;
-  --accent-subtle: #f1f1ef;
-  --accent-text: #16181d;
+  --accent-ring: #a6323b;
+  --accent-subtle: #f8edef;
+  --accent-text: #a6323b;
 }
 
 /*
@@ -540,6 +543,10 @@ html[data-portal] body {
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
+    /* Never wider than the paper: a wide screen layout must not widen the
+       printed page and push a form's right edge off the sheet. */
+    width: auto !important;
+    min-width: 0 !important;
     overflow: visible !important;
     position: static !important;
     margin: 0 !important;

@@ -1,97 +1,92 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import {
-  Clock3,
-  Plus,
-  ShoppingCart,
-  Truck,
-  Wallet,
-} from "lucide-react";
+import { Ban, Eye, MoreHorizontal, Printer, ShoppingCart } from "lucide-react";
 
 import {
-  Button,
   CurrencyDisplay,
   DepartmentChip,
-  DocumentNumber,
   DropdownFilter,
   EnterpriseTable,
   ExportButton,
   FilterBar,
-  MetricCard,
+  IconButton,
   PageHeader,
   PageTransition,
-  PrintButton,
   SearchBar,
   StatusBadge,
+  StatusTabs,
   TableCard,
   toast,
 } from "@/components";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/features/auth/auth-context";
 import { can } from "@/features/auth/types";
-import {
-  cancelPurchaseOrder,
-  exportPurchaseOrdersCsv,
-} from "@/features/purchase-orders/api";
+import { cancelPurchaseOrder, exportPurchaseOrdersCsv } from "@/features/purchase-orders/api";
 import { usePurchaseOrders } from "@/features/purchase-orders/hooks";
 import { formatDate } from "@/features/purchase-orders/lib";
 import {
   PO_STATUSES,
   canVoidPO,
   poTotal,
-  poSupplierName,
+  supplierById,
   type POStatus,
   type PurchaseOrder,
 } from "@/features/purchase-orders/types";
 import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
-import { PODrawer } from "@/features/purchase-orders/components/po-drawer";
+import { usePOPrint } from "@/features/purchase-orders/components/use-po-print";
 
 const ALL = "__all";
 
+/** The supplier as recorded; blank until completed on the order or by hand. */
+const supplierOf = (po: PurchaseOrder) => po.supplierName?.trim() || supplierById(po.supplierId)?.name || "";
+
+/**
+ * Purchase orders (redesigned 21 Oct 2026, after the Purchase requests list).
+ * An order is created when its request is approved, so there is no "new"
+ * button: each row opens the order's page, where its details are completed
+ * and the official form is printed.
+ */
 export function POListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const admin = can(user, "manage:purchase-orders");
 
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ALL);
   const [status, setStatus] = React.useState(ALL);
 
+  // Status is a tab, filtered here, so each tab can show its own count.
   const filters = React.useMemo(
-    () => ({
-      search: search || undefined,
-      departmentCode: department === ALL ? undefined : department,
-      status: status === ALL ? undefined : (status as POStatus),
-    }),
-    [search, department, status],
+    () => ({ search: search || undefined, departmentCode: department === ALL ? undefined : department }),
+    [search, department],
   );
-
-  const { data, loading, refresh } = usePurchaseOrders(filters);
-  // KPI figures always reflect the whole register, independent of filters.
-  const stats = usePurchaseOrders(React.useMemo(() => ({}), []));
-
-  const openCount = stats.data.filter((po) =>
-    ["Draft", "Pending Approval", "Approved", "Released"].includes(po.status),
-  ).length;
-  const pendingCount = stats.data.filter((po) => po.status === "Pending Approval").length;
-  const releasedCount = stats.data.filter((po) => po.status === "Released").length;
-  const totalValue = stats.data
-    .filter((po) => po.status !== "Cancelled")
-    .reduce((sum, po) => sum + poTotal(po), 0);
+  const { data: allRows, loading, refresh } = usePurchaseOrders(filters);
+  const data = React.useMemo(
+    () => (status === ALL ? allRows : allRows.filter((r) => r.status === status)),
+    [allRows, status],
+  );
+  const tabs = [
+    { value: ALL, label: "All", count: allRows.length },
+    ...PO_STATUSES.map((s) => ({ value: s, label: s, count: allRows.filter((r) => r.status === s).length })).filter(
+      (t) => t.count > 0 || t.value === status,
+    ),
+  ];
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseOrder[]>([]);
-  const [confirmVoid, setConfirmVoid] = React.useState(false);
-
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [activeId, setActiveId] = React.useState<string | null>(null);
-
-
-  const refreshAll = () => {
-    void refresh();
-    void stats.refresh();
-  };
+  const [voidRows, setVoidRows] = React.useState<PurchaseOrder[] | null>(null);
+  // Prints the official Purchase Orders, never this screen.
+  const { print, sheet } = usePOPrint();
+  const open = React.useCallback((po: PurchaseOrder) => navigate(`/purchase-orders/${encodeURIComponent(po.id)}`), [navigate]);
 
   const downloadCsv = (rows: PurchaseOrder[], suffix: string) => {
     const blob = new Blob([exportPurchaseOrdersCsv(rows)], { type: "text/csv" });
@@ -104,47 +99,36 @@ export function POListPage() {
     toast.success(`Exported ${rows.length} purchase order${rows.length === 1 ? "" : "s"}`);
   };
 
-  // Numbered orders are voided, never deleted. Only orders not yet issued
-  // to the supplier can be; the rest are left out of the count.
+  // Numbered orders are voided, never deleted; only those not issued to the supplier.
   const voidable = selectedRows.filter(canVoidPO);
 
   const columns = React.useMemo<ColumnDef<PurchaseOrder, unknown>[]>(
     () => [
       {
-        header: "PO Number",
-        accessorKey: "poNumber",
-        cell: ({ row }) => (
-          <DocumentNumber
-            value={row.original.poNumber}
-            chipColor={departmentByCode(row.original.departmentCode).color}
-          />
-        ),
-      },
-      {
-        header: "Linked PR",
-        accessorKey: "prNumber",
-        cell: ({ getValue }) => (
-          <span className="whitespace-nowrap font-medium text-neutral-700">
-            {getValue<string>()}
-          </span>
-        ),
-      },
-      {
-        header: "Supplier",
-        id: "supplier",
-        accessorFn: (po) => poSupplierName(po),
-        cell: ({ getValue }) => (
-          <span className="block max-w-[200px] truncate text-neutral-600">
-            {getValue<string>()}
-          </span>
-        ),
+        header: "Order",
+        id: "order",
+        accessorFn: (po) => supplierOf(po),
+        cell: ({ row }) => {
+          const po = row.original;
+          const supplier = supplierOf(po);
+          return (
+            <div className="min-w-0 max-w-[440px]">
+              <div className={supplier ? "truncate font-medium text-neutral-900" : "truncate text-[#6b707a]"}>
+                {supplier || "Supplier not set"}
+              </div>
+              <div className="mt-0.5 truncate text-[12.5px] text-[#5b606b]">
+                <span className="font-['Geist_Mono',ui-monospace,monospace]">{po.poNumber}</span> · from{" "}
+                {po.prOfficialNumber ?? po.prNumber} · {po.purpose}
+              </div>
+            </div>
+          );
+        },
       },
       {
         header: "Office",
         accessorKey: "departmentCode",
         cell: ({ getValue }) => {
           const dept = departmentByCode(getValue<string>());
-          // No swatch here: the control number already carries the office colour.
           return <DepartmentChip code={dept.code} name={dept.name} />;
         },
       },
@@ -156,64 +140,65 @@ export function POListPage() {
         meta: { align: "right" },
       },
       {
+        header: "Date",
+        id: "date",
+        accessorFn: (po) => po.poDate ?? po.issuedDate,
+        cell: ({ getValue }) => <span className="whitespace-nowrap text-neutral-500">{formatDate(getValue<string>())}</span>,
+      },
+      {
         header: "Status",
         accessorKey: "status",
         cell: ({ getValue }) => <StatusBadge status={getValue<POStatus>()} />,
       },
       {
-        header: "Issued",
-        accessorKey: "issuedDate",
-        cell: ({ getValue }) => (
-          <span className="whitespace-nowrap text-neutral-500">
-            {formatDate(getValue<string>())}
-          </span>
-        ),
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => {
+          const po = row.original;
+          return (
+            // The menu is not a row click.
+            <span onClick={(e) => e.stopPropagation()} className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton variant="ghost" aria-label={`Actions for ${po.poNumber}`} className="size-11 text-[#5b606b]">
+                    <MoreHorizontal />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem className="min-h-10 text-[13.5px]" onSelect={() => open(po)}>
+                    <Eye />
+                    View PO
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="min-h-10 text-[13.5px]" onSelect={() => print([po])}>
+                    <Printer />
+                    Print PO
+                  </DropdownMenuItem>
+                  {admin && canVoidPO(po) && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="min-h-10 text-[13.5px]" onSelect={() => setVoidRows([po])}>
+                        <Ban />
+                        Void order…
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          );
+        },
+        meta: { headerClassName: "w-14", className: "w-14 py-1" },
       },
-
     ],
-    [navigate],
+    [admin, open, print],
   );
 
   return (
     <PageTransition className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
-        title="Purchase Orders"
-        description="Issue and track purchase orders raised from approved purchase requests."
-        actions={
-          <Button onClick={() => navigate("/purchase-orders/new")}>
-            <Plus />
-            New Purchase Order
-          </Button>
-        }
+        title="Purchase orders"
+        description="Created when a purchase request is approved. Complete the details and print the official order."
       />
-
-      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Open Purchase Orders"
-          value={openCount}
-          icon={ShoppingCart}
-          loading={stats.loading}
-        />
-        <MetricCard
-          label="Pending Approval"
-          value={pendingCount}
-          icon={Clock3}
-          loading={stats.loading}
-        />
-        <MetricCard
-          label="Released to Suppliers"
-          value={releasedCount}
-          icon={Truck}
-          loading={stats.loading}
-        />
-        <MetricCard
-          label="Total PO Value"
-          kind="peso"
-          value={totalValue}
-          icon={Wallet}
-          loading={stats.loading}
-        />
-      </div>
 
       <div className="min-h-0 flex-1">
         <TableCard
@@ -221,19 +206,12 @@ export function POListPage() {
           toolbar={
             <FilterBar
               className="shrink-0"
-              end={
-                <>
-                  <ExportButton
-                    onClick={() => downloadCsv(data, "all")}
-                    disabled={data.length === 0}
-                  />
-                  <PrintButton onClick={() => window.print()} />
-                </>
-              }
+              end={<ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />}
             >
+              <StatusTabs tabs={tabs} value={status} onChange={setStatus} />
               <SearchBar
-                placeholder="Search PO, PR, supplier…"
-                widthClassName="w-56"
+                placeholder="Search PO, PR, purpose…"
+                widthClassName="w-64"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -241,19 +219,7 @@ export function POListPage() {
                 label="Office"
                 value={department}
                 onChange={setDepartment}
-                options={[
-                  { value: ALL, label: "All Offices" },
-                  ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
-                ]}
-              />
-              <DropdownFilter
-                label="Status"
-                value={status}
-                onChange={setStatus}
-                options={[
-                  { value: ALL, label: "All Statuses" },
-                  ...PO_STATUSES.map((s) => ({ value: s, label: s })),
-                ]}
+                options={[{ value: ALL, label: "All Offices" }, ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name }))]}
               />
             </FilterBar>
           }
@@ -265,26 +231,19 @@ export function POListPage() {
             skeletonRows={8}
             fillContainer
             stickyHeader
-            pageSize={10}
-            minWidth={1080}
+            pageSize={15}
+            minWidth={1000}
             enableRowSelection
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
             onSelectedRowsChange={setSelectedRows}
             getRowId={(po) => po.id}
-            onRowClick={(po) => {
-              setActiveId(po.id);
-              setDrawerOpen(true);
-            }}
+            onRowClick={open}
             emptyState={{
               icon: ShoppingCart,
-              title: "No purchase orders found",
-              description:
-                "Try adjusting the filters, or raise a purchase order from an approved purchase request.",
-              action: {
-                label: "New Purchase Order",
-                onClick: () => navigate("/purchase-orders/new"),
-              },
+              title: "No purchase orders yet",
+              description: "A purchase order is created when its purchase request is approved.",
+              action: { label: "Go to purchase requests", onClick: () => navigate("/purchase-requests") },
             }}
           />
         </TableCard>
@@ -292,36 +251,29 @@ export function POListPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
-        onPrint={() => window.print()}
-        onVoid={
-          can(user, "manage:purchase-orders") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined
-        }
+        onPrint={() => print(selectedRows)}
+        printLabel={selectedRows.length === 1 ? "Print" : `Print ${selectedRows.length}`}
+        onVoid={admin && voidable.length > 0 ? () => setVoidRows(voidable) : undefined}
+        voidLabel={voidable.length === 1 ? "Void order" : `Void ${voidable.length} orders`}
+        voidTone="neutral"
         onClear={() => setRowSelection({})}
       />
 
-      <VoidDialog
-        open={confirmVoid}
-        onOpenChange={setConfirmVoid}
-        noun="purchase order"
-        rows={voidable}
-        selectedCount={selectedRows.length}
-        numberOf={(po) => po.poNumber}
-        voidOne={(po, reason) =>
-          cancelPurchaseOrder(po.id, { reason, by: user?.name ?? "Staff", office: user?.office })
-        }
-        onDone={() => {
-          setRowSelection({});
-          refreshAll();
-        }}
-      />
+      {sheet}
 
-      <PODrawer
-        poId={activeId}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onChanged={refreshAll}
-        onEdit={(id) => navigate(`/purchase-orders/${id}/edit`)}
+      <VoidDialog
+        open={!!voidRows}
+        onOpenChange={(o) => !o && setVoidRows(null)}
+        noun="purchase order"
+        rows={voidRows ?? []}
+        selectedCount={voidRows?.length ?? 0}
+        numberOf={(po) => po.poNumber}
+        voidOne={(po, reason) => cancelPurchaseOrder(po.id, { reason, by: user?.name ?? "Staff", office: user?.office })}
+        onDone={() => {
+          setVoidRows(null);
+          setRowSelection({});
+          void refresh();
+        }}
       />
     </PageTransition>
   );

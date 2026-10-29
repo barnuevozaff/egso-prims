@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken } from "./helpers.js";
+import { AUTH, call, accountToken } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -34,7 +34,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearFirestore();
   await fetch(`${AUTH}/emulator/v1/projects/${PROJECT_ID}/accounts`, { method: "DELETE" });
-  ({ token: admin, uid: adminUid } = await staffToken("admin@alaminos.gov.ph", "Administrator"));
+  ({ token: admin, uid: adminUid } = await accountToken("admin@alaminos.gov.ph"));
   const run = Math.random().toString(36).slice(2, 8);
   [EA, WA, FV] = [`ea-${run}`, `wa-${run}`, `fv-${run}`];
   await db.doc(`energy_accounts/${EA}`).set({ id: EA, account_number: "ACC-TEST-1" });
@@ -101,9 +101,7 @@ describe("createNumberedRecord", () => {
     expect(res.error?.message).toMatch(/no longer exists/);
   });
 
-  it("is for Administrators only", async () => {
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("createNumberedRecord", { type: "EC", record: bill() }, dept)).error?.status).toBe("PERMISSION_DENIED");
+  it("is refused signed out", async () => {
     expect((await call("createNumberedRecord", { type: "EC", record: bill() })).error?.status).toBe("PERMISSION_DENIED");
   });
 });
@@ -299,11 +297,9 @@ describe("voidReleasedRis", () => {
     }
   });
 
-  it("needs a reason, and an Administrator", async () => {
+  it("needs a reason, and an account", async () => {
     await seed();
     expect((await voidIt(admin, "  ")).error?.status).toBe("INVALID_ARGUMENT");
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await voidIt(dept)).error?.status).toBe("PERMISSION_DENIED");
     expect((await voidIt()).error?.status).toBe("PERMISSION_DENIED");
     expect((await db.doc("inventory_items/item-1").get()).get("on_hand")).toBe(70);
   });

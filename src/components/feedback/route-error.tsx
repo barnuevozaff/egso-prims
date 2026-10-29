@@ -2,6 +2,7 @@ import { isRouteErrorResponse, useLocation, useNavigate, useRouteError } from "r
 import { AlertTriangle, ArrowLeft, RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isPortalPath, portalPath } from "@/features/portal/paths";
 
 /**
  * What a route renders when it throws, and what an unknown URL renders.
@@ -34,8 +35,8 @@ export function RouteError({ notFound: unknownAddress = false }: { notFound?: bo
    * here: sending them "back" to the admin dashboard only bounces them to a
    * login they cannot pass. Within the portal, back means the portal.
    */
-  const inPortal = pathname === "/portal" || pathname.startsWith("/portal/");
-  const home = inPortal ? "/portal" : "/";
+  const inPortal = isPortalPath(pathname);
+  const home = inPortal ? portalPath() : "/";
 
   const detail =
     error instanceof Error

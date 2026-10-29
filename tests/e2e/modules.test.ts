@@ -1,7 +1,7 @@
 import type { Browser, Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { APP_URL, createStaff, launch, newPage, resetEmulators, shot, signIn } from "./browser";
+import { APP_URL, createAccount, launch, newPage, resetEmulators, shot, signIn } from "./browser";
 
 /**
  * Phase 4 in the browser, on Firebase: what each role is offered in the
@@ -22,9 +22,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetEmulators();
-  await createStaff("admin@alaminos.gov.ph", "Administrator", {}, "Ana Reyes");
-  await createStaff("dept@alaminos.gov.ph", "Department User", {}, "Dante Cruz");
-  await createStaff("viewer@alaminos.gov.ph", "Viewer", {}, "Vic Santos");
+  await createAccount("admin@alaminos.gov.ph", "Ana Reyes");
+  await createAccount("clerk@alaminos.gov.ph", "Dante Cruz");
 });
 
 async function session(name: string, run: (page: Page) => Promise<void>) {
@@ -84,22 +83,16 @@ async function seedDoc(path: string, data: Record<string, string | number | null
 const sidebarLink = (page: Page, name: string) => page.locator("aside").getByRole("button", { name, exact: true });
 
 describe("Phase 4 screens in the browser, on Firebase", () => {
-  it("each role sees only the sidebar links it can open", async () => {
-    const expected: Record<string, { shown: string[]; hidden: string[] }> = {
-      "admin@alaminos.gov.ph": { shown: ["Reports", "Audit trail", "Settings"], hidden: [] },
-      "dept@alaminos.gov.ph": { shown: ["Purchase requests", "Energy"], hidden: ["Reports", "Audit trail", "Settings"] },
-      "viewer@alaminos.gov.ph": { shown: ["Reports"], hidden: ["Audit trail", "Settings"] },
-    };
-    for (const [email, { shown, hidden }] of Object.entries(expected)) {
+  it("every account sees every sidebar link and Settings (one role, 29 Oct 2026)", async () => {
+    for (const email of ["admin@alaminos.gov.ph", "clerk@alaminos.gov.ph"]) {
       await session(`sidebar-${email}`, async (page) => {
         await signIn(page, email);
         await sidebarLink(page, "Dashboard").waitFor();
-        for (const name of shown) expect(await sidebarLink(page, name).count()).toBe(1);
-        for (const name of hidden) expect(await sidebarLink(page, name).count()).toBe(0);
-        // The profile menu offers Settings only to those who can open it.
-        await page.getByRole("button", { name: /Ana Reyes|Dante Cruz|Vic Santos/ }).click();
-        const settingsItem = page.getByRole("menuitem", { name: "Settings" });
-        expect(await settingsItem.count()).toBe(hidden.includes("Settings") ? 0 : 1);
+        for (const name of ["Purchase requests", "Energy", "Reports", "Audit trail", "Settings"]) {
+          expect(await sidebarLink(page, name).count()).toBe(1);
+        }
+        await page.getByRole("button", { name: /Ana Reyes|Dante Cruz/ }).click();
+        expect(await page.getByRole("menuitem", { name: "Settings" }).count()).toBe(1);
         await page.keyboard.press("Escape");
         await shot(page, `50-sidebar-${email.split("@")[0]}`);
       });
@@ -110,7 +103,7 @@ describe("Phase 4 screens in the browser, on Firebase", () => {
     const purpose = "Assembly to be voided (test data)";
     await bookPortalReservation(purpose);
     await session("void-reservation", async (page) => {
-      await signIn(page, "dept@alaminos.gov.ph");
+      await signIn(page, "clerk@alaminos.gov.ph");
       await page.goto(`${APP_URL}/reservations`);
       await page.getByText(purpose).first().waitFor({ timeout: 30_000 });
       await page.getByRole("checkbox", { name: "Select row" }).first().check();

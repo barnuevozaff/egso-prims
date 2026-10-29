@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken } from "./helpers.js";
+import { AUTH, call, accountToken } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -27,7 +27,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearFirestore();
   await fetch(`${AUTH}/emulator/v1/projects/${PROJECT_ID}/accounts`, { method: "DELETE" });
-  ({ token: admin, uid: adminUid } = await staffToken("admin@alaminos.gov.ph", "Administrator"));
+  ({ token: admin, uid: adminUid } = await accountToken("admin@alaminos.gov.ph"));
   // Fresh parent ids per test (late cascade deletes cannot reach this test's records).
   const run = Math.random().toString(36).slice(2, 8);
   [EA, FV] = [`ea-${run}`, `fv-${run}`];
@@ -93,15 +93,14 @@ describe("correcting a finalized record", () => {
     expect((await db.doc(`fuel_trips/${id}`).get()).data()).toMatchObject({ distance_travelled: 100, fuel_used: 10, ending_fuel: 15 });
   });
 
-  it("needs a reason, a real change and an Administrator; a voided record is not corrected", async () => {
+  it("needs a reason, a real change and an account; a voided record is not corrected", async () => {
     const id = await newBill();
     const same = { amount: 12000, kwh: 800, remarks: null };
     expect((await call("correctUtilityRecord", { type: "EC", id, changes: same, reason: "" }, admin)).error?.status).toBe("INVALID_ARGUMENT");
     expect((await call("correctUtilityRecord", { type: "EC", id, changes: same, reason: "Check" }, admin)).error?.message).toMatch(
       /Nothing was changed/,
     );
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("correctUtilityRecord", { type: "EC", id, changes: { ...same, amount: 1 }, reason: "x" }, dept)).error?.status).toBe(
+    expect((await call("correctUtilityRecord", { type: "EC", id, changes: { ...same, amount: 1 }, reason: "x" })).error?.status).toBe(
       "PERMISSION_DENIED",
     );
     await call("voidUtilityRecord", { type: "EC", id, reason: "Duplicate" }, admin);
@@ -156,11 +155,10 @@ describe("voiding a finalized record", () => {
     expect((await db.collection("energy_bills").where("billing_month", "==", 10).get()).size).toBe(1);
   });
 
-  it("needs a reason and an Administrator", async () => {
+  it("needs a reason and an account", async () => {
     const id = await newBill();
     expect((await call("voidUtilityRecord", { type: "EC", id, reason: "  " }, admin)).error?.status).toBe("INVALID_ARGUMENT");
-    const { token: viewer } = await staffToken("viewer@alaminos.gov.ph", "Viewer");
-    expect((await call("voidUtilityRecord", { type: "EC", id, reason: "x" }, viewer)).error?.status).toBe("PERMISSION_DENIED");
+    expect((await call("voidUtilityRecord", { type: "EC", id, reason: "x" })).error?.status).toBe("PERMISSION_DENIED");
     expect((await db.doc(`energy_bills/${id}`).get()).get("voided")).toBeUndefined();
   });
 });

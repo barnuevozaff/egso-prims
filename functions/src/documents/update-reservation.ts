@@ -20,7 +20,7 @@ import { attachments, record, requiredText } from "./validate.js";
 const EDITABLE = ["Draft", "Pending", "Approved"];
 
 export const updateReservation = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator", "Department User"], "change reservations");
   const data = record(request.data ?? {});
   const id = requiredText(data.id, "Reservation", 40);

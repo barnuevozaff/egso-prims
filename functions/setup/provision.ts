@@ -1,24 +1,17 @@
-import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 
 /**
- * First-run setup for a fresh EGSO-PRIMS on Firebase: the first
- * Administrator, staff roles while the app has no Users screen, the office's
- * own settings, and a check that the database really is fresh.
+ * First-run setup for a fresh EGSO-PRIMS on Firebase: the office's own
+ * settings and a check that the database really is fresh.
  *
- * Pure Admin SDK work, given an Auth and a Firestore. The command line
- * (setup/cli.ts) decides where they point; assertSetupTarget is the guard.
- * Tested against the emulators (functions/test-emulator/first-run.emulator.test.ts).
+ * Accounts are not made here: they are added in the Firebase console
+ * (Authentication → Users → Add user), and every account is an Administrator
+ * (29 Oct 2026; docs/firebase/README.md, "Authentication").
  *
- * Why a script: roles live in custom claims only the Admin SDK can write, and
- * setStaffRole accepts only a caller who is already an Administrator — so the
- * first one cannot come from the app. Nobody can sign up and give themselves
- * a role (docs/firebase/fresh-start.md).
+ * Pure Admin SDK work, given a Firestore. The command line (setup/cli.ts)
+ * decides where it points; assertSetupTarget is the guard. Tested against the
+ * emulators (functions/test-emulator/first-run.emulator.test.ts).
  */
-
-export const OFFICE_DOMAINS = ["alaminos.gov.ph"];
-export const ROLES = ["Administrator", "Department User", "Viewer"] as const;
-export type Role = (typeof ROLES)[number];
 
 /** The only remote project this may ever touch, and the two it must never touch. */
 export const AUTHORISED_PROJECT = "egso-b2c0a";
@@ -50,86 +43,6 @@ export function assertSetupTarget(options: { projectId: string; remote: boolean;
   if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
     throw new Error("Emulator variables are set; unset them for a remote run, or run in emulator mode.");
   }
-}
-
-export function isOfficeEmail(email: string): boolean {
-  return OFFICE_DOMAINS.includes(email.trim().toLowerCase().split("@")[1] ?? "");
-}
-
-export interface Provisioned {
-  uid: string;
-  email: string;
-  role: Role;
-  approver: boolean;
-  created: boolean;
-  /** One-time link the person opens to set their own password. */
-  passwordLink: string;
-}
-
-async function findUser(auth: Auth, email: string) {
-  try {
-    return await auth.getUserByEmail(email);
-  } catch (e) {
-    if ((e as { code?: string }).code === "auth/user-not-found") return null;
-    throw e;
-  }
-}
-
-async function administrators(auth: Auth): Promise<string[]> {
-  const out: string[] = [];
-  let page: string | undefined;
-  do {
-    const res = await auth.listUsers(1000, page);
-    for (const u of res.users) if (u.customClaims?.role === "Administrator") out.push(u.email ?? u.uid);
-    page = res.pageToken;
-  } while (page);
-  return out;
-}
-
-/**
- * Creates (or finds) an office account and sets its role, as setStaffRole
- * does. No password is ever chosen or seen here: the account is created
- * without one, and the person sets it through the returned one-time link.
- * Existing sessions are revoked so the new role applies at once.
- */
-export async function provisionAccount(
-  auth: Auth,
-  input: { email: string; displayName?: string; role: Role; approver?: boolean },
-): Promise<Provisioned> {
-  const email = input.email.trim().toLowerCase();
-  if (!isOfficeEmail(email)) throw new Error(`${email} is not an office address (@${OFFICE_DOMAINS.join(", @")}).`);
-  if (!ROLES.includes(input.role)) throw new Error(`Role must be one of ${ROLES.join(", ")}.`);
-  const approver = input.approver === true;
-  if (approver && input.role !== "Department User") throw new Error("Only a Department User can be made an approver.");
-
-  let user = await findUser(auth, email);
-  const created = !user;
-  if (!user) user = await auth.createUser({ email, displayName: input.displayName?.trim() || undefined, disabled: false });
-  else if (input.displayName?.trim() && user.displayName !== input.displayName.trim()) {
-    user = await auth.updateUser(user.uid, { displayName: input.displayName.trim() });
-  }
-  await auth.setCustomUserClaims(user.uid, { ...(user.customClaims ?? {}), role: input.role, approver });
-  await auth.revokeRefreshTokens(user.uid);
-  const passwordLink = await auth.generatePasswordResetLink(email);
-  return { uid: user.uid, email, role: input.role, approver, created, passwordLink };
-}
-
-/**
- * The first Administrator. Refused when an Administrator already exists
- * under another address, so rerunning first-run setup cannot quietly mint a
- * second one; further Administrators are given the role deliberately
- * (provisionAccount, or setStaffRole by an Administrator).
- */
-export async function provisionFirstAdministrator(
-  auth: Auth,
-  input: { email: string; displayName?: string },
-): Promise<Provisioned> {
-  const email = input.email.trim().toLowerCase();
-  const existing = (await administrators(auth)).filter((e) => e.toLowerCase() !== email);
-  if (existing.length) {
-    throw new Error(`An Administrator already exists (${existing.join(", ")}). First-run setup makes only the first one.`);
-  }
-  return provisionAccount(auth, { email, displayName: input.displayName, role: "Administrator" });
 }
 
 /* ---------------- settings ---------------- */
@@ -201,6 +114,59 @@ export async function seedSettings(db: Firestore, values: Record<string, unknown
       result.written.push(key);
     });
   }
+  return result;
+}
+
+/**
+ * The printed names on the official Municipality of Alaminos Purchase Request
+ * and Purchase Order templates, confirmed by the owner as the initial values
+ * (22 Oct 2026). Roles and designations are fixed by the forms
+ * (src/features/config/types.ts SIGNATORY_ROLES); only these names are
+ * settings, and an Administrator changes them in Settings.
+ */
+export const TEMPLATE_SIGNATORY_NAMES: { category: "Signatories" | "PO Signatories"; key: string; value: string }[] = [
+  { category: "Signatories", key: "pr_requested_by_name", value: "FLORENTINO J. DESTACAMENTO" },
+  { category: "Signatories", key: "pr_cash_availability_name", value: "ROWENA C. LANDICHO" },
+  { category: "Signatories", key: "pr_approved_by_name", value: "Hon. ERICSON R. LOPEZ" },
+  { category: "PO Signatories", key: "po_approving_name", value: "ERICSON R. LOPEZ" },
+  { category: "PO Signatories", key: "po_bac_secretary_name", value: "NEMIA B. MONZONES" },
+];
+
+/**
+ * Saves the template names where Settings has none, in one transaction. A
+ * name already set — by an Administrator or an earlier run — is never
+ * overwritten. Unstamped, so the audit trail shows a System write rather
+ * than someone's Settings save. dryRun reads only and reports what it would do.
+ */
+export async function seedSignatoryNames(db: Firestore, options: { dryRun: boolean }): Promise<SettingsResult> {
+  const result: SettingsResult = { written: [], kept: [] };
+  await db.runTransaction(async (tx) => {
+    const refs = TEMPLATE_SIGNATORY_NAMES.map((s) => db.collection("system_configuration").doc(settingId(s.category, s.key)));
+    const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+    const at = new Date().toISOString();
+    TEMPLATE_SIGNATORY_NAMES.forEach((s, i) => {
+      const current = snaps[i].get("value");
+      if (typeof current === "string" && current.trim() !== "") {
+        result.kept.push(`${s.key} (${current})`);
+        return;
+      }
+      result.written.push(`${s.key} = ${s.value}`);
+      if (options.dryRun) return;
+      tx.set(
+        refs[i],
+        {
+          id: refs[i].id,
+          category: s.category,
+          key: s.key,
+          value: s.value,
+          description: "Initial value from the official template (22 Oct 2026); change it in Settings.",
+          created_at: snaps[i].exists ? snaps[i].get("created_at") ?? at : at,
+          updated_at: at,
+        },
+        { merge: true },
+      );
+    });
+  });
   return result;
 }
 

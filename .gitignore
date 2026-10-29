@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-portal
 dist-ssr
 *.local
 
@@ -49,6 +50,7 @@ dist-ssr
 functions/lib/
 .firebase/
 emulator-data/
+firebase-export-*/
 *-firebase-adminsdk-*.json
 service-account*.json
 serviceAccount*.json

@@ -3,6 +3,7 @@ import { uploadAttachmentInputs } from "@/lib/storage";
 import { nextDocumentNumber } from "@/features/shared/doc-numbers";
 import {
   prTotal,
+  type PRHeading,
   type PRListFilters,
   type PRStatus,
   type PurchaseRequest,
@@ -25,8 +26,22 @@ export function rowToPR(r: any): PurchaseRequest {
     prNumber: r.pr_number,
     departmentCode: r.department_code,
     requester: r.requester,
-    purpose: r.purpose,
-    fundingSource: r.funding_source,
+    purpose: r.purpose ?? "",
+    fundingSource: r.funding_source || undefined,
+    section: r.section ?? undefined,
+    fpp: r.fpp ?? undefined,
+    headings: Array.isArray(r.headings) ? r.headings : [],
+    officialPrNumber: r.official_pr_number ?? undefined,
+    officialPrNumberAssignedAt: r.official_pr_number_assigned_at ?? undefined,
+    officialPrNumberAssignedBy: r.official_pr_number_assigned_by ?? undefined,
+    poNumber: r.po_number ?? undefined,
+    signatories: r.signatories
+      ? {
+          requestedBy: r.signatories.requested_by ?? null,
+          cashAvailability: r.signatories.cash_availability ?? null,
+          approvedBy: r.signatories.approved_by ?? null,
+        }
+      : undefined,
     requestDate: r.request_date,
     status: r.status,
     items: r.items ?? [],
@@ -73,7 +88,11 @@ export interface PRDraftInput {
   departmentCode: string;
   requester: string;
   purpose: string;
-  fundingSource: PurchaseRequest["fundingSource"];
+  fundingSource?: PurchaseRequest["fundingSource"];
+  section?: string;
+  fpp?: string;
+  /** Group headings: staff only, ignored for the public portal. */
+  headings?: Omit<PRHeading, "id">[];
   requestDate: string;
   items: Omit<PurchaseRequest["items"][number], "id">[];
   attachments: AttachmentInput[];
@@ -94,7 +113,7 @@ export async function createPurchaseRequest(input: PRDraftInput): Promise<Purcha
     department_code: input.departmentCode,
     requester: input.requester,
     purpose: input.purpose,
-    funding_source: input.fundingSource,
+    funding_source: input.fundingSource ?? "",
     request_date: input.requestDate,
     status: "Submitted" as PRStatus,
     items: input.items.map((it) => ({ ...it, id: uid() })),
@@ -130,7 +149,7 @@ export async function updatePurchaseRequest(
     department_code: input.departmentCode,
     requester: input.requester,
     purpose: input.purpose,
-    funding_source: input.fundingSource,
+    funding_source: input.fundingSource ?? "",
     request_date: input.requestDate,
     items: input.items.map((it) => ({ ...it, id: uid() })),
     attachments: [
@@ -264,4 +283,12 @@ export function exportPurchaseRequestsCsv(rows: PurchaseRequest[]): string {
     ].join(","),
   );
   return [header.join(","), ...lines].join("\n");
+}
+
+/**
+ * The order for an approved request (21 Oct 2026). Orders are created with the
+ * approval by a Cloud Function, which the Supabase version does not have.
+ */
+export async function ensurePurchaseOrderForPR(_id: string): Promise<{ poNumber: string; created: boolean }> {
+  throw new Error("Purchase orders are created with the approval only on the Firebase backend.");
 }

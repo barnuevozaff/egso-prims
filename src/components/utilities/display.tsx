@@ -32,17 +32,29 @@ export function CurrencyDisplay({
 export interface DocumentNumberProps {
   /** e.g. "PR-2026-0184" */
   value: string;
-  /** Tailwind bg class for the identity chip, e.g. "bg-blue-500". */
+  /**
+   * No longer drawn (24 Oct 2026): the category and office colour squares
+   * were the only colours in the registers apart from the seal and status
+   * dots. Kept so callers need not change.
+   */
   chipColor?: string;
   className?: string;
 }
 
-/** Document identity: colored chip + medium-weight number (PR table anatomy). */
-export function DocumentNumber({ value, chipColor, className }: DocumentNumberProps) {
+/**
+ * Document identity: the number in Geist Mono, as the design system sets
+ * document numbers (PR-2026-000243) and as the Purchase request and order
+ * lists show them.
+ */
+export function DocumentNumber({ value, className }: DocumentNumberProps) {
   return (
-    <span className={cn("flex items-center gap-2.5", className)}>
-      {chipColor && <span className={cn("h-6 w-6 shrink-0 rounded-md", chipColor)} />}
-      <span className="whitespace-nowrap font-medium text-neutral-900">{value}</span>
+    <span
+      className={cn("whitespace-nowrap text-[13px] font-medium text-neutral-900", className)}
+      // Set here, not as a class: tailwind-merge reads an arbitrary font-[…]
+      // class as a weight and drops it beside font-medium.
+      style={{ fontFamily: "'Geist Mono', ui-monospace, monospace" }}
+    >
+      {value}
     </span>
   );
 }

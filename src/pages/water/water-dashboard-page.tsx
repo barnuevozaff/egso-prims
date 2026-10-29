@@ -23,6 +23,7 @@ import {
   ExportButton,
   FilterBar,
   MetricCard,
+  MetricIcon,
   OverlineLabel,
   PageHeader,
   PageTransition,
@@ -449,7 +450,7 @@ export function WaterDashboardPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
-          label="Registered Accounts"
+          label="Registered Accounts" tone="brand"
           value={activeAccounts.length}
           icon={Gauge}
           loading={allAccounts.loading}
@@ -468,28 +469,24 @@ export function WaterDashboardPage() {
           icon={Wallet}
           loading={loading}
         />
-        <ContainerCard hoverable className="p-4">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-              <TrendingUp className="h-3.5 w-3.5" />
-            </div>
-            <span className="text-[12px] text-neutral-500">Highest Consuming</span>
+        <ContainerCard className="px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">Highest Consuming</span>
+            <MetricIcon icon={TrendingUp} />
           </div>
-          <div className="mt-3 truncate text-[14px] font-semibold tracking-tight text-neutral-900">
+          <div className="mt-2 truncate text-[16px] font-semibold leading-8 tracking-tight text-neutral-900">
             {highest ? accountLabel(highest.account) : "—"}
           </div>
           {highest?.current != null && (
             <CurrencyDisplay amount={highest.current} className="mt-0.5 text-[12.5px]" />
           )}
         </ContainerCard>
-        <ContainerCard hoverable className="p-4">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-              <ArrowDownRight className="h-3.5 w-3.5" />
-            </div>
-            <span className="text-[12px] text-neutral-500">Lowest Consuming</span>
+        <ContainerCard className="px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">Lowest Consuming</span>
+            <MetricIcon icon={ArrowDownRight} />
           </div>
-          <div className="mt-3 truncate text-[14px] font-semibold tracking-tight text-neutral-900">
+          <div className="mt-2 truncate text-[16px] font-semibold leading-8 tracking-tight text-neutral-900">
             {lowest ? accountLabel(lowest.account) : "—"}
           </div>
           {lowest?.current != null && (

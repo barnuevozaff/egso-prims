@@ -2,10 +2,11 @@ import * as React from "react";
 import {
   CheckCircle2,
   FileDown,
-  PackageCheck,
   Pencil,
   Printer,
+  Send,
   Undo2,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -13,6 +14,7 @@ import {
   ConfirmationModal,
   Drawer,
   DrawerActions,
+  Field,
   DrawerBody,
   DrawerFooter,
   DrawerHeader,
@@ -20,12 +22,13 @@ import {
   SkeletonText,
   Spinner,
   StatusBadge,
+  Textarea,
   WarningModal,
   toast,
 } from "@/components";
 import { listInventoryItems } from "@/features/inventory/api";
 import type { InventoryItem } from "@/features/inventory/types";
-import { setRequestStatus } from "@/features/ris/api";
+import { approveRequest, rejectRequest, setRequestStatus } from "@/features/ris/api";
 import { useRequest } from "@/features/ris/hooks";
 import { nextRISStatus } from "@/features/ris/lib";
 import { RISDetailPanels } from "@/features/ris/components/ris-detail-panels";
@@ -52,16 +55,21 @@ export function RISDrawer({
   const { data: ris, loading, setData } = useRequest(open ? risId : null);
   const [confirmAdvance, setConfirmAdvance] = React.useState(false);
   const [confirmReturn, setConfirmReturn] = React.useState(false);
+  const [confirmReject, setConfirmReject] = React.useState(false);
+  const [rejectReason, setRejectReason] = React.useState("");
   const [acting, setActing] = React.useState(false);
   const [stock, setStock] = React.useState<InventoryItem[] | null>(null);
 
+  // Since 22 Oct 2026: Draft -> Pending Approval -> Approved (stock issued) or Rejected.
   const next = ris ? nextRISStatus(ris.status) : null;
-  const releasing = next === "Released";
-  const terminal = ris ? ["Cancelled", "Completed"].includes(ris.status) : false;
+  const approving = next === "Approved";
+  const pending = ris?.status === "Pending Approval";
+  const isAdmin = user?.role === "Administrator";
+  const manages = can(user, "manage:ris");
 
   const openAdvance = () => {
     setConfirmAdvance(true);
-    if (releasing) {
+    if (approving) {
       setStock(null);
       void listInventoryItems()
         .then(setStock)
@@ -70,22 +78,17 @@ export function RISDrawer({
   };
 
   const advance = async () => {
-    if (!ris || !next) return;
+    if (!ris || !next || acting) return;
     setActing(true);
     try {
-      const updated = await setRequestStatus(ris.id, next, {
-        by: user?.name ?? "Staff",
-        office: "General Services Office",
-      });
+      const who = { by: user?.name ?? "Staff", office: "General Services Office" };
+      // Approval issues the stock on the server, once; submitting moves no stock.
+      const updated = approving ? await approveRequest(ris.id, who) : await setRequestStatus(ris.id, next, who);
       setData(updated);
-      toast.success(
-        next === "Released"
-          ? `${ris.risNumber} released — inventory updated`
-          : `${ris.risNumber} moved to ${next}`,
-      );
+      toast.success(approving ? `${ris.risNumber} approved — stock issued` : `${ris.risNumber} submitted for approval`);
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to update status");
+      toast.error(e instanceof Error ? e.message : "Unable to update the slip");
     }
     setActing(false);
     setConfirmAdvance(false);
@@ -110,12 +113,37 @@ export function RISDrawer({
     setConfirmReturn(false);
   };
 
-  const primaryLabel = releasing ? "Release" : next === "Completed" ? "Mark Completed" : "Approve";
+  const reject = async () => {
+    if (!ris || !rejectReason.trim()) return;
+    setActing(true);
+    try {
+      const updated = await rejectRequest(ris.id, {
+        reason: rejectReason,
+        by: user?.name ?? "Staff",
+        office: "General Services Office",
+      });
+      setData(updated);
+      toast.success(`${ris.risNumber} rejected — no stock was issued`);
+      onChanged?.();
+      setConfirmReject(false);
+      setRejectReason("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to reject the slip");
+    }
+    setActing(false);
+  };
+
+  const primaryLabel = approving ? "Approve" : "Submit for Approval";
+  // Lines that issue stock, against the register as it stands.
+  const issuing = ris ? ris.items.filter((it) => it.issuedQty > 0) : [];
   const insufficient =
-    releasing && stock && ris
-      ? ris.items.filter((it) => {
+    approving && stock
+      ? issuing.filter((it) => {
           const inv = stock.find((s) => s.id === it.inventoryItemId);
-          return !inv || it.issuedQty > inv.onHand;
+          const total = issuing
+            .filter((x) => x.inventoryItemId && x.inventoryItemId === it.inventoryItemId)
+            .reduce((n, x) => n + x.issuedQty, 0);
+          return !inv || total > inv.onHand;
         })
       : [];
 
@@ -172,23 +200,29 @@ export function RISDrawer({
                 <Printer />
                 Print
               </Button>
-              {/* A voided document is closed for editing (firestore.rules), and
-                  only roles that manage the module reach the edit page. */}
-              {ris.status !== "Cancelled" && can(user, "manage:ris") && (
+              {/* Only a draft or a pending slip is edited: once approved, what
+                  was issued stays as issued (firestore.rules). */}
+              {(ris.status === "Draft" || pending) && manages && (
                 <Button variant="secondary" onClick={() => onEdit?.(ris.id)}>
                   <Pencil />
                   Edit
                 </Button>
               )}
-              {!terminal && (
+              {pending && manages && (
                 <Button variant="outline" onClick={() => setConfirmReturn(true)}>
                   <Undo2 />
                   Return
                 </Button>
               )}
-              {next && (
+              {pending && isAdmin && (
+                <Button variant="outline" onClick={() => setConfirmReject(true)}>
+                  <XCircle />
+                  Reject
+                </Button>
+              )}
+              {next && (approving ? isAdmin : manages) && (
                 <Button onClick={openAdvance}>
-                  {releasing ? <PackageCheck /> : <CheckCircle2 />}
+                  {approving ? <CheckCircle2 /> : <Send />}
                   {primaryLabel}
                 </Button>
               )}
@@ -199,26 +233,26 @@ export function RISDrawer({
             open={confirmAdvance}
             onOpenChange={setConfirmAdvance}
             tone="success"
-            icon={releasing ? PackageCheck : CheckCircle2}
-            title={releasing ? "Release items from stock?" : `Move to ${next}?`}
+            icon={approving ? CheckCircle2 : Send}
+            title={approving ? `Approve ${ris.risNumber}?` : `Submit ${ris.risNumber} for approval?`}
             description={
-              releasing
-                ? `${ris.risNumber} will deduct the issued quantities from inventory and write stock card transactions.`
-                : `${ris.risNumber} will move from “${ris.status}” to “${next}”. This is recorded in the approval timeline.`
+              approving
+                ? "Approving issues the items: the quantities below are deducted from inventory now, with a line on each item’s stock card. This happens once."
+                : "The slip goes to the General Services Office for approval. No stock moves until it is approved."
             }
             confirmLabel={primaryLabel}
             loading={acting}
-            // Releasing more than is on hand would drive stock below zero.
-            confirmDisabled={insufficient.length > 0}
+            // Approving more than is on hand would drive stock below zero; the server refuses it too.
+            confirmDisabled={approving && (!stock || insufficient.length > 0 || issuing.length === 0)}
             onConfirm={advance}
           >
-            {releasing && (
+            {approving && (
               <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
                 {!stock ? (
                   <Spinner size="sm" label="Checking stock balances…" />
                 ) : (
                   <ul className="space-y-1.5">
-                    {ris.items.map((it) => {
+                    {issuing.map((it) => {
                       const inv = stock.find((s) => s.id === it.inventoryItemId);
                       const after = (inv?.onHand ?? 0) - it.issuedQty;
                       const short = !inv || after < 0;
@@ -227,7 +261,9 @@ export function RISDrawer({
                           key={it.id}
                           className="flex items-center justify-between gap-3 text-[11.5px]"
                         >
-                          <span className="min-w-0 truncate text-neutral-700">{it.name}</span>
+                          <span className="min-w-0 truncate text-neutral-700">
+                            {it.name} <span className="text-neutral-500">· {it.issuedQty} {it.unit}</span>
+                          </span>
                           <span
                             className={
                               "shrink-0 tabular-nums " +
@@ -243,8 +279,13 @@ export function RISDrawer({
                 )}
                 {insufficient.length > 0 && (
                   <p className="mt-2 text-[11.5px] font-medium text-red-600">
-                    Insufficient stock for {insufficient.length} item
-                    {insufficient.length === 1 ? "" : "s"} — adjust the slip before releasing.
+                    Not enough stock, or not linked to an inventory item, for {insufficient.length} line
+                    {insufficient.length === 1 ? "" : "s"} — edit the slip before approving.
+                  </p>
+                )}
+                {stock && issuing.length === 0 && (
+                  <p className="mt-2 text-[11.5px] font-medium text-red-600">
+                    Nothing to issue — set the quantities to issue first.
                   </p>
                 )}
               </div>
@@ -259,6 +300,29 @@ export function RISDrawer({
             loading={acting}
             onConfirm={sendBack}
           />
+          <WarningModal
+            open={confirmReject}
+            onOpenChange={(o) => {
+              setConfirmReject(o);
+              if (!o) setRejectReason("");
+            }}
+            title={`Reject ${ris.risNumber}?`}
+            description="The slip is closed as Rejected and no stock is issued. The reason is shown to the requester when they track it."
+            confirmLabel="Reject Slip"
+            loading={acting}
+            confirmDisabled={!rejectReason.trim()}
+            onConfirm={reject}
+          >
+            <Field label="Reason" required className="mt-3">
+              <Textarea
+                rows={3}
+                maxLength={500}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Item not available this quarter"
+              />
+            </Field>
+          </WarningModal>
         </>
       )}
       </Drawer>

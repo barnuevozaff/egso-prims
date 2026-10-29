@@ -4,10 +4,16 @@ import type { HistoryEntry } from "@/features/shared/history-feed";
 
 /** Requisition and Issue Slip domain types. Shapes mirror the future Supabase schema. */
 
+/**
+ * Since 22 Oct 2026: Pending Approval → Approved (approval issues the stock)
+ * or Rejected. Released and Completed belong to slips issued under the
+ * earlier workflow; they stay valid and printable, and nothing moves them.
+ */
 export type RISStatus =
   | "Draft"
   | "Pending Approval"
   | "Approved"
+  | "Rejected"
   | "Released"
   | "Completed"
   | "Cancelled";
@@ -16,15 +22,17 @@ export const RIS_STATUSES: RISStatus[] = [
   "Draft",
   "Pending Approval",
   "Approved",
+  "Rejected",
   "Released",
   "Completed",
   "Cancelled",
 ];
 
 /**
- * Stages a slip can be voided from. Before release no stock has moved; a
- * Released slip is voided by an Administrator only, and its stock is
- * returned in the same step (voidReleasedRis). A Completed slip is final.
+ * Stages a slip can be voided from. Before its stock is issued nothing has
+ * moved; an issued slip (Approved since 22 Oct 2026, or Released earlier) is
+ * voided by an Administrator only, and its stock is returned in the same
+ * step (voidReleasedRis). A Completed slip is final.
  */
 export const VOIDABLE_RIS_STATUSES: RISStatus[] = ["Draft", "Pending Approval", "Approved", "Released"];
 
@@ -62,6 +70,8 @@ export interface RequestForIssuance {
   /** ISO date the slip was issued/raised. */
   issueDate: string;
   status: RISStatus;
+  /** When approval issued the stock (22 Oct 2026); absent before, and on older slips. */
+  stockIssuedAt?: string;
   items: RISItem[];
   attachments: AttachmentRecord[];
   comments: ThreadComment[];

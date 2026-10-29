@@ -73,29 +73,70 @@ export async function resetEmulators(): Promise<void> {
   await fetch(`${AUTH}/emulator/v1/projects/${PROJECT_ID}/accounts`, { method: "DELETE" });
 }
 
-/** A staff account with a role, as setStaffRole leaves it. */
-export async function createStaff(
-  email: string,
-  role: string,
-  extra: Record<string, unknown> = {},
-  displayName?: string,
-): Promise<string> {
+/**
+ * An account as Firebase console → Authentication → Add user leaves it: an
+ * email and a password (and a display name for the profile menu), no
+ * claims. Every account is an Administrator (29 Oct 2026).
+ */
+export async function createAccount(email: string, displayName?: string): Promise<string> {
   const res = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: PASSWORD, returnSecureToken: true }),
   });
   const { localId } = (await res.json()) as { localId: string };
-  await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:update`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
-    body: JSON.stringify({ localId, displayName, customAttributes: JSON.stringify({ role, ...extra }) }),
-  });
+  if (displayName) {
+    await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
+      body: JSON.stringify({ localId, displayName }),
+    });
+  }
   return localId;
 }
 
+/**
+ * Synthetic Purchase Request signatories, as an Administrator sets them in
+ * Settings → Signatories; approval is refused without them (21 Oct 2026).
+ */
+export async function seedSignatories(): Promise<void> {
+  const set = async (key: string, value: string | string[]) => {
+    const id = `cfg-signatories-${key.replace(/_/g, "-")}`;
+    const v = Array.isArray(value)
+      ? { arrayValue: { values: value.map((s) => ({ stringValue: s })) } }
+      : { stringValue: value };
+    const res = await fetch(`${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/system_configuration/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
+      body: JSON.stringify({ fields: { id: { stringValue: id }, category: { stringValue: "Signatories" }, key: { stringValue: key }, value: v } }),
+    });
+    if (!res.ok) throw new Error(`Could not set ${key}: ${res.status}`);
+  };
+  // One General Services Officer for every request (21 Oct 2026), whatever office filed it.
+  await set("pr_requested_by_name", "TEST GSO SIGNATORY");
+  await set("pr_cash_availability_name", "TEST TREASURER");
+  await set("pr_approved_by_name", "TEST MAYOR");
+}
+
+/** Writes a document of plain string fields straight into the Firestore emulator (test setup only). */
+export async function seedDoc(docPath: string, fields: Record<string, string>): Promise<void> {
+  const res = await fetch(`${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/${docPath}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
+    body: JSON.stringify({
+      fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { stringValue: v }])),
+    }),
+  });
+  if (!res.ok) throw new Error(`Could not seed ${docPath}: ${res.status}`);
+}
+
 /** Files a purchase request the way the public portal does (the create function). */
-export async function filePortalRequest(purpose: string): Promise<{ id: string; pr_number: string }> {
+export async function filePortalRequest(
+  purpose: string,
+  items: { description: string; quantity: number; unit: string; estimatedCost: number }[] = [
+    { description: "Alcohol, 500 ml", quantity: 5, unit: "bottle", estimatedCost: 90 },
+  ],
+): Promise<{ id: string; pr_number: string }> {
   const res = await fetch(`http://127.0.0.1:5001/${PROJECT_ID}/asia-southeast1/createPurchaseRequest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -107,7 +148,7 @@ export async function filePortalRequest(purpose: string): Promise<{ id: string; 
           purpose,
           fundingSource: "General Fund",
           requestDate: "2026-10-19",
-          items: [{ description: "Alcohol, 500 ml", quantity: 5, unit: "bottle", estimatedCost: 90 }],
+          items,
           attachments: [],
         },
       },

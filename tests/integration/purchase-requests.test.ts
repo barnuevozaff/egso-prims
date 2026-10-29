@@ -17,6 +17,9 @@ import {
   type PRDraftInput,
 } from "@/features/purchase-requests/api";
 
+import { cancelPurchaseOrder } from "@/features/purchase-orders/api";
+import { prSummary } from "@/features/purchase-requests/types";
+
 import { createTeam, manilaYear, resetEmulators, samplePdf, signInAs, signOutToPublic } from "./setup";
 
 const input = (over: Partial<PRDraftInput> = {}): PRDraftInput => ({
@@ -49,8 +52,50 @@ describe("Purchase Requests on Firestore", () => {
     await expect(listPurchaseRequests()).rejects.toThrow(/permission/i);
   });
 
+  it("the portal files with office, name, purpose and items; the GSO may add the fund, which is optional (22 Oct 2026)", async () => {
+    await signOutToPublic();
+    // The purpose is required again on submission; spaces alone do not count.
+    await expect(createPurchaseRequest(input({ purpose: "   " }))).rejects.toThrow("Purpose is required.");
+    const pr = await createPurchaseRequest(
+      input({
+        purpose: "Office supplies for daily administrative operations (test data)",
+        fundingSource: undefined,
+        section: "Supply",
+        fpp: "1000-01",
+        items: [
+          { description: "Bond paper, A4", quantity: 10, unit: "ream", estimatedCost: 250 },
+          { description: "Ballpen, black", quantity: 3, unit: "box", estimatedCost: 120 },
+        ],
+      }),
+    );
+    expect(pr).toMatchObject({
+      purpose: "Office supplies for daily administrative operations (test data)",
+      fundingSource: undefined,
+      section: "Supply",
+      fpp: "1000-01",
+      status: "Submitted",
+    });
+    expect(prSummary(pr)).toBe("Office supplies for daily administrative operations (test data)");
+
+    await signInAs("admin@alaminos.gov.ph");
+    const completed = await updatePurchaseRequest(pr.id, input({ purpose: "Office supplies for Q4 (test data)", fundingSource: "General Fund" }));
+    expect(completed).toMatchObject({ purpose: "Office supplies for Q4 (test data)", fundingSource: "General Fund" });
+    await signInAs("head@alaminos.gov.ph");
+    const approved = await setPurchaseRequestStatus(pr.id, "Approved", { by: "Approver" });
+    // Two references: the tracking one from submission, the official one from approval.
+    expect(approved).toMatchObject({
+      status: "Approved",
+      prNumber: `PR-${manilaYear()}-000001`,
+      officialPrNumber: `100-${manilaYear()}-000001`,
+      signatories: { requestedBy: { name: "TEST GSO SIGNATORY" }, cashAvailability: { name: "TEST TREASURER" } },
+    });
+    // An approved request is an official document: its content is not edited.
+    await signInAs("admin@alaminos.gov.ph");
+    await expect(updatePurchaseRequest(pr.id, input({ purpose: "Changed afterwards" }))).rejects.toThrow(/permission/i);
+  });
+
   it("lists newest first and filters by status, office, date and search", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const a = await createPurchaseRequest(input({ purpose: "Toner cartridges", departmentCode: "MHO" }));
     const b = await createPurchaseRequest(input({ purpose: "Bond paper", requestDate: "2026-09-01" }));
     await signInAs("admin@alaminos.gov.ph");
@@ -64,8 +109,17 @@ describe("Purchase Requests on Firestore", () => {
     expect(await countRecords("purchase_requests", ["Submitted"])).toBe(1);
   });
 
+  it("an edit without headings keeps the group headings a request already has (21 Oct 2026)", async () => {
+    await signInAs("admin@alaminos.gov.ph");
+    const pr = await createPurchaseRequest(input({ headings: [{ position: 0, text: "Office Supplies" }] }));
+    expect(pr.headings?.map((h) => h.text)).toEqual(["Office Supplies"]);
+    const edited = await updatePurchaseRequest(pr.id, input({ purpose: "Revised purpose (test data)" }));
+    expect(edited.purpose).toBe("Revised purpose (test data)");
+    expect(edited.headings?.map((h) => h.text)).toEqual(["Office Supplies"]);
+  });
+
   it("edits, comments and keeps the whole history", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const pr = await createPurchaseRequest(input());
     const edited = await updatePurchaseRequest(pr.id, input({ purpose: "Revised purpose" }));
     expect(edited.purpose).toBe("Revised purpose");
@@ -74,19 +128,15 @@ describe("Purchase Requests on Firestore", () => {
     expect(commented.history.map((h) => h.kind)).toEqual(["create", "status", "update", "comment"]);
   });
 
-  it("only an Administrator or an approver approves; a Department User is refused", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("any account approves another's request, signed with its own account (29 Oct 2026)", async () => {
+    await signInAs("clerk@alaminos.gov.ph");
     const pr = await createPurchaseRequest(input());
-    await expect(setPurchaseRequestStatus(pr.id, "Approved")).rejects.toThrow(/permission/i);
-    expect((await getPurchaseRequest(pr.id))?.status).toBe("Submitted");
 
-    await signInAs("approver@alaminos.gov.ph");
+    await signInAs("head@alaminos.gov.ph");
     const approved = await setPurchaseRequestStatus(pr.id, "Approved", { by: "Approver" });
     expect(approved.status).toBe("Approved");
-    expect(approved.approvals.at(-1)).toMatchObject({ step: "Approved", by: "Approver" });
-
-    await signInAs("viewer@alaminos.gov.ph");
-    await expect(setPurchaseRequestStatus(pr.id, "Completed")).rejects.toThrow(/permission/i);
+    // Signed by the account that approved it, as the server sees it.
+    expect(approved.approvals.at(-1)).toMatchObject({ step: "Approved", by: "head@alaminos.gov.ph" });
   });
 
   it("uploads attachments to Storage and removes them", async () => {
@@ -120,25 +170,45 @@ describe("Purchase Requests on Firestore", () => {
     await expect(cancelPurchaseRequest(pr.id, { reason: "Again", by: "Admin" })).rejects.toThrow(/cannot be voided/);
   });
 
-  it("a Department User voids only their own open request", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("any account voids a request, its own or another's", async () => {
+    await signInAs("clerk@alaminos.gov.ph");
     const own = await createPurchaseRequest(input());
-    await signOutToPublic();
-    const portal = await createPurchaseRequest(input());
-    await signInAs("dept@alaminos.gov.ph");
-    await expect(cancelPurchaseRequest(portal.id, { reason: "Not mine", by: "Dept" })).rejects.toThrow(/permission/i);
-    expect((await cancelPurchaseRequest(own.id, { reason: "Raised by mistake", by: "Dept" })).status).toBe("Cancelled");
+    const other = await createPurchaseRequest(input());
+    expect((await cancelPurchaseRequest(own.id, { reason: "Raised by mistake", by: "Clerk" })).status).toBe("Cancelled");
+    await signInAs("admin@alaminos.gov.ph");
+    expect((await cancelPurchaseRequest(other.id, { reason: "Not needed", by: "Admin" })).status).toBe("Cancelled");
   });
 
-  it("only a decider marks a request completed, and only after approval", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("a request with a purchase order in force is not voided until the order is voided", async () => {
+    await signInAs("admin@alaminos.gov.ph");
     const pr = await createPurchaseRequest(input());
-    await signInAs("approver@alaminos.gov.ph");
+    // Approving creates the order (21 Oct 2026).
+    const approved = await setPurchaseRequestStatus(pr.id, "Approved", { by: "Administrator" });
+    const po = { id: approved.poNumber!, poNumber: approved.poNumber! };
+    expect(po.poNumber).toMatch(/^PO-/);
+    await expect(cancelPurchaseRequest(pr.id, { reason: "Not needed", by: "Admin" })).rejects.toThrow(
+      new RegExp(`${po.poNumber}.*in force`),
+    );
+    expect((await getPurchaseRequest(pr.id))?.status).toBe("Approved");
+
+    await cancelPurchaseOrder(po.id, { reason: "Supplier withdrew (test data)", by: "Admin" });
+    const voided = await cancelPurchaseRequest(pr.id, { reason: "Not needed", by: "Admin" });
+    // The tracking reference, the official number, the items and the history stay.
+    expect(voided).toMatchObject({
+      status: "Cancelled",
+      prNumber: pr.prNumber,
+      officialPrNumber: approved.officialPrNumber,
+      items: [expect.objectContaining({ description: "Bond paper, A4" })],
+    });
+    expect(voided.history.length).toBe(approved.history.length + 1);
+  });
+
+  it("a request is marked completed only after approval", async () => {
+    await signInAs("clerk@alaminos.gov.ph");
+    const pr = await createPurchaseRequest(input());
+    await signInAs("head@alaminos.gov.ph");
     await expect(setPurchaseRequestStatus(pr.id, "Completed")).rejects.toThrow(/permission/i);
     await setPurchaseRequestStatus(pr.id, "Approved", { by: "Approver" });
-    await signInAs("dept@alaminos.gov.ph");
-    await expect(setPurchaseRequestStatus(pr.id, "Completed")).rejects.toThrow(/permission/i);
-    await signInAs("approver@alaminos.gov.ph");
     expect((await setPurchaseRequestStatus(pr.id, "Completed", { by: "Approver" })).status).toBe("Completed");
   });
 });

@@ -1,4 +1,5 @@
 import { ContainerCard, Skeleton } from "@/components";
+import { MetricIcon, type MetricTone } from "@/components/cards/metric-icon";
 import { useCountUp } from "@/hooks/use-count-up";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ export function FuelMetricCard({
   decimals = 0,
   icon: Icon,
   hint,
+  tone = "neutral",
   loading = false,
   className,
 }: {
@@ -24,34 +26,32 @@ export function FuelMetricCard({
   decimals?: number;
   icon: React.ComponentType<{ className?: string }>;
   hint?: string;
+  /** What the figure means, for its icon tint (see metric-icon.tsx). */
+  tone?: MetricTone;
   loading?: boolean;
   className?: string;
 }) {
   const animated = useCountUp(loading ? 0 : value);
 
   return (
-    <ContainerCard hoverable className={cn("group p-4", className)}>
-      <div className="flex items-center gap-2">
-        <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <span className="text-[12px] text-neutral-500">{label}</span>
+    // The same figure anatomy as MetricCard (24 Oct 2026), with the unit after the number.
+    <ContainerCard className={cn("px-5 py-4", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">{label}</span>
+        <MetricIcon icon={Icon} tone={loading ? "neutral" : tone} value={value} />
       </div>
       {loading ? (
-        <>
-          <Skeleton className="mt-4 h-8 w-24" />
-          <Skeleton className="mt-2 h-3 w-32" />
-        </>
+        <Skeleton className="mt-1.5 h-7 w-24" />
       ) : (
         <>
-          <div className="mt-4 text-[26px] font-semibold tabular-nums tracking-tight text-neutral-900">
+          <div className="mt-1 text-[26px] font-semibold leading-8 tracking-[-0.03em] text-neutral-900 tabular-nums">
             {animated.toLocaleString("en-PH", {
               minimumFractionDigits: decimals,
               maximumFractionDigits: decimals,
             })}
-            {unit && <span className="ml-1 text-[14px] font-medium text-neutral-500">{unit}</span>}
+            {unit && <span className="ml-1 text-[14px] font-medium tracking-normal text-[#5b606b]">{unit}</span>}
           </div>
-          {hint && <p className="mt-1.5 text-[11.5px] text-neutral-500">{hint}</p>}
+          {hint && <p className="mt-0.5 text-[12.5px] text-[#5b606b]">{hint}</p>}
         </>
       )}
     </ContainerCard>

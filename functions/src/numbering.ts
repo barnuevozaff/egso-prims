@@ -1,6 +1,8 @@
 import { getFirestore, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
+import { callerOf } from "./documents/caller.js";
+
 /**
  * Document numbers — PR-2026-000243 — ported from the Postgres function
  * next_document_number (migrations 032 and 035).
@@ -59,7 +61,8 @@ export const NUMBERED_COLLECTIONS: Record<string, string> = {
  * Types numbered by the function that saves them (numbered-records.ts,
  * records/documents.ts). Handing one out on its own would only leave a gap.
  */
-export const SAVED_WITH_NUMBER = ["EC", "WC", "FC", "VT", "RDS", "RIA", "RAD"];
+// INV: inventory item codes, issued only with the item (documents/inventory.ts).
+export const SAVED_WITH_NUMBER = ["EC", "WC", "FC", "VT", "RDS", "RIA", "RAD", "INV"];
 
 /** How far past a taken number the allocator looks before giving up. */
 const MAX_SKIPS = 25;
@@ -228,8 +231,8 @@ export const nextDocumentNumber = onCall(async (request) => {
   if (!/^[A-Z]{2,5}$/.test(type)) {
     throw new HttpsError("invalid-argument", "Document type must be 2 to 5 letters, e.g. PR.");
   }
-  const role = request.auth?.token.role;
-  if (role !== "Administrator" && role !== "Department User") {
+  // Any account, checked live like every function's caller (29 Oct 2026).
+  if ((await callerOf(request)).kind !== "staff") {
     throw new HttpsError("permission-denied", "Only staff can allocate document numbers.");
   }
   if (type in NUMBERED_COLLECTIONS || SAVED_WITH_NUMBER.includes(type)) {

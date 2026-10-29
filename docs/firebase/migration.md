@@ -84,8 +84,9 @@ people keep their passwords — or, simpler for a small office, the
 Administrator creates each account and people set a password from the
 reset email. Either way:
 
-- every account needs its role set with `setStaffRole` (and `approver` where
-  granted); an account without a role is refused by the app;
+- every account in Firebase Authentication is an Administrator (29 Oct
+  2026), so import or create only the people who should have access; no
+  role needs setting (README, "Authentication");
 - `created_by_uid` on imported purchase requests still names Supabase user
   IDs. If accounts are imported with the same UIDs, ownership carries over;
   if not, ownership needs a mapping step, decided with the office.

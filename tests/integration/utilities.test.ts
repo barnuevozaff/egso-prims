@@ -54,7 +54,7 @@ import {
   updateWaterMeterReading,
 } from "@/features/water/api";
 
-import { createTeam, manilaYear, resetEmulators, signInAs } from "./setup";
+import { createTeam, manilaYear, resetEmulators, signInAs, signOutToPublic } from "./setup";
 
 /** Synthetic accounts and vehicles only; no real municipal records. */
 
@@ -178,9 +178,9 @@ describe("Energy on Firestore", () => {
     expect((await listEnergySubmeterBills({ submeterId: sub.id })).map((b) => b.id)).toEqual([again.id]);
   });
 
-  it("is written by Administrators only", async () => {
-    await signInAs("dept@alaminos.gov.ph");
-    await expect(createEnergyAccount(account("009"))).rejects.toThrow("You don't have permission to perform this action.");
+  it("is not written signed out", async () => {
+    await signOutToPublic();
+    await expect(createEnergyAccount(account("009"))).rejects.toThrow();
   });
 });
 

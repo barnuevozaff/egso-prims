@@ -3,7 +3,7 @@ import * as React from "react";
 import { countRecords, loadStockLevels } from "@/features/shared/record-counts";
 import { useRealtimeRefresh } from "@/features/shared/use-realtime";
 import { PENDING_PR_STATUSES } from "@/features/purchase-requests/types";
-import { stockStatusOf } from "@/features/inventory/types";
+import { stockStateOf } from "@/features/inventory/types";
 
 /**
  * Live counts behind the sidebar badges.
@@ -32,22 +32,12 @@ const EMPTY: NavCounts = {
 };
 
 /**
- * Stock alerts cannot be counted by the database: `stockStatusOf` compares each
- * item's balance against its own reorder and critical levels, which PostgREST
- * cannot express as a filter. Only the three integers that decide it are
- * fetched, and the classification stays in the one function that owns it.
+ * Items out of stock (24 Oct 2026). Reorder and critical levels are no longer
+ * part of the workflow, so the Inventory count no longer flags "low" items.
  */
 async function countStockAlerts(): Promise<number> {
   const rows = await loadStockLevels();
-
-  return rows.filter(
-    (r) =>
-      stockStatusOf({
-        onHand: r.on_hand,
-        reorderLevel: r.reorder_level,
-        criticalLevel: r.critical_level,
-      }) !== "Available",
-  ).length;
+  return rows.filter((r) => stockStateOf({ onHand: r.on_hand }) === "Out of Stock").length;
 }
 
 export async function loadNavCounts(): Promise<NavCounts> {

@@ -64,7 +64,7 @@ describe("Notifications on Firestore", () => {
   it("staff see the notification a submission raised, and mark it read", async () => {
     await signOutToPublic();
     const filed = await createPurchaseRequest(pr);
-    await signInAs("viewer@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const [n] = await eventually(async () => {
       const list = await listNotifications({ module: "Procurement" });
       return list.length ? list : undefined;
@@ -93,8 +93,26 @@ describe("Notifications on Firestore", () => {
 });
 
 describe("Audit trail on Firestore", () => {
+  it("records who changed an official's printed name, and from what to what (21 Oct 2026)", async () => {
+    await signInAs("admin@alaminos.gov.ph");
+    await setConfigValues([{ category: "Signatories", key: "pr_cash_availability_name", value: "NEW TREASURER (test data)" }]);
+    const [entry] = await eventually(async () => {
+      // The test setup's own seeding of the name is audited too ("Record Created", System).
+      const list = (await listAuditEntries({ module: "Settings" })).filter(
+        (e) => e.documentNumber === "Signatories · pr_cash_availability_name" && e.action === "Record Updated",
+      );
+      return list.length ? list : undefined;
+    });
+    expect(entry).toMatchObject({
+      user: "admin@alaminos.gov.ph",
+      action: "Record Updated",
+      previousValue: "Value: TEST TREASURER",
+      updatedValue: "Value: NEW TREASURER (test data)",
+    });
+  });
+
   it("shows who did what, newest first, with the document's whole trail", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const filed = await createPurchaseRequest(pr);
     await signInAs("admin@alaminos.gov.ph");
     await setPurchaseRequestStatus(filed.id, "Approved", { by: "Admin" });
@@ -104,7 +122,7 @@ describe("Audit trail on Firestore", () => {
     });
     expect(entries.map((e) => [e.action, e.user])).toEqual([
       ["Record Updated", "admin@alaminos.gov.ph"],
-      ["Record Created", "dept@alaminos.gov.ph"],
+      ["Record Created", "clerk@alaminos.gov.ph"],
     ]);
     expect(ownEntries(await listRelatedEntries(entries[0])).map((e) => e.action)).toEqual([
       "Record Created",
@@ -128,8 +146,8 @@ describe("Audit trail on Firestore", () => {
     await expect(deleteAuditEntries([entry.id])).rejects.toThrow(/cannot be deleted/);
   });
 
-  it("is closed to everyone but Administrators", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("is closed to signed-out visitors", async () => {
+    await signOutToPublic();
     await expect(listAuditEntries()).rejects.toThrow(/permission/i);
   });
 });
@@ -156,10 +174,13 @@ describe("Settings on Firestore", () => {
     expect((await getSystemStatus()).connected).toBe(true);
   });
 
-  it("others read settings but cannot change them", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("every account reads and changes settings; signed out, nobody changes them", async () => {
+    await signInAs("clerk@alaminos.gov.ph");
     expect(await getConfigBoolean("Document Numbering", "year_reset")).toBe(true);
-    await expect(setConfigValue("Document Numbering", "padding_length", 2)).rejects.toThrow(/permission/i);
+    await setConfigValue("Document Numbering", "padding_length", 5);
+    expect(await getConfigNumber("Document Numbering", "padding_length")).toBe(5);
+    await signOutToPublic();
+    await expect(setConfigValue("Document Numbering", "padding_length", 2)).rejects.toThrow();
   });
 });
 
@@ -179,7 +200,7 @@ describe("Reservation changes through the server", () => {
   });
 
   it("moves a booking when the slot is free, and refuses a clash", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const a = await createReservation(fr());
     const b = await createReservation(fr({ startTime: "13:00", endTime: "15:00" }));
     const moved = await updateReservation(b.id, fr({ startTime: "15:00", endTime: "16:00", purpose: "Moved" }));

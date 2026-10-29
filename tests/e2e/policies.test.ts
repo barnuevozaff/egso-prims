@@ -1,7 +1,7 @@
 import type { Browser, Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { APP_URL, createStaff, launch, newPage, resetEmulators, shot, signIn } from "./browser";
+import { APP_URL, createAccount, launch, newPage, resetEmulators, shot, signIn } from "./browser";
 
 /**
  * The approved record policies (2026-10-20) in the browser, on Firebase: a
@@ -22,7 +22,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetEmulators();
-  await createStaff("admin@alaminos.gov.ph", "Administrator", {}, "Ana Reyes");
+  await createAccount("admin@alaminos.gov.ph", "Ana Reyes");
 });
 
 async function session(name: string, run: (page: Page) => Promise<void>) {

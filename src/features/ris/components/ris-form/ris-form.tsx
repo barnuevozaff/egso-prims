@@ -16,6 +16,7 @@ import type { PurchaseRequest } from "@/features/purchase-requests/types";
 import { risFormSchema, type RISFormValues } from "@/features/ris/components/ris-form/schema";
 import { reportLoadFailure } from "@/features/shared/load-guard";
 import { OfficeField } from "@/features/shared/office-field";
+import { useStockList } from "@/features/ris/components/ris-form/stock-list";
 import { StockNameInput } from "@/features/ris/components/ris-form/stock-name-input";
 import { LeaveGuard } from "@/features/shared/leave-guard";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,9 @@ import { cn } from "@/lib/utils";
  *
  * The portal asks only for what the requester knows: who, why, and the items
  * with quantity and unit. Anonymous visitors cannot read the stock register
- * (migration 034), so items are typed by hand and GSO matches them to stock.
+ * (migration 034); they pick each item from the GSO stock list, which the
+ * portalStockSuggestions function returns, and picking links the line to it
+ * (22 Oct 2026).
  * The admin adds the source purchase request and, per item, what is available
  * and how much to issue.
  */
@@ -36,6 +39,7 @@ import { cn } from "@/lib/utils";
 const emptyItem = {
   name: "",
   inventoryItemId: undefined,
+  stockNo: undefined,
   unit: "pc",
   requestedQty: 1,
   issuedQty: 1,
@@ -196,6 +200,14 @@ export function RISForm({
 
   const submit = form.handleSubmit(async (values) => {
     if (admin && !checkIssue(values)) return;
+    // The portal requests only what is on the GSO stock list (22 Oct 2026).
+    if (!admin) {
+      const unpicked = values.items.flatMap((row, i) => (row.inventoryItemId ? [] : [i]));
+      for (const i of unpicked) {
+        form.setError(`items.${i}.name`, { message: "Choose the item from the GSO stock list" });
+      }
+      if (unpicked.length) return;
+    }
     await onSubmit({
       prNumber: values.prNumber || undefined,
       poNumber: values.poNumber,
@@ -209,8 +221,8 @@ export function RISForm({
       items: values.items.map((row) => {
         const inv = inventory.find((s) => s.id === row.inventoryItemId);
         return {
-          inventoryItemId: inv?.id,
-          stockNo: inv?.itemCode,
+          inventoryItemId: inv?.id ?? row.inventoryItemId,
+          stockNo: inv?.itemCode ?? row.stockNo,
           name: row.name.trim(),
           unit: inv?.unit ?? row.unit,
           requestedQty: row.requestedQty,
@@ -443,15 +455,20 @@ function ItemsSection({
   admin: boolean;
   inventory: InventoryItem[];
 }) {
-  const { register, control, setValue, formState } = form;
+  const { register, control, setValue, getValues, formState } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
   const items = useWatch({ control, name: "items" });
+  // The portal's GSO stock list, loaded once for every item row.
+  const stock = useStockList(!admin);
   // Units as the office set them in Settings → Procurement, plus any already
-  // on the slip, so an edit or a stock unit is never missing from the list.
+  // on the slip, plus every unit in the register (the stock list on the
+  // portal, which cannot read Settings). A unit must be an option before an
+  // item brings it: the select drops a value it has no option for yet, which
+  // left a picked "pack" item with no unit (29 Oct 2026).
   const { options: itemUnits } = useConfigOptions(
     "Procurement",
     "item_units",
-    (items ?? []).map((it) => it?.unit ?? "").filter(Boolean),
+    [...(items ?? []).map((it) => it?.unit ?? ""), ...(admin ? inventory : stock.items).map((s) => s.unit)].filter(Boolean),
   );
   const itemsError = formState.errors.items;
   // The name takes every spare pixel; the rest are sized to their values.
@@ -524,7 +541,9 @@ function ItemsSection({
                         options={inventory.map((s) => ({
                           value: s.name,
                           label: s.name,
-                          description: `${s.onHand} ${s.unit} on hand`,
+                          // The code tells two items of the same name apart, and can be searched.
+                          description: `${s.itemCode} · ${s.onHand} ${s.unit} on hand`,
+                          keywords: [s.itemCode],
                         }))}
                         value={field.value || undefined}
                         onChange={(v) => {
@@ -550,12 +569,23 @@ function ItemsSection({
                       <StockNameInput
                         id={`ris-item-${row.id}`}
                         label={`Item ${i + 1} name`}
+                        stock={stock}
                         value={field.value ?? ""}
-                        onChange={field.onChange}
+                        // Typing over a picked item unlinks it; it must be picked again.
+                        onChange={(v) => {
+                          field.onChange(v);
+                          if (getValues(`items.${i}.inventoryItemId`)) {
+                            setValue(`items.${i}.inventoryItemId`, undefined);
+                            setValue(`items.${i}.stockNo`, undefined);
+                          }
+                        }}
                         onBlur={field.onBlur}
+                        selectedId={items?.[i]?.inventoryItemId}
                         onPick={(s) => {
                           setValue(`items.${i}.name`, s.name, { shouldValidate: true });
                           setValue(`items.${i}.unit`, s.unit);
+                          setValue(`items.${i}.inventoryItemId`, s.id || undefined);
+                          setValue(`items.${i}.stockNo`, s.code || undefined);
                         }}
                         invalid={!!rowErr?.name}
                         className={CELL}
@@ -603,7 +633,8 @@ function ItemsSection({
                     value={field.value}
                     onChange={field.onChange}
                     invalid={!!rowErr?.unit}
-                    disabled={!!inv}
+                    // A register item is counted in its own unit.
+                    disabled={!!inv || (!admin && !!items?.[i]?.inventoryItemId)}
                     size="lg"
                     className="h-10 rounded-lg border-[#d4d5d2] px-3 text-[14px] text-neutral-900 focus-visible:border-neutral-900 focus-visible:ring-4 focus-visible:ring-neutral-900/10"
                   />
@@ -646,7 +677,7 @@ function ItemsSection({
         <span className="text-[13px] text-[#5b606b]">
           {admin
             ? "Pick from stock to see what is available."
-            : "Start typing to see items GSO keeps in stock."}
+            : "Click an item field to see the GSO stock list, or type to search it."}
         </span>
       </div>
     </section>
@@ -668,9 +699,12 @@ function SummaryPanel({
 }) {
   const values = useWatch({ control: form.control });
   const items = values.items ?? [];
-  const named = items.filter((it) => (it?.name ?? "").trim().length > 0);
+  // On the portal a line counts once it is picked from the stock list, as
+  // submitting requires (22 Oct 2026); typed text alone is not an item.
+  const named = items.filter((it) => (admin ? (it?.name ?? "").trim().length > 0 : !!it?.inventoryItemId));
   const complete = items.filter(
-    (it) => (it?.name ?? "").trim().length >= 2 && Number(it?.requestedQty) > 0,
+    (it) =>
+      (admin ? (it?.name ?? "").trim().length >= 2 : !!it?.inventoryItemId) && Number(it?.requestedQty) > 0,
   ).length;
 
   // The same thresholds the schema enforces, so a tick means it will pass.
@@ -698,7 +732,7 @@ function SummaryPanel({
       </div>
       <p className="mt-4 text-[13px] text-[#5b606b]">Items requested</p>
       <p className={cn("mt-1 text-[28px] font-semibold leading-tight tracking-[-0.01em]", MONO)}>
-        {items.length}
+        {admin ? items.length : named.length}
       </p>
 
       {named.length > 0 ? (
@@ -740,7 +774,7 @@ function SummaryPanel({
       <button
         type="submit"
         disabled={submitting}
-        className="group mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-neutral-900 text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+        className="group mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-neutral-900 text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70 [[data-portal]_&]:bg-(--accent-solid) [[data-portal]_&]:hover:bg-(--accent-solid-hover) [[data-portal]_&]:focus-visible:ring-(--accent-ring)"
       >
         {submitLabel}
         {submitting ? (

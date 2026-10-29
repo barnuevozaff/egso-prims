@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 
 import { requireFirebase, useEmulators } from "@/lib/firebase";
-import { fetchAllRows, firestore, friendlyFirebaseError } from "@/lib/firestore";
+import { fetchAllRows, firestore, friendlyFirebaseError, writerUid } from "@/lib/firestore";
 import { rowToEntry, type ConfigFilters, type SystemStatus } from "@/features/config/api.supabase";
 import { configDefinition, type ConfigCategory, type ConfigEntry, type ConfigValue } from "@/features/config/types";
 
@@ -72,6 +72,8 @@ export async function setConfigValue(
     value,
     description: description ?? null,
     updated_at: new Date().toISOString(),
+    // The audit trail names whoever changed a setting (an official's name, say).
+    updated_by_uid: writerUid(),
   };
   try {
     await setDoc(doc(firestore(), TABLE, row.id), row, { merge: true });
@@ -91,7 +93,7 @@ export async function setConfigValues(entries: { category: string; key: string; 
         const id = docId(e.category, e.key);
         batch.set(
           doc(firestore(), TABLE, id),
-          { id, category: e.category, key: e.key, value: e.value, updated_at: new Date().toISOString() },
+          { id, category: e.category, key: e.key, value: e.value, updated_at: new Date().toISOString(), updated_by_uid: writerUid() },
           { merge: true },
         );
       }

@@ -1,23 +1,21 @@
 import { getApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   assertSetupTarget,
   freshStartCheck,
-  provisionAccount,
-  provisionFirstAdministrator,
   seedSettings,
   settingId,
 } from "../setup/provision.ts";
-import { AUTH, call, signUp } from "./helpers.js";
+import { AUTH, call } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
- * Fresh-start setup on the emulators: the first Administrator, staff roles,
- * the office's settings, the fresh-database check — and that nobody can
- * sign up and make themselves an Administrator. Synthetic accounts only.
+ * Fresh-start setup on the emulators: the target guard, the office's settings
+ * and the fresh-database check. Accounts are added in the Firebase console,
+ * not by this tooling (29 Oct 2026; accounts.emulator.test.ts). Synthetic
+ * data only.
  */
 
 let db: Firestore;
@@ -59,61 +57,6 @@ describe("the setup target guard", () => {
   });
 });
 
-describe("provisioning the first Administrator", () => {
-  it("creates the account without a password, sets the role, and returns a one-time link", async () => {
-    const p = await provisionFirstAdministrator(getAuth(), { email: "Head.GSO@alaminos.gov.ph", displayName: "Test Head" });
-    expect(p).toMatchObject({ email: "head.gso@alaminos.gov.ph", role: "Administrator", approver: false, created: true });
-    expect(p.passwordLink).toMatch(/oobCode=/);
-    const user = await getAuth().getUser(p.uid);
-    expect(user.customClaims).toMatchObject({ role: "Administrator", approver: false });
-    expect(user.passwordHash).toBeUndefined();
-  });
-
-  it("is idempotent for the same person, and will not make a second Administrator", async () => {
-    await provisionFirstAdministrator(getAuth(), { email: "head.gso@alaminos.gov.ph" });
-    const again = await provisionFirstAdministrator(getAuth(), { email: "head.gso@alaminos.gov.ph" });
-    expect(again.created).toBe(false);
-    await expect(provisionFirstAdministrator(getAuth(), { email: "other@alaminos.gov.ph" })).rejects.toThrow(
-      /An Administrator already exists \(head.gso@alaminos.gov.ph\)/,
-    );
-  });
-
-  it("only gives roles to office addresses, and approver only to Department Users", async () => {
-    await expect(provisionFirstAdministrator(getAuth(), { email: "someone@gmail.com" })).rejects.toThrow(/not an office address/);
-    await expect(
-      provisionAccount(getAuth(), { email: "viewer@alaminos.gov.ph", role: "Viewer", approver: true }),
-    ).rejects.toThrow(/Only a Department User/);
-    const dept = await provisionAccount(getAuth(), { email: "dept@alaminos.gov.ph", role: "Department User", approver: true });
-    expect((await getAuth().getUser(dept.uid)).customClaims).toMatchObject({ role: "Department User", approver: true });
-  });
-});
-
-describe("nobody can sign up and become an Administrator", () => {
-  it("an outside address cannot even create an account", async () => {
-    const res = await signUp("someone@gmail.com");
-    expect(res.error?.message).toMatch(/not an office address|PERMISSION_DENIED|BLOCKING_FUNCTION/i);
-  });
-
-  it("an office address that signs up gets no role, and cannot give itself one", async () => {
-    const res = await signUp("newcomer@alaminos.gov.ph");
-    expect(res.localId).toBeTruthy();
-    expect((await getAuth().getUser(res.localId!)).customClaims?.role).toBeUndefined();
-
-    // Writing a role into its own account with its own token is refused.
-    const update = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: res.idToken, customAttributes: JSON.stringify({ role: "Administrator" }) }),
-    });
-    const body = (await update.json()) as { error?: unknown };
-    expect(update.ok && !body.error).toBe(false);
-    expect((await getAuth().getUser(res.localId!)).customClaims?.role).toBeUndefined();
-
-    // Nor through the app's role function.
-    const self = await call("setStaffRole", { uid: res.localId, role: "Administrator" }, res.idToken);
-    expect(self.error?.status).toBe("PERMISSION_DENIED");
-  });
-});
 
 describe("settings and the fresh-database check", () => {
   it("writes the office's particulars under the Settings screen's IDs, never overwriting", async () => {

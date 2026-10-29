@@ -1,7 +1,7 @@
 import type { Browser, Page } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { APP_URL, createStaff, launch, newPage, resetEmulators, shot, signIn } from "./browser";
+import { APP_URL, createAccount, launch, newPage, resetEmulators, shot, signIn } from "./browser";
 
 /**
  * Records Management in the browser, on Firebase: an Administrator files a
@@ -22,8 +22,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetEmulators();
-  await createStaff("admin@alaminos.gov.ph", "Administrator", {}, "Ana Reyes");
-  await createStaff("dept@alaminos.gov.ph", "Department User", {}, "Dante Cruz");
+  await createAccount("admin@alaminos.gov.ph", "Ana Reyes");
+  await createAccount("clerk@alaminos.gov.ph", "Dante Cruz");
 });
 
 async function session(name: string, run: (page: Page) => Promise<void>) {
@@ -37,22 +37,6 @@ async function session(name: string, run: (page: Page) => Promise<void>) {
   } finally {
     await context.close();
   }
-}
-
-/** A synthetic document written with the emulator's admin token (emulator only). */
-async function seedDoc(path: string, data: Record<string, string | number | null>) {
-  const fields = Object.fromEntries(
-    Object.entries(data).map(([k, v]) => [
-      k,
-      v === null ? { nullValue: null } : typeof v === "number" ? { integerValue: String(v) } : { stringValue: v },
-    ]),
-  );
-  const res = await fetch(`http://127.0.0.1:8085/v1/projects/demo-egso-prims/databases/(default)/documents/${path}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer owner" },
-    body: JSON.stringify({ fields }),
-  });
-  if (!res.ok) throw new Error(`Could not seed ${path}: ${res.status}`);
 }
 
 describe("Records Management in the browser, on Firebase", () => {
@@ -77,35 +61,4 @@ describe("Records Management in the browser, on Firebase", () => {
     });
   });
 
-  it("a Department User reads Records Management but is offered no changes", async () => {
-    const at = "2026-10-19T00:00:00.000Z";
-    await seedDoc("disposition_schedules/rds-e2e", {
-      id: "rds-e2e", schedule_no: "RDS-2026-000009", agency_name: "Test Agency (e2e)", agency_address: "Test address",
-      date_prepared: "2026-10-19", status: "Draft", created_at: at, updated_at: at,
-    });
-    await seedDoc("record_series/ser-e2e", {
-      id: "ser-e2e", schedule_id: "rds-e2e", item_number: 1, title_and_description: "Vouchers (test)",
-      retention_active: 1, retention_storage: 1, retention_total: 2, created_at: at, updated_at: at,
-    });
-    await session("records-readonly", async (page) => {
-      await signIn(page, "dept@alaminos.gov.ph");
-      await page.goto(`${APP_URL}/records`);
-      await page.getByText("RDS-2026-000009").first().waitFor({ timeout: 30_000 });
-      expect(await page.getByRole("button", { name: "New Schedule" }).count()).toBe(0);
-      await page.getByText("RDS-2026-000009").first().click();
-      await page.getByText("Vouchers (test)").first().waitFor({ timeout: 30_000 });
-      for (const name of ["Edit", "Delete"]) {
-        expect(await page.getByRole("button", { name, exact: true }).count()).toBe(0);
-      }
-      await shot(page, "63-records-readonly");
-
-      await page.goto(`${APP_URL}/records/new`);
-      await page.waitForLoadState("domcontentloaded");
-      expect(await page.getByRole("button", { name: "Create Schedule" }).count()).toBe(0);
-
-      await page.goto(`${APP_URL}/records/shelves`);
-      await page.getByRole("heading", { name: "Records Room" }).waitFor();
-      expect(await page.getByRole("button", { name: "Add Shelf" }).count()).toBe(0);
-    });
-  });
 });

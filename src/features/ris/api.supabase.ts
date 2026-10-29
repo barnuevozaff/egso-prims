@@ -38,6 +38,7 @@ export function rowToRIS(r: any): RequestForIssuance {
     receivedBy: r.received_by,
     issueDate: r.issue_date,
     status: r.status,
+    stockIssuedAt: r.stock_issued_at ?? undefined,
     items: r.items ?? [],
     attachments: r.attachments ?? [],
     comments: r.comments ?? [],
@@ -238,6 +239,26 @@ export async function setRequestStatus(
  * returning released stock in one safe step needs the Firebase backend
  * (voidReleasedRis). A Completed slip is final.
  */
+/** Approval issues stock through a server function, which only the Firebase backend has. */
+export async function approveRequest(
+  id: string,
+  options: { by?: string; office?: string } = {},
+): Promise<RequestForIssuance> {
+  void id;
+  void options;
+  throw new Error("Approving a slip needs the Firebase backend; nothing was changed.");
+}
+
+/** Rejects a pending slip with a reason. No stock moves. */
+export async function rejectRequest(
+  id: string,
+  input: { reason: string; by?: string; office?: string },
+): Promise<RequestForIssuance> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error("Give a reason for rejecting the slip.");
+  return setRequestStatus(id, "Rejected", { by: input.by, office: input.office, remarks: reason });
+}
+
 export async function cancelRequest(
   id: string,
   input: { reason: string; by: string; office?: string },
@@ -323,31 +344,21 @@ export function exportRequestsCsv(rows: RequestForIssuance[]): string {
 }
 
 export interface StockSuggestion {
+  /** The inventory item, so a requested line is linked to the register (22 Oct 2026). */
+  id: string;
+  /** Its item code, e.g. INV-2026-000001. */
+  code: string;
   name: string;
   unit: string;
   inStock: boolean;
 }
 
 /**
- * Items from central stock whose name contains the query, for the portal's
- * RIS form (migration 050). Anonymous visitors cannot read the register, so
- * this goes through a function that returns only name, unit and whether any
- * is on hand. Any failure, including the function not existing yet, returns
- * no suggestions: they are a help, and the form works without them.
+ * The stock list for the portal's RIS form. The Supabase function (migration
+ * 050) answers only a typed query and never lists the register, so a Supabase
+ * build has no list to show; the portal runs on Firebase, where
+ * portalStockSuggestions returns the list (29 Oct 2026).
  */
-export async function suggestStock(query: string): Promise<StockSuggestion[]> {
-  if (query.trim().length < 2) return [];
-  try {
-    const { data, error } = await requireDb().rpc("portal_stock_suggestions", {
-      p_query: query.trim(),
-    });
-    if (error || !Array.isArray(data)) return [];
-    return (data as { name: string; unit: string; in_stock: boolean }[]).map((r) => ({
-      name: r.name,
-      unit: r.unit,
-      inStock: r.in_stock,
-    }));
-  } catch {
-    return [];
-  }
+export function listStock(): Promise<StockSuggestion[]> {
+  return Promise.resolve([]);
 }

@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 
 import { PageTransition, toast } from "@/components";
 import { rememberFiling } from "@/features/portal/recent";
+import { portalPath } from "@/features/portal/paths";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
@@ -47,7 +48,7 @@ export function PortalPage({
       <section className="border-b border-[#ececea] bg-white text-neutral-900 print:hidden">
         <div className={cn("mx-auto w-full pb-8 pt-6", gutter, measure)}>
           <Link
-            to="/portal"
+            to={portalPath()}
             // 40px to hit; the negative margins keep it where the 22px link sat.
             className="-mx-2 -my-2 inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-[13px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)"
           >
@@ -84,7 +85,7 @@ function receiptTitle(reference: string): string {
  *
  * The reference number is the thing to keep, so it is the largest text and has
  * its own Copy button. The number is also remembered on this computer for the
- * home page's "Filed on this computer" list. The QR code and Print receipt
+ * home page's "Requests from this device" list. The QR code and Print receipt
  * were removed on 18 Oct 2026 at the owner's request.
  */
 export function SubmissionSuccess({
@@ -96,7 +97,7 @@ export function SubmissionSuccess({
 }) {
   const reduce = useReducedMotion();
   const [copied, setCopied] = React.useState(false);
-  const trackPath = `/portal/track?ref=${encodeURIComponent(reference)}`;
+  const trackPath = `${portalPath("/track")}?ref=${encodeURIComponent(reference)}`;
 
   React.useEffect(() => {
     rememberFiling(reference);
@@ -131,7 +132,7 @@ export function SubmissionSuccess({
             initial={reduce ? false : { scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.1, ease: EASE_OUT }}
-            className="grid h-11 w-11 place-items-center rounded-full bg-neutral-900 text-white"
+            className="grid h-11 w-11 place-items-center rounded-full bg-[#1d6a40] text-white"
           >
             <Check aria-hidden="true" className="h-[22px] w-[22px]" strokeWidth={2.5} />
           </motion.span>
@@ -166,7 +167,7 @@ export function SubmissionSuccess({
             </span>
           </div>
           <p className="mt-2 text-[13px] text-[#5b606b]">
-            Keep this number. It is also saved on this computer.
+            Keep this number. It is also saved on this device.
           </p>
         </div>
 
@@ -176,7 +177,7 @@ export function SubmissionSuccess({
         <div className="flex flex-wrap gap-2.5">
           <Link
             to={trackPath}
-            className="group inline-flex h-11 items-center gap-2 rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98]"
+            className="group inline-flex h-11 items-center gap-2 rounded-[10px] ui-accent ui-accent-hover px-[18px] text-[15px] font-medium transition-[background-color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) focus-visible:ring-offset-2 active:scale-[0.98]"
           >
             Track this request
             <ArrowRight
@@ -186,7 +187,7 @@ export function SubmissionSuccess({
           </Link>
         </div>
         <Link
-          to="/portal"
+          to={portalPath()}
           className="rounded-md px-1 py-2.5 text-[14px] text-[#5b606b] transition-colors hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900"
         >
           Back to all services

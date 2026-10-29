@@ -1,11 +1,11 @@
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signInAnonymously, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { requireFirebase } from "@/lib/firebase";
 import { firebaseAuthMessage, firebaseDriver } from "@/features/auth/firebase-driver";
 import type { AuthUser } from "@/features/auth/types";
 
-import { createStaff, createTeam, PROJECT_ID, resetEmulators } from "./setup";
+import { createAccount, createTeam, PROJECT_ID, resetEmulators } from "./setup";
 
 /**
  * The Firebase sign-in driver behind the login page, against the Auth
@@ -36,25 +36,31 @@ beforeEach(async () => {
 });
 
 describe("Firebase sign-in", () => {
-  it("reads the role and approver flag from the server-set claims", async () => {
-    const { user } = await watchedSignIn("approver@alaminos.gov.ph");
+  it("lets in any account added in the console as an Administrator, with no claims (29 Oct 2026)", async () => {
+    await createAccount("newhire@gmail.com");
+    const { user } = await watchedSignIn("newhire@gmail.com");
     expect(user).toMatchObject({
-      email: "approver@alaminos.gov.ph",
-      role: "Department User",
-      approver: true,
+      email: "newhire@gmail.com",
+      role: "Administrator",
+      approver: false,
       office: "General Services Office",
     });
-    const admin = await watchedSignIn("admin@alaminos.gov.ph");
-    expect(admin.user).toMatchObject({ role: "Administrator", approver: false });
   });
 
-  it("does not let in an account that has no role, and signs it out", async () => {
-    await createStaff("newhire@alaminos.gov.ph", "");
-    const { user, error } = await watchedSignIn("newhire@alaminos.gov.ph");
-    expect(user).toBeNull();
-    expect(firebaseAuthMessage(error)).toMatch(/not been given access yet/);
+  it("does not let in an anonymous session, and signs it out", async () => {
+    const { auth } = requireFirebase();
+    await signOut(auth);
+    const error = await new Promise<unknown>((resolve, reject) => {
+      const stop = firebaseDriver.watch((_user, e) => {
+        if (!e) return;
+        stop();
+        resolve(e);
+      });
+      signInAnonymously(auth).catch(reject);
+    });
+    expect(firebaseAuthMessage(error)).toMatch(/cannot sign in here/);
     await new Promise((r) => setTimeout(r, 200));
-    expect(requireFirebase().auth.currentUser).toBeNull();
+    expect(auth.currentUser).toBeNull();
   });
 
   it("gives one answer for a wrong password and an unknown address", async () => {
@@ -67,13 +73,13 @@ describe("Firebase sign-in", () => {
 
   it("sends a password reset link back to the login page", async () => {
     (globalThis as { window?: unknown }).window = { location: { origin: "http://localhost:5174" } };
-    await firebaseDriver.requestPasswordReset("dept@alaminos.gov.ph");
+    await firebaseDriver.requestPasswordReset("clerk@alaminos.gov.ph");
     // An unknown address gets the same quiet answer.
     await expect(firebaseDriver.requestPasswordReset("nobody@alaminos.gov.ph")).resolves.toBeUndefined();
     const codes = (await (
       await fetch(`http://127.0.0.1:9099/emulator/v1/projects/${PROJECT_ID}/oobCodes`)
     ).json()) as { oobCodes: { email: string; requestType: string; oobLink: string }[] };
-    const reset = codes.oobCodes.find((c) => c.email === "dept@alaminos.gov.ph" && c.requestType === "PASSWORD_RESET");
+    const reset = codes.oobCodes.find((c) => c.email === "clerk@alaminos.gov.ph" && c.requestType === "PASSWORD_RESET");
     expect(reset?.oobLink).toContain(encodeURIComponent("http://localhost:5174/login"));
   });
 });

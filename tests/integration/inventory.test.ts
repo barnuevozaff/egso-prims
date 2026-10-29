@@ -1,7 +1,7 @@
 import { doc, getDoc } from "firebase/firestore";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { firestore } from "@/lib/firestore";
+import { firestore, writerUid } from "@/lib/firestore";
 import { loadStockLevels } from "@/features/shared/record-counts";
 import {
   adjustStock,
@@ -11,11 +11,10 @@ import {
   getInventoryItem,
   listInventoryItems,
   listStockCard,
-  updateInventoryItem,
   type ItemDraftInput,
 } from "@/features/inventory/api";
 
-import { createTeam, resetEmulators, signInAs } from "./setup";
+import { createTeam, manilaYear, resetEmulators, signInAs } from "./setup";
 
 const input = (over: Partial<ItemDraftInput> = {}): ItemDraftInput => ({
   name: "Bond paper, A4",
@@ -37,10 +36,10 @@ beforeEach(async () => {
 });
 
 describe("Inventory on Firestore", () => {
-  it("issues item codes per category and opens a stock card with the opening balance", async () => {
+  it("issues item codes INV-<year>-<sequence> and opens a stock card with the opening balance", async () => {
     const a = await createInventoryItem(input());
     const b = await createInventoryItem(input({ name: "Ballpen, black" }));
-    expect([a.itemCode, b.itemCode]).toEqual(["OFF-0001", "OFF-0002"]);
+    expect([a.itemCode, b.itemCode]).toEqual([`INV-${manilaYear()}-000001`, `INV-${manilaYear()}-000002`]);
     expect(a).toMatchObject({ onHand: 40, reorderLevel: 10, criticalLevel: 4, location: "GSO Stockroom A" });
     const card = await listStockCard(a.id);
     expect(card).toHaveLength(1);
@@ -53,25 +52,21 @@ describe("Inventory on Firestore", () => {
       category: "Inventory",
       key: "reorder_percent",
       value: 50,
+      updated_by_uid: writerUid(),
     });
     const item = await createInventoryItem(input());
     expect(item.reorderLevel).toBe(20);
   });
 
-  it("never lets two items share a code", async () => {
-    await createInventoryItem(input({ itemCode: "PAPER-1" }));
-    await expect(createInventoryItem(input({ itemCode: "PAPER-1" }))).rejects.toThrow(/already used/);
+  it("issues the code itself, never a typed one, and frees its claim with the item (22 Oct 2026)", async () => {
+    const a = await createInventoryItem(input({ itemCode: "PAPER-1" }));
+    const b = await createInventoryItem(input({ itemCode: "PAPER-1" }));
+    expect(a.itemCode).not.toBe("PAPER-1");
+    expect(new Set([a.itemCode, b.itemCode]).size).toBe(2);
+    expect(await claimExists(a.itemCode)).toBe(true);
+    await deleteInventoryItems([a.id]);
+    expect(await claimExists(a.itemCode)).toBe(false);
     expect(await listInventoryItems()).toHaveLength(1);
-  });
-
-  it("moves the code's claim when the code changes, and frees it on delete", async () => {
-    const item = await createInventoryItem(input({ itemCode: "PAPER-1" }));
-    await updateInventoryItem(item.id, { ...input(), itemCode: "PAPER-2" });
-    expect(await claimExists("PAPER-1")).toBe(false);
-    expect(await claimExists("PAPER-2")).toBe(true);
-    await deleteInventoryItems([item.id]);
-    expect(await claimExists("PAPER-2")).toBe(false);
-    await expect(createInventoryItem(input({ itemCode: "PAPER-2" }))).resolves.toBeTruthy();
   });
 
   it("adjusts and deducts stock with a stock-card line each, never below zero", async () => {
@@ -111,10 +106,4 @@ describe("Inventory on Firestore", () => {
     expect(await loadStockLevels()).toHaveLength(2);
   });
 
-  it("is closed to Department Users and Viewers for writing", async () => {
-    await signInAs("dept@alaminos.gov.ph");
-    await expect(createInventoryItem(input())).rejects.toThrow(/permission/);
-    await signInAs("viewer@alaminos.gov.ph");
-    expect(await listInventoryItems()).toEqual([]);
-  });
 });

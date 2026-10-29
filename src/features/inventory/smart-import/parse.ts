@@ -51,11 +51,31 @@ function toLines(words: OcrWord[]): Line[] {
   return lines;
 }
 
+/**
+ * Two-word headings read as one, so "Unit Cost" is the price and not a Unit
+ * column, "Total Cost" is a line total, and "Item Description" (the official
+ * PR and PO forms) is the item's name (22 Oct 2026).
+ */
+const HEADER_PAIRS: Record<string, ImportField> = {
+  "unit cost": "unitCost",
+  "unit price": "unitCost",
+  "unit value": "unitCost",
+  "total cost": "lineTotal",
+  "total amount": "lineTotal",
+  "total price": "lineTotal",
+  "item description": "itemName",
+  "item no": "stockNumber",
+  "stock no": "stockNumber",
+  "property no": "stockNumber",
+};
+
 /** Header keyword → field. Order matters: more specific tokens win. */
 const HEADER_MAP: { field: ImportField; tokens: string[] }[] = [
   { field: "stockNumber", tokens: ["stock", "article", "code", "no.", "no", "number", "item no"] },
   { field: "quantity", tokens: ["qty", "quantity", "count", "on hand", "onhand", "issued", "balance"] },
-  { field: "unitCost", tokens: ["unit cost", "cost", "price", "amount", "value", "unit price"] },
+  // An amount or total is quantity x unit cost, never the unit price.
+  { field: "lineTotal", tokens: ["amount", "total", "value", "ext"] },
+  { field: "unitCost", tokens: ["unit cost", "cost", "price", "unit price"] },
   { field: "unit", tokens: ["unit", "uom", "u/m", "u/i", "measure"] },
   { field: "category", tokens: ["category", "class", "classification", "type"] },
   { field: "description", tokens: ["description", "desc", "specification", "specs", "particular"] },
@@ -81,11 +101,18 @@ function detectHeader(lines: Line[]): { line: Line; columns: Column[] } | null {
   for (const line of lines) {
     const cols: Column[] = [];
     const seen = new Set<ImportField>();
-    for (const w of line.words) {
-      const field = fieldForHeaderToken(w.text);
+    const ws = line.words;
+    for (let i = 0; i < ws.length; i++) {
+      const w = ws[i];
+      const next = ws[i + 1];
+      const pairKey = next ? (w.text + " " + next.text).toLowerCase().replace(/[^a-z ]/g, "") : "";
+      const pair = HEADER_PAIRS[pairKey];
+      const field = pair ?? fieldForHeaderToken(w.text);
+      const center = pair && next ? (w.x0 + next.x1) / 2 : (w.x0 + w.x1) / 2;
+      if (pair) i++;
       if (field && !seen.has(field)) {
         seen.add(field);
-        cols.push({ field, center: (w.x0 + w.x1) / 2 });
+        cols.push({ field, center });
       }
     }
     if (cols.length >= 2 && (!best || cols.length > best.score)) {
@@ -155,12 +182,20 @@ function rowFromColumns(line: Line, columns: Column[]): ImportRow | null {
     itemName: cellText("itemName"),
     description: cellText("description"),
     category: normalizeCategory(cellText("category")),
+    categorySource: cellText("category") ? "document" : "",
     unit: unitNorm.unit,
     quantity: cleanNumber(cellText("quantity")),
     unitCost: cleanNumber(cellText("unitCost")),
+    lineTotal: cleanNumber(cellText("lineTotal")),
     uncertain: {},
   };
 
+  // A table whose only text column is "Description" names its items there.
+  const nameFromDescription = !row.itemName && !!row.description;
+  if (nameFromDescription) {
+    row.itemName = row.description;
+    row.description = "";
+  }
   // A line with no name and no quantity is not a real inventory row.
   if (!row.itemName && !row.quantity) return null;
 
@@ -175,6 +210,14 @@ function rowFromColumns(line: Line, columns: Column[]): ImportRow | null {
   ] as ImportField[]) {
     if (cellConf(f) < 60) row.uncertain[f] = true;
   }
+  if (nameFromDescription && cellConf("description") < 60) row.uncertain.itemName = true;
+  // A unit cost equal to the line total on a line of several is probably the total.
+  const qty = Number(row.quantity);
+  if (row.unitCost && row.lineTotal && qty > 1 && Number(row.unitCost) === Number(row.lineTotal)) {
+    row.uncertain.unitCost = true;
+  }
+  // Only a total was printed: the unit price is left blank for the reviewer, never derived.
+  if (!row.unitCost) row.uncertain.unitCost = true;
   // Required fields left blank are always worth flagging.
   if (!row.itemName) row.uncertain.itemName = true;
   if (!row.quantity) row.uncertain.quantity = true;
@@ -222,11 +265,13 @@ function rowFromPositional(line: Line): ImportRow | null {
     itemName: name,
     description: "",
     category: "",
+    categorySource: "",
     unit,
     quantity: qtyWord ? cleanNumber(qtyWord.text) : "",
     unitCost: "",
+    lineTotal: "",
     // A recovered, readable unit is trusted; otherwise the field stays flagged.
-    uncertain: { unit: !unit || unitConf < 60, quantity: !qtyWord, category: true },
+    uncertain: { unit: !unit || unitConf < 60, quantity: !qtyWord, category: true, unitCost: true },
   };
   // Positional extraction is inherently uncertain about the name split.
   if (line.words.some((w) => w.confidence < 70)) row.uncertain.itemName = true;
@@ -236,10 +281,10 @@ function rowFromPositional(line: Line): ImportRow | null {
 const SKIP_ROW = /^(grand\s+)?(total|subtotal|prepared|approved|noted|received|page|signature)/i;
 
 /**
- * Auto-classifies each row's category when the document did not carry one.
- * A confident classification clears the uncertainty flag; an undetermined one
- * leaves the field blank and flagged, so the administrator only has to verify
- * the few items the classifier was unsure about.
+ * Suggests a category for each row the document gave none, from the word
+ * lists in classify.ts. A suggestion is marked as one and stays flagged
+ * until the reviewer confirms or changes it (22 Oct 2026); an undetermined
+ * one leaves the field blank.
  */
 function autoClassify(rows: ImportRow[]): void {
   for (const row of rows) {
@@ -247,10 +292,9 @@ function autoClassify(rows: ImportRow[]): void {
     const result = classifyCategory(row.itemName, row.description);
     if (result.category) {
       row.category = result.category;
-      row.uncertain.category = false;
-    } else {
-      row.uncertain.category = true;
+      row.categorySource = "suggested";
     }
+    row.uncertain.category = true;
   }
 }
 

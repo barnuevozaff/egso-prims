@@ -21,6 +21,7 @@ export {
 export { ContainerCard } from "@/components/cards/container-card";
 export { InformationCard } from "@/components/cards/information-card";
 export { MetricCard } from "@/components/cards/metric-card";
+export { MetricIcon, type MetricTone } from "@/components/cards/metric-icon";
 export { SummaryCard } from "@/components/cards/summary-card";
 
 // Layout
@@ -65,6 +66,7 @@ export {
 // Toolbar
 export { SearchBar } from "@/components/toolbar/search-bar";
 export { FilterBar } from "@/components/toolbar/filter-bar";
+export { StatusTabs, type StatusTab } from "@/components/toolbar/status-tabs";
 export { DropdownFilter } from "@/components/toolbar/dropdown-filter";
 export { DateFilter } from "@/components/toolbar/date-filter";
 export { ExportButton, PrintButton } from "@/components/toolbar/toolbar-buttons";

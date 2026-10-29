@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { isOfficeEmail } from "../src/accounts.js";
+import { isAccountToken } from "../src/accounts.js";
 import { assertAllowedProject } from "../src/project.js";
 
-describe("isOfficeEmail (enforce_office_domain, migration 036)", () => {
-  it("accepts office addresses in any letter case", () => {
-    expect(isOfficeEmail("Clerk@Alaminos.gov.ph")).toBe(true);
+describe("isAccountToken: every console-created account is an Administrator (29 Oct 2026)", () => {
+  it("accepts an email-and-password session, any domain, with no claims", () => {
+    for (const email of ["egsoalaminos@gmail.com", "clerk@alaminos.gov.ph"]) {
+      expect(isAccountToken({ email, firebase: { sign_in_provider: "password" } })).toBe(true);
+    }
   });
 
-  it("rejects other domains, look-alikes and missing addresses", () => {
-    for (const email of ["clerk@gmail.com", "clerk@alaminos.gov.ph.evil.com", "alaminos.gov.ph", "", null]) {
-      expect(isOfficeEmail(email)).toBe(false);
-    }
+  it("refuses anonymous, custom-token and email-less sessions, and no session", () => {
+    expect(isAccountToken({ email: "x@gmail.com", firebase: { sign_in_provider: "anonymous" } })).toBe(false);
+    expect(isAccountToken({ email: "x@gmail.com", firebase: { sign_in_provider: "custom" } })).toBe(false);
+    expect(isAccountToken({ email: " ", firebase: { sign_in_provider: "password" } })).toBe(false);
+    expect(isAccountToken({ firebase: { sign_in_provider: "password" } })).toBe(false);
+    expect(isAccountToken(undefined)).toBe(false);
   });
 });
 

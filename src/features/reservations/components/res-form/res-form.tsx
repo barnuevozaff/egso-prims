@@ -427,7 +427,7 @@ function DatePickerMonth({
                   "flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900",
                   MONO,
                   isSelected
-                    ? "bg-neutral-900 font-semibold text-white"
+                    ? "bg-neutral-900 font-semibold text-white [[data-portal]_&]:bg-(--accent-solid)"
                     : past
                       ? "cursor-not-allowed text-[#a3a6ad]"
                       : "text-neutral-900 hover:bg-neutral-100",
@@ -546,7 +546,7 @@ function TimeSlots({ form, bookings, loading }: { form: FormApi; bookings: Booki
                 "flex h-11 flex-col items-center justify-center rounded-lg border text-[13px] font-medium leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-1",
                 MONO,
                 inRange
-                  ? "border-neutral-900 bg-neutral-900 text-white"
+                  ? "border-neutral-900 bg-neutral-900 text-white [[data-portal]_&]:border-(--accent-solid) [[data-portal]_&]:bg-(--accent-solid)"
                   : isBlocked
                     ? "cursor-not-allowed border-[#f4f4f2] bg-[#f4f4f2] text-[#6b707a]"
                     : "border-[#d4d5d2] bg-white text-neutral-900 hover:border-neutral-900",
@@ -808,7 +808,7 @@ function SummaryPanel({
       <button
         type="submit"
         disabled={submitting}
-        className="group mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-neutral-900 text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+        className="group mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-neutral-900 text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70 [[data-portal]_&]:bg-(--accent-solid) [[data-portal]_&]:hover:bg-(--accent-solid-hover) [[data-portal]_&]:focus-visible:ring-(--accent-ring)"
       >
         {submitLabel}
         {submitting ? (

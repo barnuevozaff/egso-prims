@@ -20,7 +20,7 @@ export const reservationAvailability = onCall(PUBLIC_CALLABLE, async (request) =
   if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 62) {
     throw new HttpsError("invalid-argument", "Ask for at most two months at a time.");
   }
-  if (callerOf(request).kind === "public") await enforcePublicLimit(request, "suggest");
+  if ((await callerOf(request)).kind === "public") await enforcePublicLimit(request, "suggest");
 
   const snap = await getFirestore()
     .collection("reservations")

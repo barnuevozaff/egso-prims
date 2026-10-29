@@ -5,9 +5,11 @@ import { reportLoadFailure } from "@/features/shared/load-guard";
 
 import {
   getInventoryItem,
+  listInventoryCategories,
   listInventoryItems,
   listStockCard,
 } from "@/features/inventory/api";
+import { STANDARD_CATEGORIES, mergeCategories } from "@/features/inventory/categories";
 import type {
   InventoryItem,
   InventoryListFilters,
@@ -101,4 +103,37 @@ export function useStockCard(itemId: string | null) {
   useRealtimeRefresh("stock_card", load);
 
   return { data, loading, refresh: load };
+}
+
+/**
+ * Every category an item can be filed under: the standard list, the ones an
+ * Administrator added, and any already on an item — one entry each, whatever
+ * the capitals or spacing. Shared by Add Item, Scan / Import, the filters and
+ * editing (22 Oct 2026).
+ */
+export function useInventoryCategories(items?: InventoryItem[]) {
+  const [saved, setSaved] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    try {
+      setSaved(await listInventoryCategories());
+    } catch (e) {
+      reportLoadFailure(e, "the inventory categories");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  useRealtimeRefresh("inventory_categories", load);
+
+  const categories = React.useMemo(
+    () => mergeCategories([...STANDARD_CATEGORIES], saved, (items ?? []).map((i) => i.category)),
+    [saved, items],
+  );
+  return { categories, loading, refresh: load };
 }

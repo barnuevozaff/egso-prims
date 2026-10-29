@@ -13,7 +13,6 @@ import {
   type Row,
 } from "@/lib/firestore";
 import { removeAttachmentFile, uploadAttachmentInputs } from "@/lib/firebase-storage";
-import { deductStockInTransaction } from "@/features/inventory/api.firebase";
 import {
   exportRequestsCsv,
   rowToRIS,
@@ -129,14 +128,19 @@ export async function deleteRequests(ids: string[]): Promise<void> {
 }
 
 /**
- * Status transition. Releasing deducts inventory and writes stock-card lines
- * in the same transaction as the status; a shortfall aborts all of it.
+ * Status changes that move no stock: submitting a draft, returning a slip
+ * for revision, rejecting it (with the reason as remarks), and marking a
+ * slip released under the earlier workflow Completed. Approval issues the
+ * stock and goes through approveRequest (22 Oct 2026); there is no Release.
  */
 export async function setRequestStatus(
   id: string,
   status: RISStatus,
   options: { by?: string; office?: string; remarks?: string } = {},
 ): Promise<RequestForIssuance> {
+  if (status === "Approved" || status === "Released") {
+    throw new Error("Approving a slip issues its stock; use Approve.");
+  }
   try {
     return rowToRIS(
       await runTransaction(firestore(), async (tx) => {
@@ -146,24 +150,9 @@ export async function setRequestStatus(
         const current = rowToRIS({ ...snap.data(), id });
         const at = nowIso();
         const history = [...current.history];
-
-        if (status === "Released") {
-          // Lines that name an item outside the register have nothing to deduct.
-          const entries = await deductStockInTransaction(
-            tx,
-            current.items
-              .filter((it) => !!it.inventoryItemId)
-              .map((it) => ({ itemId: it.inventoryItemId!, quantity: it.issuedQty })),
-            { documentNumber: current.risNumber, user: options.by ?? "Administrator" },
-          );
-          for (const e of entries) {
-            history.push({
-              id: uid(),
-              kind: "update",
-              text: `Stock card: ${e.itemName} −${e.quantityOut} (balance ${e.balance})`,
-              at: e.date,
-            });
-          }
+        // Checked again inside the transaction, so two people cannot both act on it.
+        if (status === "Rejected" && current.status !== "Pending Approval") {
+          throw new Error(`${current.risNumber} is ${current.status}; only a pending slip can be rejected.`);
         }
 
         const patch = {
@@ -195,6 +184,29 @@ export async function setRequestStatus(
 }
 
 /**
+ * Approves a pending slip and issues its stock in one server transaction
+ * (approveRisRequest, 22 Oct 2026): checks every line and the stock, deducts
+ * it with stock-card lines, and stamps who approved it. Approving it again
+ * changes nothing.
+ */
+export async function approveRequest(
+  id: string,
+  options: { by?: string; office?: string } = {},
+): Promise<RequestForIssuance> {
+  return rowToRIS(await callFunction<Row>("approveRisRequest", { id, by: options.by, office: options.office }));
+}
+
+/** Rejects a pending slip with a reason. No stock moves. */
+export async function rejectRequest(
+  id: string,
+  input: { reason: string; by?: string; office?: string },
+): Promise<RequestForIssuance> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error("Give a reason for rejecting the slip.");
+  return setRequestStatus(id, "Rejected", { by: input.by, office: input.office, remarks: reason });
+}
+
+/**
  * Voids a slip instead of deleting it (see api.supabase.ts). Before release
  * no stock has moved, so the status changes here, checked again inside the
  * transaction. A Released slip goes to the voidReleasedRis function, which
@@ -209,13 +221,14 @@ export async function cancelRequest(
   if (!reason) throw new Error("Give a reason for voiding the slip.");
   const current = await getRequest(id);
   if (!current) throw new Error(notFound(id));
-  if (current.status === "Released") {
+  // An issued slip gives its stock back as it is voided (voidReleasedRis).
+  if (current.status === "Released" || (current.status === "Approved" && current.stockIssuedAt)) {
     return rowToRIS(await callFunction<Row>("voidReleasedRis", { id, reason, by: input.by, office: input.office }));
   }
   const at = nowIso();
   return rowToRIS(
     await updateRow(TABLE, id, notFound(id), (r) => {
-      if (r.status === "Released" || !VOIDABLE_RIS_STATUSES.includes(r.status)) {
+      if (r.status === "Released" || r.stock_issued_at || !VOIDABLE_RIS_STATUSES.includes(r.status)) {
         throw new Error(`${r.ris_number} is ${r.status} and cannot be voided.`);
       }
       return {
@@ -264,20 +277,18 @@ export async function removeRequestAttachment(id: string, attachmentId: string):
 }
 
 /**
- * Stock suggestions for the portal's RIS form, from the portalStockSuggestions
- * Cloud Function (name, unit and whether any is on hand — nothing else of the
- * register). Any failure returns no suggestions: they are a help, and the
- * form works without them.
+ * The GSO stock list for the portal's RIS form, A to Z, from the
+ * portalStockSuggestions Cloud Function: each item's ID and code, name, unit
+ * and whether any is on hand — never the quantity. The form filters it as the
+ * requester types (29 Oct 2026). A failure throws, so the form can say the
+ * list did not load rather than that nothing matches.
  */
-export async function suggestStock(query: string): Promise<StockSuggestion[]> {
-  if (query.trim().length < 2) return [];
-  try {
-    const rows = await callFunction<{ name: string; unit: string; in_stock: boolean }[]>(
-      "portalStockSuggestions",
-      { query: query.trim() },
-    );
-    return Array.isArray(rows) ? rows.map((r) => ({ name: r.name, unit: r.unit, inStock: r.in_stock })) : [];
-  } catch {
-    return [];
-  }
+export async function listStock(): Promise<StockSuggestion[]> {
+  const rows = await callFunction<{ id: string; code: string; name: string; unit: string; in_stock: boolean }[]>(
+    "portalStockSuggestions",
+    { query: "" },
+  );
+  return Array.isArray(rows)
+    ? rows.map((r) => ({ id: r.id, code: r.code, name: r.name, unit: r.unit, inStock: r.in_stock }))
+    : [];
 }

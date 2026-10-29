@@ -17,6 +17,12 @@ describe("friendlyFirebaseError", () => {
     expect(friendlyFirebaseError(duplicate).message).toBe(duplicate.message);
   });
 
+  it("a function that failed or is not deployed yet is never worded as saved (21 Oct 2026)", () => {
+    const message = friendlyFirebaseError({ code: "functions/internal", message: "internal" }).message;
+    expect(message).toMatch(/could not complete this action, so it was not recorded/);
+    expect(message).not.toMatch(/Database error/);
+  });
+
   it("gives the same messages as the Supabase helper for connection problems", () => {
     expect(friendlyFirebaseError({ code: "unavailable", message: "x" }).message).toBe(
       "Unable to reach the server. Check your connection and try again.",

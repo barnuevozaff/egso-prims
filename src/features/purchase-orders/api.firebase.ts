@@ -16,6 +16,7 @@ import { removeAttachmentFile, uploadAttachmentInputs } from "@/lib/firebase-sto
 import {
   exportPurchaseOrdersCsv,
   rowToPO,
+  type PODetailsInput,
   type PODraftInput,
 } from "@/features/purchase-orders/api.supabase";
 import {
@@ -94,11 +95,9 @@ export async function updatePurchaseOrder(id: string, input: PODraftInput): Prom
   );
   const at = nowIso();
   return rowToPO(
+    // The source request, and the office, requester and purpose copied from
+    // it, are fixed when the order is created (firestore.rules keep them).
     await updateRow(TABLE, id, notFound(id), (r) => ({
-      pr_number: input.prNumber,
-      department_code: input.departmentCode,
-      requester: input.requester,
-      purpose: input.purpose,
       supplier_name: input.supplierName,
       supplier_address: input.supplierAddress?.trim() || null,
       supplier_tin: input.supplierTin?.trim() || null,
@@ -106,11 +105,11 @@ export async function updatePurchaseOrder(id: string, input: PODraftInput): Prom
       mode_of_procurement: input.modeOfProcurement?.trim() || null,
       payment_term: input.paymentTerm?.trim() || null,
       delivery_term: input.deliveryTerm?.trim() || null,
-      municipal_mayor: input.municipalMayor?.trim() || null,
-      bac_secretary: input.bacSecretary?.trim() || null,
+      bac_resolution_no: input.bacResolutionNo?.trim() || null,
+      bac_resolution_series: input.bacResolutionSeries?.trim() || null,
       delivery_address: input.deliveryAddress,
-      expected_delivery: input.expectedDelivery,
-      items: input.items.map((it) => ({ ...it, id: uid() })),
+      expected_delivery: input.expectedDelivery || null,
+      items: input.items.map((it) => ({ ...it, stockNo: it.stockNo?.trim() || null, id: uid() })),
       attachments: [...(r.attachments ?? []), ...uploaded.map((a) => ({ ...a, id: uid(), uploadedAt: at }))],
       history: [...(r.history ?? []), { id: uid(), kind: "update", text: "Order details updated", at }],
       updated_at: at,
@@ -135,13 +134,28 @@ export async function setPurchaseOrderStatus(
   status: POStatus,
   options: { by?: string; office?: string; remarks?: string } = {},
 ): Promise<PurchaseOrder> {
+  // Approval completes the official order (21 Oct 2026): the server checks the
+  // source request and the signatory, copies the signatories and dates it.
+  if (status === "Approved") {
+    return rowToPO(
+      await callFunction<Row>("approvePurchaseOrder", { id, by: options.by, remarks: options.remarks }),
+    );
+  }
   const at = nowIso();
   return rowToPO(
     await updateRow(TABLE, id, notFound(id), (r) => ({
       status,
       approvals: [
         ...(r.approvals ?? []),
-        { step: status, by: options.by, office: options.office, at, remarks: options.remarks, byUid: writerUid() },
+        // Firestore stores no undefined: remarks only when there are some.
+        {
+          step: status,
+          by: options.by ?? null,
+          office: options.office ?? null,
+          at,
+          ...(options.remarks ? { remarks: options.remarks } : {}),
+          byUid: writerUid(),
+        },
       ],
       history: [
         ...(r.history ?? []),
@@ -269,5 +283,21 @@ export async function removePurchaseOrderAttachment(
       ],
       updated_at: at,
     })),
+  );
+}
+
+/**
+ * Completes or corrects an order's details (21 Oct 2026). Filling in a blank
+ * is a completion; changing a recorded value or the items is a correction,
+ * which on an approved order needs a reason. The server records every change
+ * with its before and after values (updatePurchaseOrderDetails).
+ */
+export async function updatePurchaseOrderDetails(
+  id: string,
+  details: PODetailsInput,
+  options: { reason?: string; by?: string } = {},
+): Promise<PurchaseOrder> {
+  return rowToPO(
+    await callFunction<Row>("updatePurchaseOrderDetails", { id, details, reason: options.reason, by: options.by }),
   );
 }

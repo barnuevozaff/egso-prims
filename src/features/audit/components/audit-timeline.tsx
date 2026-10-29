@@ -7,6 +7,7 @@ import {
   Droplets,
   FileText,
   Fuel,
+  Settings,
   ShieldAlert,
   ShoppingCart,
   UserRound,
@@ -28,6 +29,7 @@ const MODULE_ICON: Record<string, React.ComponentType<{ className?: string }>> =
   "Water Consumption": Droplets,
   "Fuel Consumption": Fuel,
   Authentication: UserRound,
+  Settings,
   System: ShieldAlert,
 };
 

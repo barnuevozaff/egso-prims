@@ -1,7 +1,7 @@
 import type { ApprovalTimelineStep } from "@/components";
 import { getPurchaseRequest } from "@/features/purchase-requests/api";
 import { buildApprovalTimeline } from "@/features/purchase-requests/lib";
-import type { PRStatus } from "@/features/purchase-requests/types";
+import { prSummary, type PRStatus } from "@/features/purchase-requests/types";
 import { getPurchaseOrder } from "@/features/purchase-orders/api";
 import { buildPOTimeline } from "@/features/purchase-orders/lib";
 import { poSupplierName, type POStatus } from "@/features/purchase-orders/types";
@@ -60,7 +60,8 @@ const PR_OFFICE: Record<PRStatus, string> = {
 const PO_OFFICE: Record<POStatus, string> = {
   Draft: "General Services Office",
   "Pending Approval": "General Services Office",
-  Approved: "Mayor's Office",
+  // Approved is the order's final status (21 Oct 2026): the GSO prints it for signing.
+  Approved: "General Services Office",
   Released: "Supplier",
   Completed: "General Services Office",
   Cancelled: "General Services Office",
@@ -81,7 +82,7 @@ export async function trackReference(raw: string): Promise<TrackResult | null> {
     return {
       kind: "Purchase Request",
       number: pr.prNumber,
-      title: pr.purpose,
+      title: prSummary(pr),
       status: pr.status,
       currentOffice: PR_OFFICE[pr.status],
       updatedAt: pr.updatedAt,

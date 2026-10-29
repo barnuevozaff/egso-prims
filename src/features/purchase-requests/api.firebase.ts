@@ -10,6 +10,7 @@ import {
   getRow,
   matchesSearch,
   updateRow,
+  writerEmail,
   type Row,
 } from "@/lib/firestore";
 import { removeAttachmentFile, uploadAttachmentInputs } from "@/lib/firebase-storage";
@@ -100,6 +101,30 @@ export async function createPurchaseRequest(input: PRDraftInput): Promise<Purcha
   return rowToPR(row);
 }
 
+/** "Fund: — → General Fund", one line per field an edit changed, for the request's own history. */
+function changedFields(r: Record<string, unknown>, next: Record<string, unknown>): { field: string; from: string; to: string }[] {
+  const show = (v: unknown) => (v === undefined || v === null || v === "" ? "—" : String(v));
+  const fields: [string, string][] = [
+    ["department_code", "Office"],
+    ["requester", "Requested by"],
+    ["purpose", "Purpose"],
+    ["funding_source", "Fund"],
+    ["section", "Section"],
+    ["fpp", "FPP"],
+  ];
+  const out = fields
+    .filter(([k]) => show(r[k]) !== show(next[k]))
+    .map(([k, label]) => ({ field: label, from: show(r[k]), to: show(next[k]) }));
+  const items = (v: unknown) => {
+    const list = Array.isArray(v) ? (v as { description?: string; quantity?: number; unit?: string; estimatedCost?: number }[]) : [];
+    return list.map((it) => `${it.quantity} ${it.unit} ${it.description} @ ${it.estimatedCost}`).join("; ") || "—";
+  };
+  if (items(r.items) !== items(next.items)) out.push({ field: "Items", from: items(r.items), to: items(next.items) });
+  const heads = (v: unknown) => (Array.isArray(v) ? (v as { text?: string }[]).map((h) => h.text).join("; ") : "") || "—";
+  if (heads(r.headings) !== heads(next.headings)) out.push({ field: "Headings", from: heads(r.headings), to: heads(next.headings) });
+  return out;
+}
+
 export async function updatePurchaseRequest(id: string, input: PRDraftInput): Promise<PurchaseRequest> {
   const current = await getPurchaseRequest(id);
   if (!current) throw new Error(notFound(id));
@@ -109,17 +134,46 @@ export async function updatePurchaseRequest(id: string, input: PRDraftInput): Pr
   );
   const at = nowIso();
   return rowToPR(
-    await updateRow(TABLE, id, notFound(id), (r) => ({
-      department_code: input.departmentCode,
-      requester: input.requester,
-      purpose: input.purpose,
-      funding_source: input.fundingSource,
-      request_date: input.requestDate,
-      items: input.items.map((it) => ({ ...it, id: uid() })),
-      attachments: [...(r.attachments ?? []), ...uploaded.map((a) => ({ ...a, id: uid(), uploadedAt: at }))],
-      history: [...(r.history ?? []), { id: uid(), kind: "update", text: "Request details updated", at }],
-      updated_at: at,
-    })),
+    await updateRow(TABLE, id, notFound(id), (r) => {
+      const next: Record<string, unknown> = {
+        department_code: input.departmentCode,
+        requester: input.requester,
+        purpose: input.purpose.trim() || null,
+        funding_source: input.fundingSource ?? null,
+        section: input.section?.trim() || null,
+        fpp: input.fpp?.trim() || null,
+        // The form no longer edits group headings (21 Oct 2026): an edit that
+        // sends none keeps those the request already has.
+        headings:
+          input.headings === undefined
+            ? (r.headings ?? [])
+            : input.headings.map((h) => ({ id: uid(), position: h.position, text: h.text.trim() })),
+        request_date: input.requestDate,
+        items: input.items.map((it) => ({ ...it, id: uid() })),
+      };
+      // Who changed what, before and after (21 Oct 2026); the audit trail
+      // records the same from the server's side.
+      const changes = changedFields(r, next);
+      const by = writerEmail() ?? "Staff";
+      return {
+        ...next,
+        attachments: [...(r.attachments ?? []), ...uploaded.map((a) => ({ ...a, id: uid(), uploadedAt: at }))],
+        history: [
+          ...(r.history ?? []),
+          {
+            id: uid(),
+            kind: "update",
+            text: changes.length
+              ? `Updated by ${by}: ${changes.map((c) => `${c.field} ${c.from} → ${c.to}`).join("; ")}`.slice(0, 2000)
+              : `Request details saved by ${by} (no changes)`,
+            at,
+            by,
+            changes,
+          },
+        ],
+        updated_at: at,
+      };
+    }),
   );
 }
 
@@ -143,6 +197,12 @@ export async function setPurchaseRequestStatus(
   status: PRStatus,
   options: { by?: string; office?: string; remarks?: string } = {},
 ): Promise<PurchaseRequest> {
+  // Approval completes the official document (21 Oct 2026): the server checks
+  // the purpose, fund and signatories, assigns the official PR number and
+  // copies the signatories, in one transaction.
+  if (status === "Approved") {
+    return rowToPR(await callFunction<Row>("approvePurchaseRequest", { id, remarks: options.remarks }));
+  }
   const at = nowIso();
   return rowToPR(
     await updateRow(TABLE, id, notFound(id), (r) => ({
@@ -167,9 +227,9 @@ export async function setPurchaseRequestStatus(
 
 /**
  * Voids a purchase request instead of deleting it (see api.supabase.ts).
- * Checked again inside the transaction, so a request completed a moment ago
- * is not voided on stale information; firestore.rules require the reason
- * and that the step is signed by the account taking it.
+ * The voidPurchaseRequest function does it (21 Oct 2026): Administrators
+ * only, open requests only, and not while a purchase order or slip raised
+ * from the request is in force — checked and written in one transaction.
  */
 export async function cancelPurchaseRequest(
   id: string,
@@ -177,23 +237,7 @@ export async function cancelPurchaseRequest(
 ): Promise<PurchaseRequest> {
   const reason = input.reason.trim();
   if (!reason) throw new Error("Give a reason for voiding the request.");
-  const at = nowIso();
-  return rowToPR(
-    await updateRow(TABLE, id, notFound(id), (r) => {
-      if (!VOIDABLE_PR_STATUSES.includes(r.status)) {
-        throw new Error(`${r.pr_number} is ${r.status} and cannot be voided.`);
-      }
-      return {
-        status: "Cancelled",
-        approvals: [
-          ...(r.approvals ?? []),
-          { step: "Cancelled", by: input.by, office: input.office, at, remarks: reason, byUid: actorUid() },
-        ],
-        history: [...(r.history ?? []), { id: uid(), kind: "status", text: `Status → Cancelled: ${reason}`, at }],
-        updated_at: at,
-      };
-    }),
-  );
+  return rowToPR(await callFunction<Row>("voidPurchaseRequest", { id, reason, by: input.by, office: input.office }));
 }
 
 export async function addPurchaseRequestComment(
@@ -229,4 +273,14 @@ export async function removePurchaseRequestAttachment(
       updated_at: at,
     })),
   );
+}
+
+/**
+ * The order for a request approved before orders were created with the
+ * approval (21 Oct 2026): links the existing one, or creates it once.
+ * Administrators only (ensurePurchaseOrderForPR).
+ */
+export async function ensurePurchaseOrderForPR(id: string): Promise<{ poNumber: string; created: boolean }> {
+  const res = await callFunction<{ po_number: string; created: boolean }>("ensurePurchaseOrderForPR", { id });
+  return { poNumber: res.po_number, created: res.created };
 }

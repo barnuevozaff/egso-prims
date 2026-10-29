@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken } from "./helpers.js";
+import { AUTH, call, accountToken } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -103,14 +103,9 @@ describe("createPurchaseRequest", () => {
   });
 
   it("accepts attachments from staff", async () => {
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     const res = await call("createPurchaseRequest", { input: { ...pr, attachments: [attachment] } }, token);
     expect(res.result?.attachments).toHaveLength(1);
-  });
-
-  it("refuses a Viewer", async () => {
-    const { token } = await staffToken("viewer@alaminos.gov.ph", "Viewer");
-    expect((await call("createPurchaseRequest", { input: pr }, token)).error?.status).toBe("PERMISSION_DENIED");
   });
 
   it("gives simultaneous submissions different, consecutive numbers", async () => {
@@ -130,30 +125,64 @@ describe("createPurchaseRequest", () => {
     const blocked = await call("createPurchaseRequest", { input: pr });
     expect(blocked.error?.status).toBe("RESOURCE_EXHAUSTED");
     // Staff are not counted against the public limit.
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     expect((await call("createPurchaseRequest", { input: pr }, token)).error).toBeUndefined();
   }, 120_000);
 });
 
 describe("createPurchaseOrder", () => {
-  it("is for Administrators only", async () => {
+  it("is for accounts only, never the public", async () => {
+    await approvedPR();
     expect((await call("createPurchaseOrder", { input: po })).error?.status).toBe("PERMISSION_DENIED");
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("createPurchaseOrder", { input: po }, dept)).error?.status).toBe("PERMISSION_DENIED");
-    const { token: admin } = await staffToken("admin@alaminos.gov.ph", "Administrator");
+    const { token: admin } = await accountToken("admin@alaminos.gov.ph");
     const res = await call("createPurchaseOrder", { input: po, asDraft: true }, admin);
     expect(res.result).toMatchObject({ po_number: `PO-${year()}-000001`, status: "Draft" });
   });
+
+  it("only from an approved request; the number is not spent on a refusal (21 Oct 2026)", async () => {
+    const { token: admin } = await accountToken("admin@alaminos.gov.ph");
+    const missing = await call("createPurchaseOrder", { input: po }, admin);
+    expect(missing.error?.message).toBe("Purchase request PR-2026-000001 was not found.");
+    await approvedPR({ status: "Rejected" });
+    expect((await call("createPurchaseOrder", { input: po }, admin)).error?.status).toBe("FAILED_PRECONDITION");
+    await approvedPR();
+    const res = await call("createPurchaseOrder", { input: po }, admin);
+    // The first number: the refusals took none.
+    expect(res.result).toMatchObject({
+      po_number: `PO-${year()}-000001`,
+      department_code: "GSO",
+      requester: "Juan Dela Cruz",
+      pr_official_number: "100-2026-000001",
+    });
+  });
 });
 
+/** An approved request to raise orders from (synthetic). */
+async function approvedPR(over: Record<string, unknown> = {}) {
+  await db.doc("purchase_requests/PR-2026-000001").set({
+    id: "PR-2026-000001", pr_number: "PR-2026-000001", official_pr_number: "100-2026-000001",
+    department_code: "GSO", requester: "Juan Dela Cruz", purpose: "Bond paper (test data)",
+    status: "Approved", items: [], ...over,
+  });
+}
+
 describe("createRisRequest", () => {
-  it("files a public slip as submitted, never as a draft", async () => {
-    const res = await call("createRisRequest", { input: ris, asDraft: true });
+  it("files a public slip as submitted, never as a draft, from the stock list only", async () => {
+    // A portal line must name a register item (22 Oct 2026).
+    const typed = await call("createRisRequest", { input: ris });
+    expect(typed.error?.message).toBe("Choose each item from the GSO stock list.");
+    await db.doc("inventory_items/inv-alcohol").set({ item_code: "INV-2026-000001", name: "Alcohol, 500 ml", unit: "bottle", on_hand: 20 });
+    const linked = { ...ris, items: [{ ...ris.items[0], inventoryItemId: "inv-alcohol", name: "alcohol", unit: "pc" }] };
+    const res = await call("createRisRequest", { input: linked, asDraft: true });
     expect(res.result).toMatchObject({ ris_number: `RIS-${year()}-000001`, status: "Pending Approval" });
+    // The register's name, unit and code win over whatever the browser sent.
+    expect((res.result as { items: unknown[] }).items).toMatchObject([
+      { inventoryItemId: "inv-alcohol", name: "Alcohol, 500 ml", unit: "bottle", stockNo: "INV-2026-000001", requestedQty: 5 },
+    ]);
   });
 
   it("lets staff save a draft", async () => {
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     const res = await call("createRisRequest", { input: ris, asDraft: true }, token);
     expect(res.result).toMatchObject({ status: "Draft" });
   });
@@ -209,9 +238,17 @@ describe("reservationAvailability", () => {
 });
 
 describe("portalStockSuggestions", () => {
-  it("suggests items by name with only name, unit and stock", async () => {
+  // One test: the function keeps the register for 30 seconds, so a second
+  // test's items would not be seen yet.
+  it("lists the whole register with no query, and matches with one, with only ID, code, name, unit and stock", async () => {
     await db.doc("inventory_items/inv-1").set({ name: "Bond paper, A4", unit: "ream", on_hand: 4, unit_price: 250 });
-    const res = await call("portalStockSuggestions", { query: "bond" });
-    expect(res.result).toEqual([{ name: "Bond paper, A4", unit: "ream", in_stock: true }]);
+    await db.doc("inventory_items/inv-2").set({ item_code: "INV-2026-000002", name: "Correction tape", unit: "pc", on_hand: 0 });
+    const all = await call("portalStockSuggestions", { query: "" });
+    expect(all.result).toEqual([
+      { id: "inv-1", code: "", name: "Bond paper, A4", unit: "ream", in_stock: true },
+      { id: "inv-2", code: "INV-2026-000002", name: "Correction tape", unit: "pc", in_stock: false },
+    ]);
+    const bond = await call("portalStockSuggestions", { query: "bond" });
+    expect(bond.result).toEqual([{ id: "inv-1", code: "", name: "Bond paper, A4", unit: "ream", in_stock: true }]);
   });
 });

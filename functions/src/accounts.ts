@@ -1,83 +1,28 @@
-import { getAuth } from "firebase-admin/auth";
-import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { beforeUserCreated } from "firebase-functions/v2/identity";
-
 /**
- * Staff accounts.
+ * Staff accounts (29 Oct 2026).
  *
- * requireOfficeEmail ports the Postgres trigger enforce_office_domain
- * (migration 036): every account must use an office address. It is a
- * blocking function, which needs Firebase Authentication upgraded to
- * Identity Platform (free tier) before it can be deployed.
+ * Every account in Firebase Authentication is an Administrator. Accounts are
+ * created only in the Firebase console (Authentication → Users → Add user):
+ * the project has sign-up disabled (Authentication → Settings → User actions,
+ * "Enable create (sign-up)" off), so no browser, SDK or API call can make
+ * one, and holding an account is the authorisation. There are no other
+ * roles, no custom claims to set and no list of addresses to keep up;
+ * disabling or deleting the account in the console takes the access away
+ * (callerOf checks it on every call).
  *
- * setStaffRole is how an Administrator gives someone a role. The role lives
- * in a custom claim that only the Admin SDK can write, so firestore.rules and
- * storage.rules can trust it; the browser's user_metadata could not be.
+ * Only an email-and-password sign-in counts. firestore.rules, storage.rules
+ * and the app (src/features/auth/firebase-driver.ts) apply the same test.
  */
 
-export const OFFICE_DOMAINS = ["alaminos.gov.ph"];
-
+/** The roles the permission table knows. Every account holds the first. */
 export const ROLES = ["Administrator", "Department User", "Viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
-export function isOfficeEmail(email: string | undefined | null): boolean {
-  const domain = (email ?? "").toLowerCase().split("@")[1] ?? "";
-  return OFFICE_DOMAINS.includes(domain);
+/** A signed-in email-and-password session, judged from its ID token. */
+export function isAccountToken(
+  token: { email?: unknown; firebase?: { sign_in_provider?: unknown } } | undefined,
+): boolean {
+  return (
+    token?.firebase?.sign_in_provider === "password" && typeof token.email === "string" && token.email.trim() !== ""
+  );
 }
-
-export const requireOfficeEmail = beforeUserCreated((event) => {
-  const email = event.data?.email;
-  if (!isOfficeEmail(email)) {
-    throw new HttpsError(
-      "permission-denied",
-      `Accounts on this system are issued by the General Services Office. ${email ?? "(no email)"} is not an office address.`,
-    );
-  }
-});
-
-export const setStaffRole = onCall(async (request) => {
-  if (request.auth?.token.role !== "Administrator") {
-    throw new HttpsError("permission-denied", "Only an Administrator can assign roles.");
-  }
-  const { uid, role, approver } = (request.data ?? {}) as {
-    uid?: unknown;
-    role?: unknown;
-    approver?: unknown;
-  };
-  if (typeof uid !== "string" || !uid) {
-    throw new HttpsError("invalid-argument", "Choose the account to change.");
-  }
-  if (role !== null && !ROLES.includes(role as Role)) {
-    throw new HttpsError("invalid-argument", `Role must be one of ${ROLES.join(", ")}, or null.`);
-  }
-  if (approver !== undefined && typeof approver !== "boolean") {
-    throw new HttpsError("invalid-argument", "Approver must be true or false.");
-  }
-  // Approving purchase requests is the Administrator's, or a Department
-  // User's explicitly granted here. A Viewer stays read-only.
-  if (approver === true && role !== "Department User") {
-    throw new HttpsError(
-      "invalid-argument",
-      role === "Administrator"
-        ? "Administrators already approve; no separate approver grant is needed."
-        : "Only a Department User can be made an approver.",
-    );
-  }
-  if (uid === request.auth.uid && role !== "Administrator") {
-    throw new HttpsError("failed-precondition", "You cannot remove your own Administrator role.");
-  }
-
-  const auth = getAuth();
-  const user = await auth.getUser(uid);
-  if (!isOfficeEmail(user.email)) {
-    throw new HttpsError("failed-precondition", "Only office accounts can be given a role.");
-  }
-  await auth.setCustomUserClaims(uid, {
-    ...(user.customClaims ?? {}),
-    role: role ?? null,
-    approver: approver === true,
-  });
-  // Signed-in sessions pick the new role up on their next token refresh.
-  await auth.revokeRefreshTokens(uid);
-  return { uid, role, approver: approver === true };
-});

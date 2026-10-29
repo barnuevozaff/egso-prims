@@ -212,7 +212,8 @@ export function EnterpriseTable<TData>({
                     key={row.id}
                     interactive={!!onRowClick}
                     data-state={row.getIsSelected() ? "selected" : undefined}
-                    className={cn(row.getIsSelected() && "bg-neutral-50/70")}
+                    // Selected rows take the faint burgundy of a selection elsewhere (24 Oct 2026).
+                    className={cn(row.getIsSelected() && "bg-[#fdf6f7]")}
                     onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   >
                     {row.getVisibleCells().map((cell, i) => {

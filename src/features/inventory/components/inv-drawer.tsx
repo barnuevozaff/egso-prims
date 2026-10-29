@@ -1,40 +1,53 @@
 import * as React from "react";
-import { FileDown, Pencil, Printer } from "lucide-react";
+import { PackagePlus, Pencil, Printer } from "lucide-react";
 
 import {
   Button,
+  ConfirmationModal,
   Drawer,
   DrawerActions,
   DrawerBody,
   DrawerFooter,
   DrawerHeader,
+  Field,
+  Input,
   Skeleton,
   SkeletonText,
   StatusBadge,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   toast,
 } from "@/components";
-import {
-  addInventoryComment,
-  removeInventoryAttachment,
-} from "@/features/inventory/api";
+import { addInventoryStock } from "@/features/inventory/api";
 import { useInventoryItem, useStockCard } from "@/features/inventory/hooks";
-import { stockStatusOf } from "@/features/inventory/types";
-import { listPurchaseOrders } from "@/features/purchase-orders/api";
-import type { PurchaseOrder } from "@/features/purchase-orders/types";
-import { AttachmentList } from "@/features/shared/attachment-list";
-import { CommentThread } from "@/features/shared/comment-thread";
-import { HistoryFeed } from "@/features/shared/history-feed";
-import { InvOverview } from "@/features/inventory/components/inv-overview";
-import { StockCardTable } from "@/features/inventory/components/inv-stock-card";
-import { supplierById } from "@/features/purchase-orders/types";
-import { reportLoadFailure } from "@/features/shared/load-guard";
+import { stockStateOf, type StockCardEntry } from "@/features/inventory/types";
+import { StockCardSheet } from "@/features/inventory/components/stock-card-sheet";
+import { getRequest } from "@/features/ris/api";
+import { printDate } from "@/features/shared/procurement-print-form";
 import { useAuth } from "@/features/auth/auth-context";
+import { can } from "@/features/auth/types";
+import { cn } from "@/lib/utils";
 
-/** Right slide-over: item overview + stock card + attachments/comments/history. */
+/**
+ * Inventory item details (24 Oct 2026): what the item is, how much is on
+ * hand, and its stock history — receipts and RIS issues with the balance
+ * after each. Actions: Add Stocks, Print Stock Card (the official Appendix
+ * 53 form), Edit, Close. No location, supplier, levels, comments or
+ * attachments; their stored values are kept, only not shown.
+ */
+
+const qty = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 2 });
+const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** One stock-card line in words: what moved, and which way. */
+function movement(e: StockCardEntry, office?: string): { text: string; tone: "in" | "out" } {
+  if (e.quantityOut > 0) {
+    const label = e.type === "RIS Release" ? "Issued" : e.type === "Correction" || e.type === "Manual Adjustment" ? "Adjusted" : "Out";
+    return { text: `${label} −${qty(e.quantityOut)}${office ? ` · ${office}` : ""}`, tone: "out" };
+  }
+  const label =
+    e.type === "Beginning Balance" ? "Opening stock" : e.type === "Return" ? "Returned" : e.type === "Stock Receipt" ? "Received" : "Added";
+  return { text: `${label} +${qty(e.quantityIn)}`, tone: "in" };
+}
+
 export function InvDrawer({
   itemId,
   open,
@@ -49,128 +62,216 @@ export function InvDrawer({
   onEdit?: (itemId: string) => void;
 }) {
   const { user } = useAuth();
-  const { data: item, loading, setData } = useInventoryItem(open ? itemId : null);
+  const { data: item, loading, refresh } = useInventoryItem(open ? itemId : null);
   const stockCard = useStockCard(open ? itemId : null);
-  const [deliveries, setDeliveries] = React.useState<PurchaseOrder[]>([]);
+  const history = React.useMemo(() => [...stockCard.data].sort((a, b) => a.date.localeCompare(b.date)), [stockCard.data]);
+  const isAdmin = user?.role === "Administrator";
 
+  // Issues saved before the office was recorded take it from their slip.
+  const [offices, setOffices] = React.useState<Record<string, string>>({});
   React.useEffect(() => {
-    if (!item) {
-      setDeliveries([]);
-      return;
+    const missing = [
+      ...new Set(history.filter((e) => e.quantityOut > 0 && !e.office && e.documentNumber.startsWith("RIS-")).map((e) => e.documentNumber)),
+    ];
+    if (missing.length === 0) return;
+    let live = true;
+    void Promise.all(
+      missing.map((n) =>
+        getRequest(n)
+          .then((r) => [n, r?.departmentCode ?? ""] as const)
+          .catch(() => [n, ""] as const),
+      ),
+    ).then((pairs) => {
+      if (live) setOffices(Object.fromEntries(pairs.filter(([, o]) => o)));
+    });
+    return () => {
+      live = false;
+    };
+  }, [history]);
+
+  // Add Stocks
+  const [adding, setAdding] = React.useState(false);
+  const [addQty, setAddQty] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const requestId = React.useRef("");
+  const addAmount = Number(addQty);
+  const addValid = addQty.trim() !== "" && Number.isFinite(addAmount) && addAmount > 0;
+
+  const openAdd = () => {
+    requestId.current = crypto.randomUUID(); // one per dialog: a retry adds nothing more
+    setAddQty("");
+    setAdding(true);
+  };
+
+  const saveAdd = async () => {
+    if (!item || !addValid || saving) return;
+    setSaving(true);
+    try {
+      const r = await addInventoryStock({
+        requestId: requestId.current,
+        itemId: item.id,
+        quantity: addAmount,
+      });
+      await Promise.all([refresh(), stockCard.refresh()]);
+      toast.success(`${item.name}: ${qty(r.onHand)} ${item.unit} on hand`);
+      onChanged?.();
+      setAdding(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "The stock was not added.");
     }
-    // Inventory still references the supplier register; orders are matched on
-    // the name, which is what a purchase order now records.
-    void listPurchaseOrders({ supplierName: supplierById(item.supplierId)?.name })
-      .then((pos) =>
-        setDeliveries(pos.filter((po) => ["Released", "Completed"].includes(po.status))),
-      )
-      .catch((e) => reportLoadFailure(e, "this item's deliveries"));
-  }, [item?.supplierId, item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setSaving(false);
+  };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} size="2xl">
-      {loading || !item ? (
-        <div className="p-5">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="mt-2 h-3 w-56" />
-          <SkeletonText lines={6} className="mt-6" />
-        </div>
-      ) : (
-        <>
-          <DrawerHeader
-            title={item.name}
-            description={`${item.itemCode} · ${item.category}`}
-            onClose={() => onOpenChange(false)}
-          >
-            <div className="mt-2">
-              <StatusBadge status={stockStatusOf(item)} />
-            </div>
-          </DrawerHeader>
-          <DrawerBody>
-            <div className="space-y-5">
-              <InvOverview
-                item={item}
-                recentDeliveries={deliveries}
-                recentMovements={stockCard.data.slice(0, 4)}
-              />
+    <>
+      {/* The printed Stock Card lives outside the drawer: dialogs never print. */}
+      {open && item && !stockCard.loading && <StockCardSheet item={item} entries={history} offices={offices} />}
+      <Drawer open={open} onOpenChange={onOpenChange} size="md">
+        {loading || !item ? (
+          <div className="p-5">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="mt-2 h-3 w-56" />
+            <SkeletonText lines={6} className="mt-6" />
+          </div>
+        ) : (
+          <>
+            <DrawerHeader title={item.name} description={`${item.itemCode} · ${item.category}`} onClose={() => onOpenChange(false)}>
+              {item.onHand <= 0 && (
+                <div className="mt-2">
+                  <StatusBadge status={stockStateOf(item)} />
+                </div>
+              )}
+            </DrawerHeader>
+            <DrawerBody>
+              <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-[12px] border border-[#ececea] bg-[#ececea]">
+                <div className="bg-white px-4 py-3">
+                  <dt className="text-[12.5px] text-[#6b707a]">Stock on hand</dt>
+                  <dd className="mt-0.5 text-[20px] font-semibold tabular-nums text-neutral-900">
+                    {qty(item.onHand)} <span className="text-[14px] font-normal text-[#5b606b]">{item.unit}</span>
+                  </dd>
+                </div>
+                <div className="bg-white px-4 py-3">
+                  <dt className="text-[12.5px] text-[#6b707a]">Unit of measure</dt>
+                  <dd className="mt-1 text-[14px] text-neutral-900">{item.unit}</dd>
+                </div>
+                <div className="bg-white px-4 py-3">
+                  <dt className="text-[12.5px] text-[#6b707a]">Unit price</dt>
+                  <dd className="mt-1 text-[14px] tabular-nums text-neutral-900">{peso(item.unitPrice)}</dd>
+                </div>
+              </dl>
 
-              <Tabs defaultValue="stock-card">
-                <TabsList className="w-full justify-start bg-neutral-100">
-                  <TabsTrigger value="stock-card" className="text-[12.5px]">
-                    Stock Card
-                  </TabsTrigger>
-                  <TabsTrigger value="attachments" className="text-[12.5px]">
-                    Attachments ({item.attachments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="comments" className="text-[12.5px]">
-                    Comments ({item.comments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="history" className="text-[12.5px]">
-                    History
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="stock-card" className="pt-3">
-                  <StockCardTable entries={stockCard.data} loading={stockCard.loading} />
-                </TabsContent>
-                <TabsContent value="attachments" className="pt-3">
-                  <AttachmentList
-                    attachments={item.attachments}
-                    onDelete={async (a) => {
-                      const updated = await removeInventoryAttachment(item.id, a.id);
-                      setData(updated);
-                      onChanged?.();
-                    }}
-                  />
-                </TabsContent>
-                <TabsContent value="comments" className="pt-3">
-                  <CommentThread
-                    comments={item.comments}
-                    onSubmit={async (text) => {
-                      const updated = await addInventoryComment(item.id, {
-                        author: user?.name ?? "Staff",
-                        office: user?.office ?? "General Services Office",
-                        text,
-                      });
-                      setData(updated);
-                    }}
-                  />
-                </TabsContent>
-                <TabsContent value="history" className="pt-3">
-                  <HistoryFeed entries={item.history} />
-                </TabsContent>
-              </Tabs>
-            </div>
-          </DrawerBody>
-          <DrawerFooter>
-            <DrawerActions>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => toast.success(`Exporting ${item.itemCode} stock card as PDF`)}
+              <section className="mt-5" aria-labelledby="stock-history-title">
+                <h3 id="stock-history-title" className="text-[13.5px] font-semibold text-neutral-900">
+                  Stock history
+                </h3>
+                {stockCard.loading ? (
+                  <SkeletonText lines={4} className="mt-3" />
+                ) : history.length === 0 ? (
+                  <p className="mt-2 rounded-[10px] border border-dashed border-[#e6e6e3] px-4 py-5 text-center text-[13px] text-[#5b606b]">
+                    No stock movements yet.
+                  </p>
+                ) : (
+                  <table className="mt-2 w-full table-fixed border-collapse text-[13px]">
+                    <colgroup>
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "26%" }} />
+                      <col />
+                      <col style={{ width: "16%" }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="text-left text-[12.5px] text-[#6b707a]">
+                        <th className="py-2 pr-2 font-normal">Date</th>
+                        <th className="py-2 pr-2 font-normal">Reference</th>
+                        <th className="py-2 pr-2 font-normal">Movement</th>
+                        <th className="py-2 text-right font-normal">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((e) => {
+                        const m = movement(e, e.office ?? offices[e.documentNumber]);
+                        return (
+                          <tr key={e.id} className="border-t border-[#f0f0ee] align-top">
+                            <td className="py-2 pr-2 tabular-nums text-neutral-700">{printDate(e.date)}</td>
+                            <td className="truncate py-2 pr-2 font-['Geist_Mono',ui-monospace,monospace] text-[12.5px] text-neutral-700">
+                              {e.documentNumber || "—"}
+                            </td>
+                            <td className={cn("py-2 pr-2 tabular-nums", m.tone === "in" ? "text-[#166534]" : "text-[#9a3412]")}>{m.text}</td>
+                            <td className="py-2 text-right tabular-nums text-neutral-900">{qty(e.balance)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </section>
+            </DrawerBody>
+            <DrawerFooter>
+              <DrawerActions>
+                <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
+                {can(user, "manage:inventory") && (
+                  <Button variant="secondary" onClick={() => onEdit?.(item.id)}>
+                    <Pencil />
+                    Edit
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => window.print()} disabled={stockCard.loading}>
+                  <Printer />
+                  Print Stock Card
+                </Button>
+                {isAdmin && (
+                  <Button onClick={openAdd}>
+                    <PackagePlus />
+                    Add Stocks
+                  </Button>
+                )}
+              </DrawerActions>
+            </DrawerFooter>
+
+            <ConfirmationModal
+              open={adding}
+              onOpenChange={(o) => {
+                if (!saving) setAdding(o);
+              }}
+              tone="success"
+              icon={PackagePlus}
+              title={`Add stock to ${item.name}`}
+              description={`${item.itemCode} · now ${qty(item.onHand)} ${item.unit} on hand. The receipt is written to the stock card.`}
+              confirmLabel="Add Stocks"
+              loading={saving}
+              confirmDisabled={!addValid}
+              onConfirm={saveAdd}
+            >
+              <Field
+                label={`Quantity received (${item.unit})`}
+                required
+                className="mt-3"
+                error={addQty.trim() !== "" && !addValid ? "Enter a quantity greater than 0" : undefined}
               >
-                <FileDown />
-                Export PDF
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  toast.info(`Preparing ${item.itemCode} for printing`);
-                  window.print();
-                }}
-              >
-                <Printer />
-                Print
-              </Button>
-              <Button onClick={() => onEdit?.(item.id)}>
-                <Pencil />
-                Edit
-              </Button>
-            </DrawerActions>
-          </DrawerFooter>
-        </>
-      )}
-    </Drawer>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  autoFocus
+                  value={addQty}
+                  onChange={(e) => setAddQty(e.target.value)}
+                  className="tabular-nums"
+                />
+              </Field>
+              {addValid && (
+                <p className="mt-3 text-[13px] text-[#5b606b]">
+                  Stock after:{" "}
+                  <span className="tabular-nums text-neutral-900">
+                    {qty(item.onHand)} → {qty(item.onHand + addAmount)} {item.unit}
+                  </span>
+                </p>
+              )}
+            </ConfirmationModal>
+          </>
+        )}
+      </Drawer>
+    </>
   );
 }

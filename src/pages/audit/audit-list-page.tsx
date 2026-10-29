@@ -16,13 +16,14 @@ import {
 } from "lucide-react";
 
 import {
+  Button,
   ContainerCard,
   DepartmentChip,
   DropdownFilter,
-  Button,
   EnterpriseTable,
   FilterBar,
   MetricCard,
+  MetricIcon,
   PageHeader,
   PageTransition,
   PrintButton,
@@ -278,28 +279,26 @@ export function AuditListPage() {
       />
 
       <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="Total Audit Logs" value={totalLogs} icon={History} loading={stats.loading} />
+        <MetricCard label="Total Audit Logs" tone="brand" value={totalLogs} icon={History} loading={stats.loading} />
         <MetricCard label="Today's Activities" value={todayCount} icon={Activity} loading={stats.loading} />
         <MetricCard label="Active Users (24h)" value={activeUsers} icon={Users} loading={stats.loading} />
-        <MetricCard label="Failed Login Attempts" value={failedLogins} icon={UserRound} loading={stats.loading} />
-        {/* Text-valued KPI: same ContainerCard pattern the Energy dashboard uses. */}
-        <ContainerCard hoverable className="p-4">
-          <div className="flex items-center gap-2">
-            <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-              <ServerCog className="h-3.5 w-3.5" />
-            </div>
-            <span className="text-[12px] text-neutral-500">Most Active Module</span>
+        <MetricCard label="Failed Login Attempts" tone="critical" value={failedLogins} icon={UserRound} loading={stats.loading} />
+        {/* Text-valued KPI, in the same figure anatomy as MetricCard (24 Oct 2026). */}
+        <ContainerCard className="px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">Most Active Module</span>
+            <MetricIcon icon={ServerCog} />
           </div>
-          <div className="mt-3 truncate text-[14px] font-semibold tracking-tight text-neutral-900">
+          <div className="mt-2 truncate text-[16px] font-semibold leading-8 tracking-tight text-neutral-900">
             {mostActiveModule?.module ?? "—"}
           </div>
           {mostActiveModule && (
-            <div className="mt-0.5 text-[12.5px] tabular-nums text-neutral-500">
+            <div className="mt-0.5 text-[12.5px] tabular-nums text-[#5b606b]">
               {mostActiveModule.count.toLocaleString("en-PH")} activities
             </div>
           )}
         </ContainerCard>
-        <MetricCard label="Critical Events" value={criticalEvents} icon={ShieldAlert} loading={stats.loading} />
+        <MetricCard label="Critical Events" tone="critical" value={criticalEvents} icon={ShieldAlert} loading={stats.loading} />
       </div>
 
       <div className="min-h-0 flex-1">

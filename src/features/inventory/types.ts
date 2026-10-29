@@ -98,6 +98,8 @@ export interface InventoryItem {
 
 export type StockTransactionType =
   | "Beginning Balance"
+  /** Add Stocks (24 Oct 2026): quantity received for an existing item. */
+  | "Stock Receipt"
   | "Purchase Order"
   | "RIS Release"
   | "Manual Adjustment"
@@ -121,6 +123,8 @@ export interface StockCardEntry {
   remarks?: string;
   /** User who performed the transaction. */
   user: string;
+  /** Issues only: the requesting office's code, for the Stock Card's Issue - Office column. */
+  office?: string;
 }
 
 export type StockStatus = "Available" | "Low Stock" | "Critical" | "Out of Stock";
@@ -142,6 +146,15 @@ export function stockStatusOf(
   return "Available";
 }
 
+/**
+ * What the Inventory screens show (24 Oct 2026): in stock or not. Reorder
+ * and critical levels are no longer part of the workflow, so no "low" or
+ * "critical" warning is derived from them here.
+ */
+export function stockStateOf(item: Pick<InventoryItem, "onHand">): "Available" | "Out of Stock" {
+  return item.onHand > 0 ? "Available" : "Out of Stock";
+}
+
 /** Item value = available quantity × unit price. */
 export function itemValue(item: Pick<InventoryItem, "onHand" | "unitPrice">): number {
   return item.onHand * item.unitPrice;
@@ -156,4 +169,48 @@ export interface InventoryListFilters {
   location?: string;
   dateFrom?: Date;
   dateTo?: Date;
+}
+
+/* ---------------- Scan / Import (22 Oct 2026) ---------------- */
+
+/**
+ * What an imported document shows. "opening": quantities are stock on hand
+ * (an inventory count), saved as opening stock. "catalog": the document only
+ * lists items (a PR or PO, a price list); the items are registered with no
+ * stock, because ordered or requested quantities are not on the shelf.
+ */
+export type ImportBasis = "opening" | "catalog";
+
+/** One reviewed row sent to createInventoryItems. */
+export interface ImportItemRow {
+  name: string;
+  category: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  /** Add `quantity` as stock received to this existing item instead of creating one. */
+  addToItemId?: string | null;
+  /** The review row's ID: keeps each row matched to what it saved across retries. */
+  key: string;
+}
+
+export interface ImportRequest {
+  /** Same ID on a retry, so rows already saved are not saved again. */
+  requestId: string;
+  basis: ImportBasis;
+  sourceName: string;
+  rows: ImportItemRow[];
+}
+
+/** What happened to one row, as Firestore confirmed it. */
+export interface ImportRowResult {
+  index: number;
+  ok: boolean;
+  action?: "created" | "added-stock";
+  /** Saved by an earlier attempt of the same request. */
+  already?: boolean;
+  id?: string;
+  code?: string;
+  name: string;
+  error?: string;
 }

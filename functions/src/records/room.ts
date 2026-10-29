@@ -218,7 +218,7 @@ const SHELF_NAME = "Give the shelf a name — what the office calls it out loud.
 
 /** Adds a shelf with its levels A–E. */
 export const createRecordShelf = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "change the Records Room");
   const input = record(request.data ?? {});
   const name = text(input.name, "Shelf name", { max: 120, optional: true })?.trim();
@@ -235,7 +235,7 @@ export const createRecordShelf = onCall(async (request) => {
 
 /** Removes an empty shelf and its levels; refused while any box stands on it. */
 export const deleteRecordShelf = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "change the Records Room");
   const id = requiredText(record(request.data ?? {}).id, "Shelf", 100);
   await db().runTransaction(async (tx) => {
@@ -257,7 +257,7 @@ export const deleteRecordShelf = onCall(async (request) => {
  * position: a taken position is refused rather than doubled.
  */
 export const moveRecordBox = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "move boxes");
   const input = record(request.data ?? {});
   const id = requiredText(input.boxId, "Box", 100);

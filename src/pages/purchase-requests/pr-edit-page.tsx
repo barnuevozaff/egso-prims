@@ -49,6 +49,15 @@ export function PREditPage() {
             action={{ label: "Back to list", onClick: () => navigate("/purchase-requests") }}
           />
         </ContainerCard>
+      ) : pr.status !== "Draft" && pr.status !== "Submitted" ? (
+        // An approved request is an official document (21 Oct 2026).
+        <ContainerCard className="mx-auto w-full max-w-3xl">
+          <ErrorState
+            title={`${pr.prNumber} can no longer be edited`}
+            description={`It is ${pr.status}${pr.officialPrNumber ? ` as official PR No. ${pr.officialPrNumber}` : ""}. Return it to draft from its drawer to revise it; it keeps its numbers.`}
+            action={{ label: "Back to list", onClick: () => navigate("/purchase-requests") }}
+          />
+        </ContainerCard>
       ) : (
         <PRForm
           initial={pr}

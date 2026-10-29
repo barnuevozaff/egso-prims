@@ -144,13 +144,12 @@ describe("Records Management forms on Firestore", () => {
     await expect(updateSchedule(s.id, schedule())).rejects.toThrow(/voided and can no longer be changed/);
   });
 
-  it("is changed by Administrators only; every staff role reads it", async () => {
+  it("every account reads and changes it", async () => {
     const s = await createSchedule(schedule());
-    await signInAs("dept@alaminos.gov.ph");
-    await expect(createSchedule(schedule())).rejects.toThrow(/permission/);
-    await expect(updateSchedule(s.id, schedule({ status: "Approved" }))).rejects.toThrow(/permission/);
-    await signInAs("viewer@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     expect((await listSchedules()).map((x) => x.id)).toEqual([s.id]);
+    const t = await createSchedule(schedule());
+    expect((await listSchedules()).map((x) => x.id).sort()).toEqual([s.id, t.id].sort());
   });
 });
 

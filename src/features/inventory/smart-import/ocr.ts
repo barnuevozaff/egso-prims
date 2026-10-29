@@ -189,6 +189,8 @@ async function ocrCanvas(
 export async function extractDocument(
   files: File[],
   onProgress?: (fraction: number, note: string) => void,
+  /** Refuse a PDF longer than this before reading any page (22 Oct 2026). */
+  maxPages = Infinity,
 ): Promise<OcrResult> {
   const words: OcrWord[] = [];
   // Canvases that still need OCR, tagged with a global page number.
@@ -204,6 +206,9 @@ export async function extractDocument(
       pdfjs ??= await loadPdfjs();
       onProgress?.(0, `Reading ${file.name}…`);
       const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+      if (doc.numPages > maxPages) {
+        throw new Error(`${file.name} has ${doc.numPages} pages; up to ${maxPages} can be read at once. Split it and import each part.`);
+      }
       for (let n = 1; n <= doc.numPages; n++) {
         pageCounter++;
         const page = await doc.getPage(n);

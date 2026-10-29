@@ -19,7 +19,7 @@ const loadFirestore = () => import("@/features/purchase-orders/api.firebase") as
 const pick = <K extends keyof Api>(name: K): Api[K] =>
   dataBackend === "firebase" ? lazyCall(loadFirestore, name) : supabaseApi[name];
 
-export type { PODraftInput } from "@/features/purchase-orders/api.supabase";
+export type { PODetailsInput, PODraftInput } from "@/features/purchase-orders/api.supabase";
 
 export const listPurchaseOrders = pick("listPurchaseOrders");
 export const getPurchaseOrder = pick("getPurchaseOrder");
@@ -32,6 +32,7 @@ export const issuePurchaseOrder = pick("issuePurchaseOrder");
 export const acknowledgePurchaseOrder = pick("acknowledgePurchaseOrder");
 export const addPurchaseOrderComment = pick("addPurchaseOrderComment");
 export const removePurchaseOrderAttachment = pick("removePurchaseOrderAttachment");
+export const updatePurchaseOrderDetails = pick("updatePurchaseOrderDetails");
 
 // The same for both databases.
 export const exportPurchaseOrdersCsv = supabaseApi.exportPurchaseOrdersCsv;

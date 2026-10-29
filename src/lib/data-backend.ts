@@ -19,6 +19,7 @@ export const FIRESTORE_TABLES: ReadonlySet<string> = new Set([
   "ris_requests",
   "reservations",
   "inventory_items",
+  "inventory_categories",
   "stock_card",
   "notifications",
   "audit_logs",

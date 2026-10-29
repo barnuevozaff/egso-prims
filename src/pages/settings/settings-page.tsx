@@ -8,6 +8,7 @@ import {
   Save,
   ShieldAlert,
   ShoppingCart,
+  Signature,
 } from "lucide-react";
 
 import {
@@ -29,6 +30,7 @@ import { setConfigValues } from "@/features/config/api";
 import { useConfiguration } from "@/features/config/hooks";
 import {
   CONFIG_DEFINITIONS,
+  SIGNATORY_ROLES,
   type ConfigCategory,
   type ConfigDefinition,
   type ConfigValue,
@@ -60,7 +62,7 @@ const MODULE_SECTIONS: SectionSpec[] = [
     category: "Procurement",
     icon: ShoppingCart,
     description:
-      "Choices offered on Purchase Requests and Purchase Orders — the units an item can be counted in, and the fund a new request starts against.",
+      "Choices offered on Purchase Requests and Purchase Orders — the units an item can be counted in, the fund a new request starts against, and the terms a new order starts with.",
   },
   {
     category: "Inventory",
@@ -97,6 +99,21 @@ const OFFICE_SECTIONS: SectionSpec[] = [
     icon: Hash,
     description:
       "How PR, PO, RIS, FR and VT numbers are formed. Read by the database when a number is issued, so a change applies to every module at once.",
+  },
+  {
+    // The stored category keeps its name; it has always held the PR's signatories.
+    category: "Signatories",
+    title: "Purchase Request signatories",
+    icon: Signature,
+    description:
+      "The three signatories of the official Purchase Request. Their roles and designations are the form's; enter the name of the person in each post. Each approved request keeps the names it was approved with.",
+  },
+  {
+    category: "PO Signatories",
+    title: "Purchase Order signatories",
+    icon: Signature,
+    description:
+      "The Municipal Mayor (\"Very truly yours,\") and the BAC Secretary (\"Certified Correct\") on the official Purchase Order. Enter the name of the person in each post. Each order keeps the names it was authorized with; the supplier's Conforme is signed on the printed order.",
   },
 ];
 
@@ -146,17 +163,37 @@ export function SettingsPage() {
   const saveSection = async (category: string) => {
     const changed = dirtyIn(category);
     if (changed.length === 0) return;
+    // An official's printed name: trimmed, a sensible length, and — on the
+    // Purchase Request, whose approval needs all three — never blank.
+    if (category in SIGNATORY_ROLES) {
+      const problem = changed
+        .map((d) => [d, String(valueOf(d) ?? "").trim()] as const)
+        .find(([, v]) => v.length > 120 || (category === "Signatories" && !v));
+      if (problem) {
+        toast.error(
+          problem[1].length > 120
+            ? `${problem[0].label}: keep the name under 120 characters.`
+            : `${problem[0].label}: enter the printed name. A Purchase Request is not approved without it.`,
+        );
+        return;
+      }
+      for (const d of changed) setDraftValue(d, String(valueOf(d) ?? "").trim());
+    }
     setSaving(category);
     try {
       await setConfigValues(
-        changed.map((d) => ({ category: d.category, key: d.key, value: valueOf(d) })),
+        changed.map((d) => ({
+          category: d.category,
+          key: d.key,
+          value: category in SIGNATORY_ROLES ? String(valueOf(d) ?? "").trim() : valueOf(d),
+        })),
       );
       setDraft((prev) => {
         const next = { ...prev };
         for (const d of changed) delete next[fieldId(d)];
         return next;
       });
-      toast.success(`${MODULE_SECTIONS.find((m) => m.category === category)?.title ?? category} settings saved`);
+      toast.success(`${[...MODULE_SECTIONS, ...OFFICE_SECTIONS].find((m) => m.category === category)?.title ?? category} settings saved`);
       void refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to save settings");
@@ -257,6 +294,46 @@ export function SettingsPage() {
     );
   };
 
+  /**
+   * The signatories of an official form (21 Oct 2026): each role and its
+   * designation are the form's and shown as text; only the printed name of
+   * the person in the post is edited.
+   */
+  const renderSignatories = (category: keyof typeof SIGNATORY_ROLES) => (
+    <div className="divide-y divide-[#f0f0ee] rounded-[12px] border border-[#ececea]">
+      {SIGNATORY_ROLES[category].map((r) => {
+        const d = sectionDefs(category).find((x) => x.key === r.key);
+        if (!d) return null;
+        const value = String(valueOf(d) ?? "");
+        const missing = category === "Signatories" && !value.trim();
+        return (
+          <div key={r.key} className="grid gap-x-6 gap-y-2 px-4 py-3.5 sm:grid-cols-[minmax(0,300px)_minmax(0,1fr)] sm:items-center">
+            <div>
+              <div className="text-[13.5px] font-medium text-neutral-900">{r.role}</div>
+              <div className="text-[12.5px] text-[#5b606b]">
+                {r.designation}
+                <span className="text-[#6b707a]"> · fixed by the form</span>
+              </div>
+            </div>
+            <div className="max-w-[560px]">
+              <Input
+                aria-label={`${r.role}, ${r.designation}: printed name`}
+                value={value}
+                maxLength={120}
+                placeholder="Printed name"
+                invalid={missing}
+                onChange={(e) => setDraftValue(d, e.target.value)}
+              />
+              {missing && (
+                <p className="mt-1 text-[12px] text-[#9a3412]">Not set — a Purchase Request cannot be approved until it is.</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   /** One settings card: what it controls, its fields, and its save bar. */
   const renderSection = ({ category, title, icon: Icon, description }: SectionSpec) => {
     const dirty = dirtyIn(category);
@@ -307,6 +384,8 @@ export function SettingsPage() {
               <Skeleton key={i} className="h-10 w-full rounded-lg" />
             ))}
           </div>
+        ) : category in SIGNATORY_ROLES ? (
+          renderSignatories(category as keyof typeof SIGNATORY_ROLES)
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {sectionDefs(category).map(renderField)}

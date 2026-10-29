@@ -59,7 +59,7 @@ describe("Reservations on Firestore", () => {
   });
 
   it("staff list, filter, edit, comment and approve; edits are checked for clashes too", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+    await signInAs("clerk@alaminos.gov.ph");
     const a = await createReservation(input());
     const b = await createReservation(input({ facilityId: "Covered Court", departmentCode: "MHO" }));
     expect((await listReservations()).map((r) => r.id)).toEqual([b.id, a.id]);
@@ -81,8 +81,4 @@ describe("Reservations on Firestore", () => {
     await expect(createReservation(input())).resolves.toBeTruthy();
   });
 
-  it("a Viewer cannot book", async () => {
-    await signInAs("viewer@alaminos.gov.ph");
-    await expect(createReservation(input())).rejects.toThrow(/Viewers cannot file reservations/);
-  });
 });

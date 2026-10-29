@@ -1,32 +1,42 @@
 import { createHash } from "node:crypto";
 
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 
-import { ROLES, type Role } from "../accounts.js";
+import { isAccountToken, type Role } from "../accounts.js";
 
 /**
- * Who is calling a function. The role comes only from the custom claim the
- * Admin SDK sets (setStaffRole); a signed-in account without one is treated
- * like any member of the public.
+ * Who is calling a function. Every account in Firebase Authentication is an
+ * Administrator (accounts.ts); a caller without one — the public portal — is
+ * public.
  */
 export type Caller =
   | { kind: "staff"; role: Role; uid: string; email: string; approver: boolean }
   | { kind: "public" };
 
-export function callerOf(request: CallableRequest): Caller {
-  const token = request.auth?.token;
-  const role = token?.role;
-  if (request.auth && typeof role === "string" && (ROLES as readonly string[]).includes(role)) {
-    return {
-      kind: "staff",
-      role: role as Role,
-      uid: request.auth.uid,
-      email: String(token?.email ?? ""),
-      approver: token?.approver === true,
-    };
+/**
+ * The account is checked live on every call: one disabled or deleted in the
+ * Firebase console, or whose sessions were revoked, is refused at once, not
+ * when its sign-in token runs out (up to an hour later).
+ */
+export async function callerOf(request: CallableRequest): Promise<Caller> {
+  const auth = request.auth;
+  if (!auth || !isAccountToken(auth.token)) return { kind: "public" };
+  const user = await getAuth()
+    .getUser(auth.uid)
+    .catch((e: { code?: string }) => {
+      if (e?.code === "auth/user-not-found") return null;
+      throw new HttpsError("unavailable", "The account could not be checked. Please try again.");
+    });
+  if (!user || user.disabled) {
+    throw new HttpsError("permission-denied", "This account has been disabled or removed. Contact the system administrator.");
   }
-  return { kind: "public" };
+  const validAfter = user.tokensValidAfterTime ? Date.parse(user.tokensValidAfterTime) : 0;
+  if (auth.token.auth_time * 1000 < validAfter) {
+    throw new HttpsError("unauthenticated", "Your session has ended. Sign in again.");
+  }
+  return { kind: "staff", role: "Administrator", uid: auth.uid, email: String(auth.token.email), approver: false };
 }
 
 /** Administrators and Department Users may create records; Viewers read only. */

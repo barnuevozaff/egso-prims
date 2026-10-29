@@ -59,7 +59,7 @@ const holderOf = (v: unknown) => {
 };
 
 export const deleteRecordHolders = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "delete these records");
   const input = record(request.data ?? {});
   const collection = holderOf(input.collection);
@@ -105,7 +105,7 @@ export const deleteRecordHolders = onCall(async (request) => {
  * restricted.
  */
 export const setRecordHolderArchived = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "archive these records");
   const input = record(request.data ?? {});
   const collection = String(input.collection ?? "");

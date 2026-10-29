@@ -61,17 +61,14 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:items-center sm:justify-between",
-        className,
-      )}
-    >
+    // On a phone the actions sit under the title, so a page with two actions
+    // does not squeeze its title and description into a sliver (24 Oct 2026).
+    <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4", className)}>
       <div className="min-w-0">
         <PageTitle>{title}</PageTitle>
         {description && <Subtitle className="mt-1">{description}</Subtitle>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

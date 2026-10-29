@@ -123,7 +123,7 @@ const same = (a: unknown, b: unknown) =>
   typeof a === "number" && typeof b === "number" ? Math.abs(a - b) < 1e-9 : (a ?? null) === (b ?? null);
 
 export const correctUtilityRecord = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "correct finalized records");
   const input = record(request.data ?? {});
   const type = kindOf(input.type);
@@ -166,7 +166,7 @@ export const correctUtilityRecord = onCall(async (request) => {
 });
 
 export const voidUtilityRecord = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "void finalized records");
   const input = record(request.data ?? {});
   const type = kindOf(input.type);

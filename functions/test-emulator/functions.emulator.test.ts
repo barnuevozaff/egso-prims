@@ -1,8 +1,7 @@
-import { getAuth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, signUp, staffToken, waitFor } from "./helpers.js";
+import { accountToken, AUTH, call, waitFor } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -107,76 +106,23 @@ describe("nextDocumentNumber callable (staff only)", () => {
   });
 
   it("refuses malformed types", async () => {
-    const { token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
+    const { token } = await accountToken("admin@alaminos.gov.ph");
     expect((await call("nextDocumentNumber", { type: "../x" }, token)).error?.status).toBe("INVALID_ARGUMENT");
   });
 
   it("numbers a type no function saves with its number", async () => {
-    const { token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
+    const { token } = await accountToken("admin@alaminos.gov.ph");
     const res = await call("nextDocumentNumber", { type: "ADJ" }, token);
     expect(res.result?.number).toMatch(/^ADJ-\d{4}-000001$/);
   });
 
   it("will not hand out a number apart from the document it belongs to", async () => {
-    const { token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
+    const { token } = await accountToken("admin@alaminos.gov.ph");
     for (const type of ["PR", "PO", "RIS", "FR", "EC", "WC", "FC", "VT", "RDS", "RIA", "RAD"]) {
       expect((await call("nextDocumentNumber", { type }, token)).error?.status).toBe("FAILED_PRECONDITION");
     }
   });
 
-  it("refuses a Viewer", async () => {
-    const { token } = await staffToken("viewer@alaminos.gov.ph", "Viewer");
-    expect((await call("nextDocumentNumber", { type: "ADJ" }, token)).error?.status).toBe("PERMISSION_DENIED");
-  });
 });
 
-describe("requireOfficeEmail blocking function", () => {
-  it("lets office addresses sign up", async () => {
-    const res = await signUp("new.clerk@alaminos.gov.ph");
-    expect(res.localId).toBeTruthy();
-  });
 
-  it("refuses any other address", async () => {
-    for (const email of ["someone@gmail.com", "x@alaminos.gov.ph.example.com"]) {
-      const res = await signUp(email);
-      expect(res.localId).toBeUndefined();
-      expect(res.error?.message).toMatch(/PERMISSION_DENIED|not an office address/);
-    }
-  });
-});
-
-describe("setStaffRole callable", () => {
-  it("lets an Administrator give an office account a role", async () => {
-    const { token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
-    const target = await getAuth().createUser({ email: "dept@alaminos.gov.ph" });
-    const res = await call("setStaffRole", { uid: target.uid, role: "Department User" }, token);
-    expect(res.result).toMatchObject({ role: "Department User" });
-    expect((await getAuth().getUser(target.uid)).customClaims?.role).toBe("Department User");
-  });
-
-  it("refuses everyone who is not an Administrator", async () => {
-    const target = await getAuth().createUser({ email: "victim@alaminos.gov.ph" });
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    for (const idToken of [undefined, dept]) {
-      const res = await call("setStaffRole", { uid: target.uid, role: "Administrator" }, idToken);
-      expect(res.error?.status).toBe("PERMISSION_DENIED");
-    }
-    expect((await getAuth().getUser(target.uid)).customClaims?.role).toBeUndefined();
-  });
-
-  it("refuses unknown roles and accounts outside the office", async () => {
-    const { token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
-    const outsider = await getAuth().createUser({ email: "outsider@gmail.com" });
-    expect((await call("setStaffRole", { uid: outsider.uid, role: "Viewer" }, token)).error?.status).toBe(
-      "FAILED_PRECONDITION",
-    );
-    expect((await call("setStaffRole", { uid: outsider.uid, role: "Superuser" }, token)).error?.status).toBe(
-      "INVALID_ARGUMENT",
-    );
-  });
-
-  it("stops an Administrator from removing their own role", async () => {
-    const { uid, token } = await staffToken("admin@alaminos.gov.ph", "Administrator");
-    expect((await call("setStaffRole", { uid, role: "Viewer" }, token)).error?.status).toBe("FAILED_PRECONDITION");
-  });
-});

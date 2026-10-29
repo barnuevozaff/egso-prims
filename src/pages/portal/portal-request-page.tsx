@@ -5,6 +5,7 @@ import { toast } from "@/components";
 import { createPurchaseRequest, type PRDraftInput } from "@/features/purchase-requests/api";
 import { PRForm } from "@/features/purchase-requests/components/pr-form/pr-form";
 import { PortalPage, SubmissionSuccess } from "@/features/portal/components/submission-success";
+import { portalPath } from "@/features/portal/paths";
 
 /** Public Purchase Request form — the same one-page form as the admin's, no login. */
 export function PortalRequestPage() {
@@ -29,7 +30,7 @@ export function PortalRequestPage() {
   return (
     <PortalPage
       title="Create Purchase Request"
-      description="Fill in one page. The summary on the right shows what is still missing."
+      description="Enter the requesting office, your name, the purpose and the items needed. Optional fields may be left blank."
     >
       {reference ? (
         <SubmissionSuccess
@@ -38,10 +39,11 @@ export function PortalRequestPage() {
         />
       ) : (
         <PRForm
+          audience="public"
           submitLabel="Submit Purchase Request"
           submitting={submitting}
           onSubmit={submit}
-          onCancel={() => navigate("/portal")}
+          onCancel={() => navigate(portalPath())}
         />
       )}
     </PortalPage>

@@ -213,7 +213,7 @@ async function writeNumbered(
 }
 
 export const createNumberedRecord = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "record this");
   const type = String(request.data?.type ?? "");
   const spec = SPECS[type];
@@ -246,7 +246,7 @@ export const normalizeName = (name: string) =>
  * browser version had to delete one after the fact).
  */
 export const recordViolation = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "record violations");
   const input = record(request.data ?? {});
   const fullName = requiredText(input.violatorName, "Violator's name", 300).trim();
@@ -371,7 +371,7 @@ export function tripDerived(r: Row): Row {
  * migrated trips are never duplicated.
  */
 export const createFuelTrip = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "record trips");
   const fields = checked(request.data?.record, TRIP_FIELDS);
   if (Number(fields.ending_odometer) < Number(fields.beginning_odometer)) {

@@ -8,13 +8,19 @@ rules_version = '2';
 // Supabase served that bucket publicly. Here only staff may read through the
 // SDK; the download URL saved on a record (getDownloadURL) carries its own
 // token and keeps working for anyone holding the link, as the public URL did.
-// Roles come from the `role` custom claim — see firestore.rules.
+// Every console-created account is an Administrator (29 Oct 2026) — see
+// firestore.rules.
 
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // A console-created account, signed in with its email and password.
     function role() {
-      return request.auth != null ? request.auth.token.get('role', '') : '';
+      return request.auth != null
+          && request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'password'
+          && request.auth.token.get('email', '') != ''
+        ? 'Administrator'
+        : '';
     }
 
     function isStaff() {

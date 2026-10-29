@@ -8,7 +8,9 @@ export type ImportField =
   | "category"
   | "unit"
   | "quantity"
-  | "unitCost";
+  | "unitCost"
+  /** A line's total (quantity x unit cost): read, never used as the unit price. */
+  | "lineTotal";
 
 /** One editable, selectable row in the import preview. */
 export interface ImportRow {
@@ -17,12 +19,16 @@ export interface ImportRow {
   stockNumber: string;
   itemName: string;
   description: string;
-  /** Empty, or a value from ITEM_CATEGORIES. */
+  /** As printed in the document, a suggestion, or empty. */
   category: string;
+  /** Where the category came from: the document itself, or the word-list suggestion. */
+  categorySource: "document" | "suggested" | "";
   unit: string;
   /** Kept as text for free editing; parsed to a number on import. */
   quantity: string;
   unitCost: string;
+  /** The line total printed beside it, if any (for checking only). */
+  lineTotal: string;
   /** Fields OCR was unsure about, highlighted in the preview. */
   uncertain: Partial<Record<ImportField, boolean>>;
 }
@@ -51,19 +57,26 @@ export function blankImportRow(id: string): ImportRow {
     itemName: "",
     description: "",
     category: "",
+    categorySource: "",
     unit: "",
     quantity: "",
     unitCost: "",
+    lineTotal: "",
     uncertain: EMPTY_UNCERTAIN,
   };
 }
 
-/** Normalises an OCR'd category token to a known category, or "" if unknown. */
+/**
+ * A category as printed: the standard spelling when it is one of the
+ * standard categories, otherwise the document's own words (a category the
+ * office uses that is not on the standard list yet).
+ */
 export function normalizeCategory(raw: string): string {
-  const t = raw.trim().toLowerCase();
+  const tidy = raw.trim().replace(/\s+/g, " ");
+  const t = tidy.toLowerCase();
   if (!t) return "";
   const hit = ITEM_CATEGORIES.find(
     (c) => c.toLowerCase() === t || c.toLowerCase().startsWith(t) || t.startsWith(c.toLowerCase()),
   );
-  return hit ?? "";
+  return hit ?? tidy;
 }

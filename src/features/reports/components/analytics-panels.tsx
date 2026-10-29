@@ -27,6 +27,7 @@ import {
   CurrencyDisplay,
   DonutChartContainer,
   LineChartContainer,
+  MetricIcon,
   OverlineLabel,
   ProgressBar,
   Skeleton,
@@ -99,14 +100,13 @@ function StatTile({
   children: React.ReactNode;
 }) {
   return (
-    <ContainerCard className="p-4">
-      <div className="flex items-center gap-2">
-        <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <span className="text-[12px] text-neutral-500">{label}</span>
+    // The same figure anatomy as MetricCard (24 Oct 2026).
+    <ContainerCard className="px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">{label}</span>
+        <MetricIcon icon={Icon} />
       </div>
-      <div className="mt-3 text-[22px] font-semibold tracking-tight text-neutral-900 tabular-nums">
+      <div className="mt-2 text-[22px] font-semibold leading-8 tracking-[-0.02em] text-neutral-900 tabular-nums">
         {children}
       </div>
     </ContainerCard>

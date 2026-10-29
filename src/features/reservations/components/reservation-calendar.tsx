@@ -286,8 +286,9 @@ function MonthView({
                   <span
                     className={cn(
                       "grid h-5 w-5 place-items-center rounded-full text-[11px] tabular-nums",
+                      // Today in the municipal burgundy, as the current page is in the sidebar.
                       isToday(d)
-                        ? "bg-neutral-900 font-semibold text-white"
+                        ? "bg-[#a6323b] font-semibold text-white"
                         : inMonth
                           ? "text-neutral-700"
                           : "text-neutral-300",
@@ -351,7 +352,7 @@ function WeekView({
                 <span
                   className={cn(
                     "grid h-5 w-5 place-items-center rounded-full text-[11.5px] tabular-nums",
-                    isToday(d) ? "bg-neutral-900 font-semibold text-white" : "text-neutral-800",
+                    isToday(d) ? "bg-[#a6323b] font-semibold text-white" : "text-neutral-800",
                   )}
                 >
                   {format(d, "d")}

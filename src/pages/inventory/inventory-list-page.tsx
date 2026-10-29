@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { format } from "date-fns";
 import {
-  AlertTriangle,
   ArrowLeftRight,
   Boxes,
   Package,
@@ -25,28 +24,22 @@ import {
   MetricCard,
   PageHeader,
   PageTransition,
-  PrintButton,
   SearchBar,
   StatusBadge,
   TableCard,
   toast,
 } from "@/components";
 import { deleteInventoryItems, exportInventoryCsv } from "@/features/inventory/api";
-import { useInventoryItems, useStockCard } from "@/features/inventory/hooks";
+import { useInventoryCategories, useInventoryItems, useStockCard } from "@/features/inventory/hooks";
 import {
-  ITEM_CATEGORIES,
-  STOCK_STATUSES,
   categoryColor,
   itemValue,
-  stockStatusOf,
+  stockStateOf,
   type InventoryItem,
   type ItemCategory,
-  type StockStatus,
 } from "@/features/inventory/types";
-import { SUPPLIERS } from "@/features/purchase-orders/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { InvDrawer } from "@/features/inventory/components/inv-drawer";
-import { SmartImportDrawer } from "@/features/inventory/components/smart-import-drawer";
 
 const ALL = "__all";
 
@@ -55,30 +48,31 @@ export function InventoryListPage() {
 
   const [search, setSearch] = React.useState("");
   const [category, setCategory] = React.useState(ALL);
-  const [supplier, setSupplier] = React.useState(ALL);
-  const [stockStatus, setStockStatus] = React.useState(ALL);
+  // In stock or not (24 Oct 2026): reorder and critical levels are not part of the workflow.
+  const [stockState, setStockState] = React.useState(ALL);
 
   const filters = React.useMemo(
     () => ({
       search: search || undefined,
       category: category === ALL ? undefined : (category as ItemCategory),
-      supplierId: supplier === ALL ? undefined : supplier,
-      stockStatus: stockStatus === ALL ? undefined : (stockStatus as StockStatus),
     }),
-    [search, category, supplier, stockStatus],
+    [search, category],
   );
 
-  const { data, loading, refresh } = useInventoryItems(filters);
+  const { data: allRows, loading, refresh } = useInventoryItems(filters);
+  const data = React.useMemo(
+    () => (stockState === ALL ? allRows : allRows.filter((it) => stockStateOf(it) === stockState)),
+    [allRows, stockState],
+  );
   // KPI figures always reflect the whole register, independent of filters.
   const stats = useInventoryItems(React.useMemo(() => ({}), []));
   const movements = useStockCard(null);
+  // Standard, added and in-use categories, shared with Add Item and Scan / Import.
+  const { categories } = useInventoryCategories(stats.data);
 
   const totalItems = stats.data.length;
   const availableUnits = stats.data.reduce((sum, it) => sum + it.onHand, 0);
-  const lowStockCount = stats.data.filter((it) =>
-    ["Low Stock", "Critical"].includes(stockStatusOf(it)),
-  ).length;
-  const outOfStockCount = stats.data.filter((it) => stockStatusOf(it) === "Out of Stock").length;
+  const outOfStockCount = stats.data.filter((it) => stockStateOf(it) === "Out of Stock").length;
   const inventoryValue = stats.data.reduce((sum, it) => sum + itemValue(it), 0);
   const today = new Date().toISOString().slice(0, 10);
   const movementsToday = movements.data.filter((e) => e.date.slice(0, 10) === today).length;
@@ -88,7 +82,6 @@ export function InventoryListPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [smartImportOpen, setSmartImportOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
 
@@ -181,8 +174,8 @@ export function InventoryListPage() {
       {
         header: "Status",
         id: "status",
-        accessorFn: (it) => stockStatusOf(it),
-        cell: ({ row }) => <StatusBadge status={stockStatusOf(row.original)} />,
+        accessorFn: (it) => stockStateOf(it),
+        cell: ({ row }) => <StatusBadge status={stockStateOf(row.original)} />,
       },
       {
         header: "Updated",
@@ -202,26 +195,25 @@ export function InventoryListPage() {
     <PageTransition className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Inventory"
-        description="Track stock levels, valuations, and movements across all storage locations."
+        description="The municipal stock register: items, stock on hand and every receipt and issue."
         actions={
           <>
-            <Button variant="secondary" onClick={() => setSmartImportOpen(true)}>
+            <Button variant="secondary" onClick={() => navigate("/inventory/import")}>
               <ScanLine className="h-3.5 w-3.5 text-neutral-500" />
-              Smart Import
+              Scan / Import Items
             </Button>
             <Button onClick={() => navigate("/inventory/new")}>
               <Plus />
-              New Item
+              Add Item
             </Button>
           </>
         }
       />
 
-      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="Total Inventory Items" value={totalItems} icon={Boxes} loading={stats.loading} />
-        <MetricCard label="Available Stock (units)" value={availableUnits} icon={Package} loading={stats.loading} />
-        <MetricCard label="Low Stock Items" value={lowStockCount} icon={AlertTriangle} loading={stats.loading} />
-        <MetricCard label="Out of Stock" value={outOfStockCount} icon={PackageX} loading={stats.loading} />
+      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <MetricCard label="Total Inventory Items" tone="brand" value={totalItems} icon={Boxes} loading={stats.loading} />
+        <MetricCard label="Available Stock (units)" tone="positive" value={availableUnits} icon={Package} loading={stats.loading} />
+        <MetricCard label="Out of Stock" tone="critical" value={outOfStockCount} icon={PackageX} loading={stats.loading} />
         <MetricCard label="Inventory Value" kind="peso" value={inventoryValue} icon={Wallet} loading={stats.loading} />
         <MetricCard
           label="Stock Movements Today"
@@ -243,12 +235,11 @@ export function InventoryListPage() {
                     onClick={() => downloadCsv(data, "all")}
                     disabled={data.length === 0}
                   />
-                  <PrintButton onClick={() => window.print()} />
                 </>
               }
             >
               <SearchBar
-                placeholder="Search code, name, supplier…"
+                placeholder="Search code, name, category…"
                 widthClassName="w-52"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -259,25 +250,17 @@ export function InventoryListPage() {
                 onChange={setCategory}
                 options={[
                   { value: ALL, label: "All Categories" },
-                  ...ITEM_CATEGORIES.map((c) => ({ value: c, label: c })),
+                  ...categories.map((c) => ({ value: c, label: c })),
                 ]}
               />
               <DropdownFilter
-                label="Supplier"
-                value={supplier}
-                onChange={setSupplier}
+                label="Stock"
+                value={stockState}
+                onChange={setStockState}
                 options={[
-                  { value: ALL, label: "All Suppliers" },
-                  ...SUPPLIERS.map((s) => ({ value: s.id, label: s.name })),
-                ]}
-              />
-              <DropdownFilter
-                label="Stock Status"
-                value={stockStatus}
-                onChange={setStockStatus}
-                options={[
-                  { value: ALL, label: "All Stock Statuses" },
-                  ...STOCK_STATUSES.map((s) => ({ value: s, label: s })),
+                  { value: ALL, label: "All Items" },
+                  { value: "Available", label: "In stock" },
+                  { value: "Out of Stock", label: "Out of stock" },
                 ]}
               />
             </FilterBar>
@@ -305,7 +288,7 @@ export function InventoryListPage() {
               icon: Boxes,
               title: "No inventory items found",
               description: "Try adjusting the filters, or register a new inventory item.",
-              action: { label: "New Item", onClick: () => navigate("/inventory/new") },
+              action: { label: "Add Item", onClick: () => navigate("/inventory/new") },
             }}
           />
         </TableCard>
@@ -314,7 +297,6 @@ export function InventoryListPage() {
       <BulkActionBar
         count={selectedRows.length}
         onExport={() => downloadCsv(selectedRows, "selection")}
-        onPrint={() => window.print()}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}
       />
@@ -323,7 +305,7 @@ export function InventoryListPage() {
         open={confirmBulkDelete}
         onOpenChange={setConfirmBulkDelete}
         title={`Delete ${selectedRows.length} item${selectedRows.length === 1 ? "" : "s"}?`}
-        description="Selected items and their stock cards, attachments, and history will be permanently removed."
+        description="Selected items and their stock cards and history will be permanently removed. Their item codes are not issued again."
         onConfirm={async () => {
           await removeRows(selectedRows);
           setConfirmBulkDelete(false);
@@ -338,12 +320,6 @@ export function InventoryListPage() {
         onEdit={(id) => navigate(`/inventory/${id}/edit`)}
       />
 
-      <SmartImportDrawer
-        open={smartImportOpen}
-        onOpenChange={setSmartImportOpen}
-        existingItems={stats.data}
-        onImported={refreshAll}
-      />
     </PageTransition>
   );
 }

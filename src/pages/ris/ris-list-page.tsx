@@ -6,8 +6,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
-  PackageCheck,
   Plus,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -24,6 +24,7 @@ import {
   PrintButton,
   SearchBar,
   StatusBadge,
+  StatusTabs,
   TableCard,
   toast,
 } from "@/components";
@@ -33,7 +34,6 @@ import { cancelRequest, exportRequestsCsv } from "@/features/ris/api";
 import { useRequests } from "@/features/ris/hooks";
 import { formatDate } from "@/features/ris/lib";
 import {
-  RIS_STATUSES,
   VOIDABLE_RIS_STATUSES,
   risTotalIssued,
   type RISStatus,
@@ -41,13 +41,26 @@ import {
 } from "@/features/ris/types";
 import { DEPARTMENTS, departmentByCode } from "@/features/purchase-requests/types";
 
-/** Statuses at which the slip has actually been issued from stock. */
-const ISSUED_STATUSES: RISStatus[] = ["Released", "Completed"];
+/**
+ * Whether the slip has been issued from stock: approved since 22 Oct 2026
+ * (approval issues it), or released under the earlier workflow.
+ */
+const isIssued = (r: RequestForIssuance) =>
+  !!r.stockIssuedAt || r.status === "Released" || r.status === "Completed";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
 import { RISDrawer } from "@/features/ris/components/ris-drawer";
 
 const ALL = "__all";
+
+/** Status tabs (22 Oct 2026). Approved also holds slips released under the earlier workflow. */
+const TABS: { value: string; label: string; match: (s: RISStatus) => boolean }[] = [
+  { value: "pending", label: "Pending", match: (s) => s === "Draft" || s === "Pending Approval" },
+  { value: "approved", label: "Approved", match: (s) => s === "Approved" || s === "Released" || s === "Completed" },
+  { value: "rejected", label: "Rejected", match: (s) => s === "Rejected" },
+  { value: "voided", label: "Voided", match: (s) => s === "Cancelled" },
+  { value: ALL, label: "All", match: () => true },
+];
 
 export function RISListPage() {
   const navigate = useNavigate();
@@ -55,27 +68,27 @@ export function RISListPage() {
 
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ALL);
-  const [status, setStatus] = React.useState(ALL);
+  const [tab, setTab] = React.useState("pending");
 
+  // The tab filters here, so each tab can show its own count.
   const filters = React.useMemo(
     () => ({
       search: search || undefined,
       departmentCode: department === ALL ? undefined : department,
-      status: status === ALL ? undefined : (status as RISStatus),
     }),
-    [search, department, status],
+    [search, department],
   );
 
-  const { data, loading, refresh } = useRequests(filters);
+  const { data: allRows, loading, refresh } = useRequests(filters);
+  const activeTab = TABS.find((t) => t.value === tab) ?? TABS[0];
+  const data = React.useMemo(() => allRows.filter((r) => activeTab.match(r.status)), [allRows, activeTab]);
   // KPI figures always reflect the whole register, independent of filters.
   const stats = useRequests(React.useMemo(() => ({}), []));
 
   const pendingCount = stats.data.filter((r) => r.status === "Pending Approval").length;
-  const approvedCount = stats.data.filter((r) => r.status === "Approved").length;
-  const releasedCount = stats.data.filter((r) => r.status === "Released").length;
-  const itemsIssued = stats.data
-    .filter((r) => ["Released", "Completed"].includes(r.status))
-    .reduce((sum, r) => sum + risTotalIssued(r), 0);
+  const approvedCount = stats.data.filter((r) => TABS[1].match(r.status)).length;
+  const rejectedCount = stats.data.filter((r) => r.status === "Rejected").length;
+  const itemsIssued = stats.data.filter(isIssued).reduce((sum, r) => sum + risTotalIssued(r), 0);
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<RequestForIssuance[]>([]);
@@ -101,12 +114,12 @@ export function RISListPage() {
     toast.success(`Exported ${rows.length} slip${rows.length === 1 ? "" : "s"}`);
   };
 
-  // Numbered slips are voided, never deleted. A Released slip is voided by
-  // an Administrator only, and its stock is returned; Completed is final.
+  // Numbered slips are voided, never deleted. An issued slip is voided by an
+  // Administrator only, and its stock is returned; Completed is final.
   const voidable = selectedRows.filter(
-    (r) => VOIDABLE_RIS_STATUSES.includes(r.status) && (r.status !== "Released" || user?.role === "Administrator"),
+    (r) => VOIDABLE_RIS_STATUSES.includes(r.status) && (!isIssued(r) || user?.role === "Administrator"),
   );
-  const releasedSelected = voidable.some((r) => r.status === "Released");
+  const issuedSelected = voidable.some(isIssued);
 
   const columns = React.useMemo<ColumnDef<RequestForIssuance, unknown>[]>(
     () => [
@@ -143,13 +156,13 @@ export function RISListPage() {
         meta: { className: "text-neutral-600" },
       },
       {
-        // A slip is only issued once it is released. Before that the name on
-        // the record is whoever prepared it, which read as an issuance that
-        // had not happened.
+        // A slip is issued when it is approved (earlier: released). Before
+        // that the name on the record is whoever prepared it, which read as
+        // an issuance that had not happened.
         header: "Issued By",
         accessorKey: "issuedBy",
         cell: ({ row, getValue }) =>
-          ISSUED_STATUSES.includes(row.original.status) ? (
+          isIssued(row.original) ? (
             <span className="whitespace-nowrap text-neutral-600">{getValue<string>()}</span>
           ) : (
             <span className="text-neutral-400">—</span>
@@ -178,7 +191,7 @@ export function RISListPage() {
     <PageTransition className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Requisition and Issue Slips"
-        description="Issue supplies from central stock against approved purchase requests."
+        description="Approve requests for supplies from central stock. Approving issues the items and updates inventory."
         actions={
           <Button onClick={() => navigate("/ris/new")}>
             <Plus />
@@ -188,17 +201,17 @@ export function RISListPage() {
       />
 
       <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Pending RIS" value={pendingCount} icon={Clock3} loading={stats.loading} />
+        <MetricCard label="Pending RIS" tone="attention" value={pendingCount} icon={Clock3} loading={stats.loading} />
         <MetricCard
-          label="Approved RIS"
+          label="Approved RIS" tone="positive"
           value={approvedCount}
           icon={CheckCircle2}
           loading={stats.loading}
         />
         <MetricCard
-          label="Released RIS"
-          value={releasedCount}
-          icon={PackageCheck}
+          label="Rejected RIS"
+          value={rejectedCount}
+          icon={XCircle}
           loading={stats.loading}
         />
         <MetricCard label="Items Issued" value={itemsIssued} icon={Boxes} loading={stats.loading} />
@@ -220,6 +233,7 @@ export function RISListPage() {
                 </>
               }
             >
+              <StatusTabs tabs={TABS.map((t) => ({ value: t.value, label: t.label, count: allRows.filter((r) => t.match(r.status)).length }))} value={tab} onChange={setTab} />
               <SearchBar
                 placeholder="Search RIS, PR, requester…"
                 widthClassName="w-56"
@@ -233,15 +247,6 @@ export function RISListPage() {
                 options={[
                   { value: ALL, label: "All Offices" },
                   ...DEPARTMENTS.map((d) => ({ value: d.code, label: d.name })),
-                ]}
-              />
-              <DropdownFilter
-                label="Status"
-                value={status}
-                onChange={setStatus}
-                options={[
-                  { value: ALL, label: "All Statuses" },
-                  ...RIS_STATUSES.map((s) => ({ value: s, label: s })),
                 ]}
               />
             </FilterBar>
@@ -293,8 +298,8 @@ export function RISListPage() {
         numberOf={(r) => r.risNumber}
         voidOne={(r, reason) => cancelRequest(r.id, { reason, by: user?.name ?? "Staff", office: user?.office })}
         extraNote={
-          releasedSelected
-            ? "Stock a released slip took is returned to inventory, with a Return line on each item's stock card."
+          issuedSelected
+            ? "Stock an issued slip took is returned to inventory, with a Return line on each item's stock card."
             : undefined
         }
         onDone={() => {

@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken } from "./helpers.js";
+import { AUTH, call, accountToken } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -26,7 +26,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearFirestore();
   await fetch(`${AUTH}/emulator/v1/projects/${PROJECT_ID}/accounts`, { method: "DELETE" });
-  ({ token: admin, uid: adminUid } = await staffToken("admin@alaminos.gov.ph", "Administrator"));
+  ({ token: admin, uid: adminUid } = await accountToken("admin@alaminos.gov.ph"));
   // Fresh ids per test, out of reach of the previous test's late cascades.
   run = Math.random().toString(36).slice(2, 8);
 });
@@ -96,7 +96,7 @@ describe("holders of official records are kept, not deleted", () => {
     }
   });
 
-  it("archives and restores an account, with who and when, for Administrators only", async () => {
+  it("archives and restores an account, with who and when, never signed out", async () => {
     await account(`ea-${run}`, `E-${run}`);
     const a = await call("setRecordHolderArchived", { collection: "energy_accounts", id: `ea-${run}`, archived: true }, admin);
     expect(a.error).toBeUndefined();
@@ -107,11 +107,11 @@ describe("holders of official records are kept, not deleted", () => {
     });
     await call("setRecordHolderArchived", { collection: "energy_accounts", id: `ea-${run}`, archived: false }, admin);
     expect((await db.doc(`energy_accounts/ea-${run}`).get()).data()).toMatchObject({ archived: false, restored_by: "admin@alaminos.gov.ph" });
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("setRecordHolderArchived", { collection: "energy_accounts", id: `ea-${run}`, archived: true }, dept)).error?.status).toBe(
+    // Signed out it is refused; every account is an Administrator (29 Oct 2026).
+    expect((await call("setRecordHolderArchived", { collection: "energy_accounts", id: `ea-${run}`, archived: true })).error?.status).toBe(
       "PERMISSION_DENIED",
     );
-    expect((await call("deleteRecordHolders", { collection: "energy_accounts", ids: [`ea-${run}`] }, dept)).error?.status).toBe(
+    expect((await call("deleteRecordHolders", { collection: "energy_accounts", ids: [`ea-${run}`] })).error?.status).toBe(
       "PERMISSION_DENIED",
     );
     expect((await call("setRecordHolderArchived", { collection: "purchase_orders", id: "x", archived: true }, admin)).error?.status).toBe(
@@ -254,9 +254,11 @@ describe("archived or inactive holders take no new records", () => {
       call("setRecordHolderArchived", { collection: "violators", id: profile, archived: true }, admin),
       call("recordViolation", { violatorName: `Racer ${run}`, record: ticket }, admin),
     ]);
-    const archivedAt = String((await db.doc(`violators/${profile}`).get()).get("archived_at"));
+    // Commit times from Firestore itself: the archived_at/created_at strings
+    // are taken before each write waits for its turn, so they cannot show order.
+    const archived = (await db.doc(`violators/${profile}`).get()).updateTime!.toMillis();
     const tickets = await db.collection("violations").where("violator_id", "==", profile).get();
-    for (const t of tickets.docs) expect(String(t.get("created_at")) <= archivedAt).toBe(true);
+    for (const t of tickets.docs) expect(t.createTime.toMillis()).toBeLessThanOrEqual(archived);
   });
 });
 
@@ -289,7 +291,7 @@ describe("submeter bills and readings are voided, never deleted", () => {
     expect((await db.collection("water_submeter_bills").where("submeter_id", "==", `ws-${run}`).get()).size).toBe(1);
   });
 
-  it("readings are voided with the reason, who and when; only an Administrator records or voids them", async () => {
+  it("readings are voided with the reason, who and when; never signed out", async () => {
     await db.doc(`fuel_vehicles/fv-${run}`).set({ id: `fv-${run}`, plate_number: `P-${run}`, status: "Active" });
     const created = await call("createUtilityEntry", { type: "ODO", record: odometer(`fv-${run}`) }, admin);
     expect(created.result).toMatchObject({ distance: 200, created_by_uid: adminUid });
@@ -298,9 +300,9 @@ describe("submeter bills and readings are voided, never deleted", () => {
       "The current odometer cannot be lower than the previous reading.",
     );
     expect((await call("voidUtilityRecord", { type: "ODO", id, reason: " " }, admin)).error?.status).toBe("INVALID_ARGUMENT");
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("createUtilityEntry", { type: "ODO", record: odometer(`fv-${run}`) }, dept)).error?.status).toBe("PERMISSION_DENIED");
-    expect((await call("voidUtilityRecord", { type: "ODO", id, reason: "x" }, dept)).error?.status).toBe("PERMISSION_DENIED");
+    // Signed out it is refused; every account is an Administrator (29 Oct 2026).
+    expect((await call("createUtilityEntry", { type: "ODO", record: odometer(`fv-${run}`) })).error?.status).toBe("PERMISSION_DENIED");
+    expect((await call("voidUtilityRecord", { type: "ODO", id, reason: "x" })).error?.status).toBe("PERMISSION_DENIED");
     await call("voidUtilityRecord", { type: "ODO", id, reason: "Duplicate entry" }, admin);
     expect((await db.doc(`fuel_odometer_readings/${id}`).get()).data()).toMatchObject({
       voided: true, void_reason: "Duplicate entry", voided_by_uid: adminUid, distance: 200,

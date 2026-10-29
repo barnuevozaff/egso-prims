@@ -14,6 +14,7 @@ import { amount, attachments, clockTime, isoDate, list, record, requiredText, te
 export type Row = Record<string, unknown>;
 
 const uid = () => randomUUID();
+const invalid = (message: string) => new HttpsError("invalid-argument", message);
 
 const opt = (value: unknown, label: string, max = 500) => text(value, label, { max, optional: true });
 /** Supabase stored a blank optional field as null; so do these documents. */
@@ -30,8 +31,12 @@ export function parsePurchaseRequest(raw: unknown) {
   return {
     departmentCode: requiredText(input.departmentCode, "Office", 20),
     requester: requiredText(input.requester, "Requested by", 200),
-    purpose: requiredText(input.purpose, "Purpose", 2000),
-    fundingSource: requiredText(input.fundingSource, "Fund", 100),
+    // Required on every new request (restored 21 Oct 2026), spaces alone
+    // refused. Fund, Section and FPP stay optional and print as blanks.
+    purpose: requiredText(input.purpose, "Purpose", 2000).trim(),
+    fundingSource: trimmedOrNull(opt(input.fundingSource, "Fund", 100)),
+    section: trimmedOrNull(opt(input.section, "Section", 100)),
+    fpp: trimmedOrNull(opt(input.fpp, "FPP", 100)),
     requestDate: isoDate(input.requestDate, "Date"),
     items: list(
       input.items,
@@ -48,7 +53,31 @@ export function parsePurchaseRequest(raw: unknown) {
   };
 }
 
-export function buildPurchaseRequest(raw: unknown, prNumber: string, at: string): Row {
+/**
+ * Group headings of the official form ("Janitorial Supplies"), added by the
+ * GSO (21 Oct 2026). Not items: no number, no quantity, no cost. `position`
+ * is the index of the item the heading stands above.
+ */
+export function parseHeadings(value: unknown, itemCount: number): { id: string; position: number; text: string }[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw invalid("Headings must be a list.");
+  if (value.length > 50) throw invalid("At most 50 headings.");
+  return value.map((h, i) => {
+    const row = record(h);
+    const position = Number(row.position);
+    if (!Number.isInteger(position) || position < 0 || position > Math.max(0, itemCount - 1)) {
+      throw invalid(`Heading ${i + 1} must stand above one of the items.`);
+    }
+    return { id: uid(), position, text: requiredText(row.text, `Heading ${i + 1}`, 200).trim() };
+  });
+}
+
+export function buildPurchaseRequest(
+  raw: unknown,
+  prNumber: string,
+  at: string,
+  options: { headings?: boolean } = {},
+): Row {
   const input = parsePurchaseRequest(raw);
   return {
     id: prNumber,
@@ -57,6 +86,10 @@ export function buildPurchaseRequest(raw: unknown, prNumber: string, at: string)
     requester: input.requester,
     purpose: input.purpose,
     funding_source: input.fundingSource,
+    section: input.section,
+    fpp: input.fpp,
+    // Only staff send headings; the public form never asks for them.
+    headings: options.headings ? parseHeadings(input.raw.headings, input.items.length) : [],
     request_date: input.requestDate,
     status: "Submitted",
     items: input.items.map((it) => ({ ...it, id: uid() })),
@@ -77,7 +110,28 @@ export function buildPurchaseRequest(raw: unknown, prNumber: string, at: string)
 
 /* ---------------- Purchase order (PO) ---------------- */
 
-export function buildPurchaseOrder(raw: unknown, poNumber: string, at: string, asDraft: boolean): Row {
+/** The approved request an order is raised from (see po-source.ts). */
+export interface POSource {
+  department_code: string;
+  requester: string;
+  purpose: string;
+  official_pr_number: string | null;
+}
+
+/**
+ * Simplified 21 Oct 2026: the office, requester and purpose come from the
+ * source request (`source`, read by the create function) instead of being
+ * typed again; the signatories are no longer typed per order — they come
+ * from Settings and are copied on at approval (approvePurchaseOrder). The
+ * date of delivery is optional, as on the paper form.
+ */
+export function buildPurchaseOrder(
+  raw: unknown,
+  poNumber: string,
+  at: string,
+  asDraft: boolean,
+  source?: POSource,
+): Row {
   const input = record(raw);
   const prNumber = requiredText(input.prNumber, "Purchase request", 40);
   const items = list(
@@ -88,6 +142,8 @@ export function buildPurchaseOrder(raw: unknown, poNumber: string, at: string, a
       quantity: amount(it.quantity, `Item ${i + 1} quantity`, { positive: true }),
       unit: requiredText(it.unit, `Item ${i + 1} unit`, 30),
       unitCost: amount(it.unitCost, `Item ${i + 1} unit cost`),
+      // The template's Stock/Property No. column; blank when the item has none.
+      stockNo: trimmedOrNull(opt(it.stockNo, `Item ${i + 1} stock/property no.`, 60)),
     }),
     { min: 1 },
   );
@@ -96,9 +152,10 @@ export function buildPurchaseOrder(raw: unknown, poNumber: string, at: string, a
     id: poNumber,
     po_number: poNumber,
     pr_number: prNumber,
-    department_code: requiredText(input.departmentCode, "Office", 20),
-    requester: requiredText(input.requester, "Requested by", 200),
-    purpose: requiredText(input.purpose, "Purpose", 2000),
+    pr_official_number: source?.official_pr_number ?? null,
+    department_code: source?.department_code || requiredText(input.departmentCode, "Office", 20),
+    requester: source?.requester || requiredText(input.requester, "Requested by", 200),
+    purpose: source?.purpose || requiredText(input.purpose, "Purpose", 2000),
     supplier_name: requiredText(input.supplierName, "Supplier", 300),
     supplier_address: trimmedOrNull(opt(input.supplierAddress, "Supplier address")),
     supplier_tin: trimmedOrNull(opt(input.supplierTin, "Supplier TIN", 40)),
@@ -106,10 +163,11 @@ export function buildPurchaseOrder(raw: unknown, poNumber: string, at: string, a
     mode_of_procurement: trimmedOrNull(opt(input.modeOfProcurement, "Mode of procurement", 200)),
     payment_term: trimmedOrNull(opt(input.paymentTerm, "Payment term", 200)),
     delivery_term: trimmedOrNull(opt(input.deliveryTerm, "Delivery term", 200)),
-    municipal_mayor: trimmedOrNull(opt(input.municipalMayor, "Municipal Mayor", 200)),
-    bac_secretary: trimmedOrNull(opt(input.bacSecretary, "BAC Secretary", 200)),
+    // Only for a negotiated purchase (Section 369 (a), RA 7160), as the form says.
+    bac_resolution_no: trimmedOrNull(opt(input.bacResolutionNo, "BAC resolution no.", 60)),
+    bac_resolution_series: trimmedOrNull(opt(input.bacResolutionSeries, "BAC resolution series", 10)),
     delivery_address: requiredText(input.deliveryAddress, "Place of delivery", 500),
-    expected_delivery: requiredText(input.expectedDelivery, "Date of delivery", 100),
+    expected_delivery: trimmedOrNull(opt(input.expectedDelivery, "Date of delivery", 100)),
     issued_date: at.slice(0, 10),
     status: asDraft ? "Draft" : "Pending Approval",
     items: items.map((it) => ({ ...it, id: uid() })),

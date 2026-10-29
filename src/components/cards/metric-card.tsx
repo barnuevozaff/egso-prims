@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { formatCount, type CountKind } from "@/lib/format";
 import { useCountUp } from "@/hooks/use-count-up";
 import { ContainerCard } from "@/components/cards/container-card";
+import { MetricIcon, type MetricTone } from "@/components/cards/metric-icon";
 import { IconButton } from "@/components/ui/button";
 import { Skeleton } from "@/components/feedback/skeleton";
 
@@ -22,11 +23,18 @@ export interface MetricCardProps {
   trend?: { label: string; direction: "up" | "down" | "none" };
   /** Called when the corner arrow action is clicked. */
   onOpen?: () => void;
+  /** What the figure means, for its icon tint (see metric-icon.tsx). Neutral by default. */
+  tone?: MetricTone;
   loading?: boolean;
   className?: string;
 }
 
-/** Stat card with animated count-up value (Design Foundation stat grid). */
+/**
+ * Stat card, with the Dashboard's figure anatomy (24 Oct 2026) so every
+ * module's summary row reads the same: the label on the left at 13px, a
+ * compact tinted icon on the right whose colour follows one rule across the
+ * app (metric-icon.tsx), the figure under it, and an optional caption.
+ */
 export function MetricCard({
   label,
   value,
@@ -34,67 +42,47 @@ export function MetricCard({
   icon: Icon,
   trend,
   onOpen,
+  tone = "neutral",
   loading = false,
   className,
 }: MetricCardProps) {
   const animated = useCountUp(loading ? 0 : value);
 
   return (
-    <ContainerCard hoverable className={cn("group p-cardt", className)}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <div className="grid h-7 w-7 place-items-center rounded-lg bg-neutral-100 text-neutral-600">
-            <Icon className="h-3.5 w-3.5" />
-          </div>
-          <span className="text-[12px] text-neutral-500">{label}</span>
-        </div>
-        {onOpen && (
-          <IconButton
-            aria-label={`Open ${label}`}
-            shape="circle"
-            onClick={onOpen}
-            className="bg-transparent text-neutral-500"
-          >
+    <ContainerCard className={cn("px-5 py-4", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <span className="pt-1 text-[13px] font-medium leading-5 text-[#5b606b]">{label}</span>
+        {onOpen ? (
+          <IconButton aria-label={`Open ${label}`} shape="circle" onClick={onOpen} className="-mr-1 bg-transparent text-[#8a8f98]">
             <ArrowUpRight />
           </IconButton>
+        ) : (
+          <MetricIcon icon={Icon} tone={loading ? "neutral" : tone} value={value} />
         )}
       </div>
       {loading ? (
-        <>
-          <Skeleton className="mt-4 h-8 w-24" />
-          <Skeleton className="mt-2 h-3 w-32" />
-        </>
+        <Skeleton className="mt-1.5 h-7 w-24" />
       ) : (
-        <>
-          <div className="mt-4 text-[26px] font-semibold tracking-tight text-neutral-900 tabular-nums">
-            {formatCount(animated, kind)}
-          </div>
-          {trend && (
-            <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px]">
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  trend.direction === "none"
-                    ? "bg-neutral-300"
-                    : trend.direction === "up"
-                      ? "bg-green-500"
-                      : "bg-red-500",
-                )}
-              />
-              <span
-                className={
-                  trend.direction === "none"
-                    ? "text-neutral-500"
-                    : trend.direction === "up"
-                      ? "text-green-600"
-                      : "text-red-600"
-                }
-              >
-                {trend.label}
-              </span>
-            </div>
+        <div className="mt-1 text-[26px] font-semibold leading-8 tracking-[-0.03em] text-neutral-900 tabular-nums">
+          {formatCount(animated, kind)}
+        </div>
+      )}
+      {trend && !loading && (
+        <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px]">
+          {trend.direction !== "none" && (
+            <span
+              aria-hidden="true"
+              className={cn("h-1.5 w-1.5 rounded-full", trend.direction === "up" ? "bg-green-600" : "bg-red-600")}
+            />
           )}
-        </>
+          <span
+            className={
+              trend.direction === "none" ? "text-[#5b606b]" : trend.direction === "up" ? "text-green-700" : "text-red-700"
+            }
+          >
+            {trend.label}
+          </span>
+        </div>
       )}
     </ContainerCard>
   );

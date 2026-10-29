@@ -20,6 +20,15 @@ export interface NotificationDraft {
 }
 
 const s = (v: unknown, fallback = "") => (v === undefined || v === null ? fallback : String(v));
+
+/** "Bond paper, A4 and 2 more items": what a request holds, for a summary line. */
+function prFirstItem(ref: Row): string {
+  const items = Array.isArray(ref?.items) ? (ref.items as { description?: unknown }[]) : [];
+  const first = typeof items[0]?.description === "string" ? items[0].description.trim() : "";
+  if (!first) return "";
+  const more = items.length - 1;
+  return more > 0 ? `${first} and ${more} more item${more === 1 ? "" : "s"}` : first;
+}
 const changedTo = (before: Row, after: Row, status: string) =>
   !!before && !!after && before.status !== after.status && after.status === status;
 
@@ -38,11 +47,20 @@ export function buildNotification(collection: string, before: Row, after: Row): 
   switch (collection) {
     case "purchase_requests":
       if (created) {
+        // A public request may arrive without a purpose (21 Oct 2026); its
+        // first item says what it is, without inventing a purpose.
         return make("Procurement", "purchase-request", "New Purchase Request Submitted",
-          `${s(ref.pr_number)} — ${s(ref.purpose, "No purpose stated")}`);
+          `${s(ref.pr_number)} — ${s(ref.purpose) || prFirstItem(ref) || "No purpose stated"}`);
       }
       if (changedTo(before, after, "Approved")) {
-        return make("Procurement", "purchase-request", "Purchase Request Approved", `${s(ref.pr_number)} was approved.`);
+        return make(
+          "Procurement",
+          "purchase-request",
+          "Purchase Request Approved",
+          ref.official_pr_number
+            ? `${s(ref.pr_number)} was approved as official PR No. ${s(ref.official_pr_number)}.`
+            : `${s(ref.pr_number)} was approved.`,
+        );
       }
       if (changedTo(before, after, "Rejected")) {
         return make("Procurement", "purchase-request", "Purchase Request Rejected", `${s(ref.pr_number)} was rejected.`);

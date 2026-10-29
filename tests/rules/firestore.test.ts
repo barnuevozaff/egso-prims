@@ -152,33 +152,7 @@ describe("public portal: only the explicitly allowed operations", () => {
   });
 });
 
-describe("ordinary staff cannot do Administrator work", () => {
-  it("Department Users and Viewers cannot write operational, Records or settings data", async () => {
-    for (const who of ["dept", "viewer"] as const) {
-      for (const c of [...OPERATIONAL, ...RECORDS, "system_configuration"]) {
-        await assertFails(setDoc(doc(as(who), `${c}/new`), { id: "new", category: "c", key: "k" }));
-        await assertFails(updateDoc(doc(as(who), `${c}/seed`), { changed: true }));
-        await assertFails(deleteDoc(doc(as(who), `${c}/seed`)));
-      }
-    }
-  });
-
-  it("a Viewer cannot change an administrative status", async () => {
-    await assertFails(updateDoc(doc(as("viewer"), "purchase_requests/PR-2026-000001"), { status: "Approved" }));
-    await assertFails(updateDoc(doc(as("viewer"), "purchase_orders/PO-2026-000001"), { status: "Released" }));
-  });
-
-  it("a Department User cannot release a purchase order", async () => {
-    await assertFails(updateDoc(doc(as("dept"), "purchase_orders/PO-2026-000001"), { status: "Released" }));
-  });
-
-  it("only Administrators clear notifications", async () => {
-    await assertFails(deleteDoc(doc(as("dept"), "notifications/n1")));
-    await assertSucceeds(deleteDoc(doc(as("admin"), "notifications/n1")));
-  });
-});
-
-describe("roles cannot be forged from the browser", () => {
+describe("access cannot be forged from the browser", () => {
   const forged = {
     lowercase: { role: "administrator", email: "a@alaminos.gov.ph" },
     padded: { role: "Administrator ", email: "a@alaminos.gov.ph" },
@@ -186,7 +160,8 @@ describe("roles cannot be forged from the browser", () => {
     rolesArray: { roles: ["Administrator"], email: "a@alaminos.gov.ph" },
   };
 
-  it("only the exact role claim counts", async () => {
+  // Without an email-and-password sign-in, claims and look-alike flags grant nothing.
+  it("role claims and look-alike flags grant nothing", async () => {
     for (const [name, token] of Object.entries(forged)) {
       const db = env.authenticatedContext(`forged-${name}`, token).firestore();
       await assertFails(getDocs(collection(db, "purchase_requests")));
@@ -194,13 +169,13 @@ describe("roles cannot be forged from the browser", () => {
     }
   });
 
-  it("an office email address alone grants nothing", async () => {
+  it("an email address without an email-and-password sign-in grants nothing", async () => {
     const db = env.authenticatedContext("u1", { email: "gso.head@alaminos.gov.ph", email_verified: true }).firestore();
     await assertFails(getDoc(doc(db, "inventory_items/seed")));
   });
 
   it("writing a role into a document grants nothing", async () => {
-    const db = as("noRole");
+    const db = env.authenticatedContext("anon-1", { firebase: { sign_in_provider: "anonymous" } }).firestore();
     await assertFails(setDoc(doc(db, "users/norole-1"), { role: "Administrator" }));
     await assertFails(setDoc(doc(db, "roles/norole-1"), { role: "Administrator" }));
     await assertFails(getDocs(collection(db, "purchase_requests")));
@@ -210,12 +185,12 @@ describe("roles cannot be forged from the browser", () => {
 describe("audit trail is append-only", () => {
   const entry = (who: keyof typeof staff) => doc(as(who), "audit_logs/AUD-2026-0001");
 
-  it("Administrators read it", async () => {
+  it("accounts read it", async () => {
     await assertSucceeds(getDoc(entry("admin")));
   });
 
-  it("nobody can delete an entry, Administrators included", async () => {
-    for (const who of ["admin", "dept", "viewer"] as const) {
+  it("nobody can delete an entry", async () => {
+    for (const who of ["admin", "colleague"] as const) {
       await assertFails(deleteDoc(entry(who)));
     }
     await assertFails(deleteDoc(doc(anon(), "audit_logs/AUD-2026-0001")));
@@ -245,7 +220,7 @@ describe("audit trail is append-only", () => {
   });
 
   it("a comment cannot be signed as someone else", async () => {
-    await assertFails(updateDoc(entry("admin"), { comments: [firstComment, comment("dept-1")] }));
+    await assertFails(updateDoc(entry("admin"), { comments: [firstComment, comment("colleague-1")] }));
   });
 
   it("earlier comments cannot be edited, removed or reordered", async () => {
@@ -263,9 +238,8 @@ describe("audit trail is append-only", () => {
     await assertFails(updateDoc(entry("admin"), { comments: [firstComment, comment("admin-1", "")] }));
   });
 
-  it("other roles cannot comment", async () => {
-    await assertFails(updateDoc(entry("dept"), { comments: [firstComment, comment("dept-1")] }));
-    await assertFails(updateDoc(entry("viewer"), { comments: [firstComment, comment("viewer-1")] }));
+  it("signed out, nobody comments", async () => {
+    await assertFails(updateDoc(doc(anon(), "audit_logs/AUD-2026-0001"), { comments: [firstComment, comment("anon")] }));
   });
 });
 
@@ -290,47 +264,22 @@ describe("public portal (signed out)", () => {
   });
 });
 
-describe("signed-in accounts without a trusted role", () => {
-  it("get nothing beyond the public view", async () => {
-    for (const who of ["noRole", "madeUpRole"] as const) {
-      await assertFails(getDocs(collection(as(who), "purchase_requests")));
-      await assertFails(getDoc(doc(as(who), "inventory_items/item-1")));
-      await assertFails(setDoc(doc(as(who), "purchase_requests/PR-2026-000002"), samplePR("PR-2026-000002")));
-    }
-  });
-});
-
-describe("Viewer", () => {
-  it("reads but never writes", async () => {
-    await assertSucceeds(getDocs(collection(as("viewer"), "purchase_requests")));
-    await assertSucceeds(getDoc(doc(as("viewer"), "inventory_items/item-1")));
-    await assertFails(setDoc(doc(as("viewer"), "purchase_requests/PR-2026-000002"), samplePR("PR-2026-000002")));
-    await assertFails(updateDoc(doc(as("viewer"), "inventory_items/item-1"), { name: "Changed" }));
+describe("every account reads and edits the registers", () => {
+  it("reads every register and the audit trail", async () => {
+    await assertSucceeds(getDocs(collection(as("colleague"), "purchase_requests")));
+    await assertSucceeds(getDoc(doc(as("colleague"), "inventory_items/item-1")));
+    await assertSucceeds(getDoc(doc(as("colleague"), "audit_logs/AUD-2026-0001")));
   });
 
-  it("cannot read the audit trail", async () => {
-    await assertFails(getDoc(doc(as("viewer"), "audit_logs/AUD-2026-0001")));
-  });
-});
-
-describe("Department User", () => {
-  it("edits a request it manages but cannot renumber it or change when it was created", async () => {
-    const ref = doc(as("dept"), "purchase_requests/PR-2026-000001");
+  it("edits a request but cannot renumber it or change when it was created", async () => {
+    const ref = doc(as("colleague"), "purchase_requests/PR-2026-000001");
     await assertSucceeds(updateDoc(ref, { purpose: "Revised purpose (test data)" }));
     await assertFails(updateDoc(ref, { pr_number: "PR-2026-000777" }));
     await assertFails(updateDoc(ref, { created_at: "2020-01-01T00:00:00.000Z" }));
   });
 
   it("cannot use a status the workflow does not have", async () => {
-    await assertFails(updateDoc(doc(as("dept"), "purchase_requests/PR-2026-000001"), { status: "Paid" }));
-  });
-
-  it("cannot manage purchase orders, inventory or settings", async () => {
-    await assertFails(updateDoc(doc(as("dept"), "purchase_orders/PO-2026-000001"), { status: "Cancelled" }));
-    await assertFails(updateDoc(doc(as("dept"), "inventory_items/item-1"), { name: "Changed" }));
-    await assertFails(
-      setDoc(doc(as("dept"), "system_configuration/x"), { category: "General", key: "x", value: 1 }),
-    );
+    await assertFails(updateDoc(doc(as("colleague"), "purchase_requests/PR-2026-000001"), { status: "Paid" }));
   });
 });
 
@@ -342,9 +291,9 @@ describe("numbered documents are created only by the server", () => {
     reservations: { id: "FR-2026-000009", res_number: "FR-2026-000009", status: "Pending" },
   } as const;
 
-  it("no browser — Administrator, staff or public — can create one directly", async () => {
+  it("no browser, signed in or public, can create one directly", async () => {
     for (const [c, data] of Object.entries(fresh)) {
-      for (const db of [as("admin"), as("dept"), as("viewer"), anon()]) {
+      for (const db of [as("admin"), as("colleague"), anon()]) {
         await assertFails(setDoc(doc(db, `${c}/${data.id}`), data));
       }
     }
@@ -352,9 +301,6 @@ describe("numbered documents are created only by the server", () => {
 });
 
 describe("purchase request decisions, ownership and voiding", () => {
-  const ctx = signedIn;
-  const approver = () => ctx("approver-1", { role: "Department User", approver: true, email: "ap@alaminos.gov.ph" });
-  const otherDept = () => ctx("dept-2", { role: "Department User", email: "dept2@alaminos.gov.ph" });
   const pr = (db: ReturnType<typeof anon>, n = "PR-2026-000001") => doc(db, `purchase_requests/${n}`);
   /** A status change as the app makes it: one new approval step, signed by the account taking it. */
   const step = (status: string, byUid: string, remarks?: string) => ({
@@ -374,63 +320,51 @@ describe("purchase request decisions, ownership and voiding", () => {
     });
   });
 
-  it("a Department User cannot approve, reject, return or complete, even their own request", async () => {
-    await assertFails(updateDoc(pr(as("dept")), step("Approved", "dept-1")));
-    await assertFails(updateDoc(pr(as("dept")), step("Rejected", "dept-1")));
-    await assertFails(updateDoc(pr(as("dept")), step("Draft", "dept-1")));
-    await assertFails(updateDoc(pr(as("dept"), "PR-2026-000002"), step("Completed", "dept-1")));
+  it("the owner submits their own draft", async () => {
+    await assertSucceeds(updateDoc(pr(as("colleague"), "PR-2026-000003"), step("Submitted", "colleague-1")));
   });
 
-  it("the owner submits and voids their own open request, with a reason", async () => {
-    await assertSucceeds(updateDoc(pr(as("dept"), "PR-2026-000003"), step("Submitted", "dept-1")));
-    await assertSucceeds(updateDoc(pr(as("dept")), step("Cancelled", "dept-1", "Duplicate of PR-2026-000010")));
+  it("voiding is the voidPurchaseRequest function's: no browser voids, Administrators included (21 Oct 2026)", async () => {
+    // The function is Administrator-only and checks for linked orders and slips.
+    await assertFails(updateDoc(pr(as("colleague")), step("Cancelled", "colleague-1", "Duplicate of PR-2026-000010")));
+    await assertFails(updateDoc(pr(as("admin")), step("Cancelled", "admin-1", "Not needed")));
   });
 
-  it("the owner cannot void an approved request; a decider can", async () => {
-    await assertFails(updateDoc(pr(as("dept"), "PR-2026-000002"), step("Cancelled", "dept-1", "Not needed")));
-    await assertSucceeds(updateDoc(pr(approver(), "PR-2026-000002"), step("Cancelled", "approver-1", "Not needed")));
+  it("a purchase request is never deleted, Administrators included", async () => {
+    await assertFails(deleteDoc(pr(as("admin"))));
+    await assertFails(deleteDoc(pr(as("admin"), "PR-2026-000003")));
+    await assertFails(deleteDoc(pr(as("colleague"), "PR-2026-000003")));
   });
 
-  it("a void must give a reason", async () => {
-    await assertFails(updateDoc(pr(as("admin")), step("Cancelled", "admin-1")));
-    await assertFails(updateDoc(pr(as("admin")), step("Cancelled", "admin-1", "")));
-    await assertFails(updateDoc(pr(as("admin")), step("Cancelled", "admin-1", "x".repeat(501))));
+  it("approval is the approvePurchaseRequest function's: no browser approves (21 Oct 2026)", async () => {
+    // The function checks the purpose and signatories, and assigns the official number.
+    await assertFails(updateDoc(pr(as("admin")), step("Approved", "admin-1")));
   });
 
-  it("another Department User cannot touch a request they did not raise, or a portal request", async () => {
-    await assertFails(updateDoc(pr(otherDept()), { purpose: "Changed" }));
-    await assertFails(updateDoc(pr(otherDept()), step("Cancelled", "dept-2", "Not mine")));
-    await assertFails(updateDoc(pr(as("dept"), "PR-2026-000006"), { purpose: "Changed" }));
-  });
-
-  it("an explicitly authorised approver approves, returns, completes and handles portal requests", async () => {
-    await assertSucceeds(updateDoc(pr(approver()), step("Approved", "approver-1")));
-    await assertSucceeds(updateDoc(pr(approver(), "PR-2026-000002"), step("Completed", "approver-1")));
+  it("the official number and the signatory copy are never written from the browser; an approved request is not edited", async () => {
+    const db = as("admin");
+    await assertFails(updateDoc(pr(db), { official_pr_number: "100-2026-000999" }));
+    await assertFails(updateDoc(pr(db), { signatories: { approved_by: { name: "Anyone", designation: "Mayor" } } }));
+    await assertSucceeds(updateDoc(pr(db), { purpose: "Revised before approval (test data)" }));
+    await assertFails(updateDoc(pr(db, "PR-2026-000002"), { purpose: "Changed after approval" }));
     await assertSucceeds(
-      updateDoc(pr(approver(), "PR-2026-000006"), step("Draft", "approver-1", "Returned to requester for revision")),
+      updateDoc(pr(db, "PR-2026-000002"), { comments: [{ id: "c1", author: "Admin", text: "Noted", createdAt: "x" }] }),
     );
   });
 
-  it("an Administrator decides on any request", async () => {
+  it("any account decides on any request, its own, someone else's or a portal one", async () => {
     await assertSucceeds(updateDoc(pr(as("admin")), step("Rejected", "admin-1")));
+    await assertSucceeds(updateDoc(pr(as("colleague"), "PR-2026-000002"), step("Completed", "colleague-1")));
+    await assertSucceeds(
+      updateDoc(pr(as("colleague"), "PR-2026-000006"), step("Draft", "colleague-1", "Returned to requester for revision")),
+    );
   });
 
   it("every status change is signed by the account taking it", async () => {
     // No new step, a step for another status, or someone else's signature.
     await assertFails(updateDoc(pr(as("admin")), { status: "Approved" }));
     await assertFails(updateDoc(pr(as("admin")), { status: "Approved", approvals: [{ step: "Rejected", byUid: "admin-1" }] }));
-    await assertFails(updateDoc(pr(as("admin")), step("Approved", "approver-1")));
-  });
-
-  it("a Viewer can do none of it, even with an approver flag", async () => {
-    const viewerApprover = ctx("va-1", { role: "Viewer", approver: true, email: "va@alaminos.gov.ph" });
-    await assertFails(updateDoc(pr(viewerApprover), step("Approved", "va-1")));
-    await assertFails(updateDoc(pr(as("viewer")), step("Approved", "viewer-1")));
-  });
-
-  it("the approver flag must be exactly true", async () => {
-    const stringFlag = ctx("sf-1", { role: "Department User", approver: "true", email: "sf@alaminos.gov.ph" });
-    await assertFails(updateDoc(pr(stringFlag), step("Approved", "sf-1")));
+    await assertFails(updateDoc(pr(as("admin")), step("Approved", "colleague-1")));
   });
 
   it("nobody skips a step or reopens a closed request, Administrators included", async () => {
@@ -449,7 +383,7 @@ describe("purchase request decisions, ownership and voiding", () => {
   });
 
   it("a numbered request is never deleted, by anyone", async () => {
-    for (const db of [as("admin"), approver(), as("dept"), anon()]) {
+    for (const db of [as("admin"), as("colleague"), anon()]) {
       await assertFails(deleteDoc(pr(db)));
     }
   });
@@ -505,7 +439,16 @@ describe("Administrator", () => {
 
   it("changes settings", async () => {
     await assertSucceeds(
-      setDoc(doc(as("admin"), "system_configuration/x"), { category: "General", key: "x", value: 1 }),
+      setDoc(doc(as("admin"), "system_configuration/x"), {
+        category: "General", key: "x", value: 1, updated_by_uid: staff.admin.uid,
+      }),
+    );
+    // Not unsigned, and not under another account: the audit trail names the writer.
+    await assertFails(setDoc(doc(as("admin"), "system_configuration/y"), { category: "General", key: "y", value: 1 }));
+    await assertFails(
+      setDoc(doc(as("admin"), "system_configuration/y"), {
+        category: "General", key: "y", value: 1, updated_by_uid: staff.colleague.uid,
+      }),
     );
   });
 
@@ -515,23 +458,28 @@ describe("Administrator", () => {
 });
 
 describe("notifications", () => {
-  it("staff may only flip the read flag", async () => {
-    const ref = doc(as("viewer"), "notifications/n1");
+  it("an account may only flip the read flag", async () => {
+    const ref = doc(as("colleague"), "notifications/n1");
     await assertSucceeds(updateDoc(ref, { is_read: true }));
     await assertFails(updateDoc(ref, { title: "Edited" }));
-    await assertFails(setDoc(doc(as("viewer"), "notifications/n2"), { title: "Fake", is_read: false }));
+    await assertFails(setDoc(doc(as("colleague"), "notifications/n2"), { title: "Fake", is_read: false }));
+  });
+
+  it("are cleared by an account, never signed out", async () => {
+    await assertFails(deleteDoc(doc(anon(), "notifications/n1")));
+    await assertSucceeds(deleteDoc(doc(as("admin"), "notifications/n1")));
   });
 });
 
 describe("Records Management", () => {
-  it("staff read; nobody outside staff does", async () => {
-    await assertSucceeds(getDoc(doc(as("viewer"), "record_boxes/box-1")));
+  it("accounts read; nobody signed out does", async () => {
+    await assertSucceeds(getDoc(doc(as("colleague"), "record_boxes/box-1")));
     await assertFails(getDoc(doc(anon(), "record_boxes/box-1")));
   });
 
-  it("an Administrator only renames a shelf or corrects a box label in the browser", async () => {
+  it("in the browser, a shelf is only renamed and a box label only corrected", async () => {
     await assertSucceeds(updateDoc(doc(as("admin"), "record_boxes/box-1"), { label_override: "Box 01 (blue)" }));
-    await assertFails(updateDoc(doc(as("viewer"), "record_boxes/box-1"), { label_override: "x" }));
+    await assertFails(updateDoc(doc(anon(), "record_boxes/box-1"), { label_override: "x" }));
     // Moving a box goes through moveRecordBox, which keeps one box per position.
     await assertFails(updateDoc(doc(as("admin"), "record_boxes/box-1"), { slot: 2 }));
     await assertSucceeds(updateDoc(doc(as("admin"), "record_shelves/seed"), { name: "Shelf 1 (north wall)" }));
@@ -552,7 +500,7 @@ describe("Records Management", () => {
   });
 });
 
-describe("unique item codes", () => {
+describe("item codes: items are created only by createInventoryItems (22 Oct 2026)", () => {
   const claim = (db: ReturnType<typeof anon>, code: string) =>
     doc(db, "unique_keys", `inventory_items.item_code:${code}`);
   const item = (id: string, code: string) => ({
@@ -564,60 +512,41 @@ describe("unique item codes", () => {
     updated_by_uid: "admin-1",
   });
 
-  async function addItem(id: string, code: string) {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await fsSetDoc(doc(db, "inventory_items/inv-a"), item("inv-a", "INV-2026-000001"));
+      await fsSetDoc(doc(db, "unique_keys/inventory_items.item_code:INV-2026-000001"), {
+        collection: "inventory_items",
+        doc_id: "inv-a",
+      });
+    });
+  });
+
+  it("no browser creates an item, with its claim or without", async () => {
     const db = as("admin");
+    await assertFails(setDoc(doc(db, "inventory_items/inv-b"), item("inv-b", "INV-2026-000002")));
     const b = writeBatch(db);
-    b.set(doc(db, `inventory_items/${id}`), item(id, code));
-    b.set(claim(db, code), { collection: "inventory_items", doc_id: id });
-    await b.commit();
-  }
-
-  it("an item is saved together with the claim on its code", async () => {
-    await assertSucceeds(addItem("inv-a", "OFF-0001"));
+    b.set(doc(db, "inventory_items/inv-b"), item("inv-b", "INV-2026-000002"));
+    b.set(claim(db, "INV-2026-000002"), { collection: "inventory_items", doc_id: "inv-b" });
+    await assertFails(b.commit());
   });
 
-  it("an item without its claim is refused", async () => {
-    await assertFails(setDoc(doc(as("admin"), "inventory_items/inv-b"), item("inv-b", "OFF-0002")));
-  });
-
-  it("a second item cannot take a code already claimed", async () => {
-    await addItem("inv-a", "OFF-0001");
-    await assertFails(addItem("inv-b", "OFF-0001"));
-    await assertFails(setDoc(doc(as("admin"), "inventory_items/inv-b"), item("inv-b", "OFF-0001")));
-  });
-
-  it("a claim must name the item that holds the code", async () => {
-    await addItem("inv-a", "OFF-0001");
-    await assertFails(setDoc(claim(as("admin"), "OFF-0099"), { collection: "inventory_items", doc_id: "inv-a" }));
-  });
-
-  it("changing a code moves the claim; it cannot be changed without one", async () => {
-    await addItem("inv-a", "OFF-0001");
+  it("an item's code never changes; its other details do", async () => {
     const db = as("admin");
-    await assertFails(updateDoc(doc(db, "inventory_items/inv-a"), { item_code: "OFF-0050" }));
-    const b = writeBatch(db);
-    b.update(doc(db, "inventory_items/inv-a"), { item_code: "OFF-0050", updated_by_uid: "admin-1" });
-    b.set(claim(db, "OFF-0050"), { collection: "inventory_items", doc_id: "inv-a" });
-    b.delete(claim(db, "OFF-0001"));
-    await assertSucceeds(b.commit());
+    await assertFails(updateDoc(doc(db, "inventory_items/inv-a"), { item_code: "INV-2026-000050" }));
+    await assertSucceeds(updateDoc(doc(db, "inventory_items/inv-a"), { name: "Bond paper, A4" }));
   });
 
-  it("a claim is released only with its item", async () => {
-    await addItem("inv-a", "OFF-0001");
-    await assertFails(deleteDoc(claim(as("admin"), "OFF-0001")));
+  it("a live claim is never released or moved from the browser", async () => {
     const db = as("admin");
-    const b = writeBatch(db);
-    b.delete(doc(db, "inventory_items/inv-a"));
-    b.delete(claim(db, "OFF-0001"));
-    await assertSucceeds(b.commit());
+    await assertFails(deleteDoc(claim(db, "INV-2026-000001")));
+    await assertFails(setDoc(claim(db, "INV-2026-000001"), { collection: "inventory_items", doc_id: "inv-z" }));
   });
 
-  it("claims and rate limits are not readable by staff or the public", async () => {
-    await addItem("inv-a", "OFF-0001");
-    for (const db of [as("dept"), as("viewer"), anon()]) {
-      await assertFails(getDoc(claim(db, "OFF-0001")));
-    }
-    for (const db of [as("admin"), as("dept"), anon()]) {
+  it("claims are not readable signed out; rate limits by nobody", async () => {
+    await assertFails(getDoc(claim(anon(), "INV-2026-000001")));
+    for (const db of [as("admin"), anon()]) {
       await assertFails(getDoc(doc(db, "rate_limits/x")));
       await assertFails(setDoc(doc(db, "rate_limits/x"), { count: 0 }));
     }
@@ -627,7 +556,7 @@ describe("unique item codes", () => {
 describe("every staff write is signed by the account making it", () => {
   it("a write signed with someone else's account, or not signed, is refused", async () => {
     const ref = doc(as("admin"), "purchase_requests/PR-2026-000001");
-    await assertFails(updateDoc(ref, { purpose: "Changed", updated_by_uid: "dept-1" }));
+    await assertFails(updateDoc(ref, { purpose: "Changed", updated_by_uid: "colleague-1" }));
     await assertFails(updateDoc(ref, { purpose: "Changed", updated_by_uid: null }));
     await assertFails(fsUpdateDoc(doc(as("admin"), "reservations/FR-2026-000001"), { purpose: "Changed" }));
     await assertSucceeds(updateDoc(ref, { purpose: "Changed" }));
@@ -637,7 +566,7 @@ describe("every staff write is signed by the account making it", () => {
     const db = as("admin");
     await assertFails(fsSetDoc(doc(db, "stock_card/stk-1"), { item_id: "item-1", quantity_in: 1 }));
     await assertFails(
-      fsSetDoc(doc(db, "stock_card/stk-2"), { item_id: "item-1", quantity_in: 1, created_by_uid: "dept-1" }),
+      fsSetDoc(doc(db, "stock_card/stk-2"), { item_id: "item-1", quantity_in: 1, created_by_uid: "colleague-1" }),
     );
     await assertSucceeds(setDoc(doc(db, "stock_card/stk-3"), { item_id: "item-1", quantity_in: 1 }));
   });
@@ -667,9 +596,9 @@ describe("purchase orders, slips and bookings are voided, never deleted", () => 
     });
   });
 
-  it("nobody deletes one — Administrator, staff or public", async () => {
+  it("nobody deletes one, signed in or public", async () => {
     for (const ref of [po, ris, fr]) {
-      for (const db of [as("admin"), as("dept"), as("viewer"), anon()]) {
+      for (const db of [as("admin"), as("colleague"), anon()]) {
         await assertFails(deleteDoc(ref(db)));
       }
     }
@@ -678,11 +607,11 @@ describe("purchase orders, slips and bookings are voided, never deleted", () => 
   it("a void gives its reason and is signed by the account taking it", async () => {
     await assertFails(updateDoc(po(as("admin")), { status: "Cancelled" }));
     await assertFails(updateDoc(po(as("admin")), voidStep("admin-1", "")));
-    await assertFails(updateDoc(po(as("admin")), voidStep("dept-1")));
+    await assertFails(updateDoc(po(as("admin")), voidStep("colleague-1")));
     await assertSucceeds(updateDoc(po(as("admin")), voidStep("admin-1")));
-    await assertSucceeds(updateDoc(ris(as("dept")), voidStep("dept-1")));
-    await assertFails(updateDoc(fr(as("dept")), voidStep("dept-1", "")));
-    await assertSucceeds(updateDoc(fr(as("dept")), voidStep("dept-1")));
+    await assertSucceeds(updateDoc(ris(as("colleague")), voidStep("colleague-1")));
+    await assertFails(updateDoc(fr(as("colleague")), voidStep("colleague-1", "")));
+    await assertSucceeds(updateDoc(fr(as("colleague")), voidStep("colleague-1")));
   });
 
   it("an order issued to the supplier, or Released, cannot be voided", async () => {
@@ -707,13 +636,119 @@ describe("purchase orders, slips and bookings are voided, never deleted", () => 
   });
 
   it("every status change is signed, not only a void", async () => {
-    await assertFails(updateDoc(ris(as("admin")), { status: "Approved" }));
-    await assertSucceeds(
+    // Approval issues stock, so only approveRisRequest approves a slip, signed or not (22 Oct 2026).
+    await assertFails(
       updateDoc(ris(as("admin")), {
         status: "Approved",
         approvals: [{ step: "Approved", by: "Test", byUid: "admin-1" }],
       }),
     );
+    // Returning a pending slip for revision.
+    await assertFails(updateDoc(ris(as("admin")), { status: "Draft" }));
+    await assertSucceeds(
+      updateDoc(ris(as("admin")), {
+        status: "Draft",
+        approvals: [{ step: "Draft", by: "Test", byUid: "admin-1" }],
+      }),
+    );
+  });
+});
+
+describe("purchase orders: Draft → Pending Approval → Approved, approved by the server (21 Oct 2026)", () => {
+  const ref = (n: string) => doc(as("admin"), `purchase_orders/${n}`);
+  const step = (status: string, remarks?: string) => ({
+    status,
+    approvals: [{ step: status, by: "Test", byUid: "admin-1", ...(remarks ? { remarks } : {}) }],
+  });
+  const base = (n: string, status: string, over: Record<string, unknown> = {}) => ({
+    id: n, po_number: n, pr_number: "PR-2026-000001", department_code: "GSO", requester: "Test", purpose: "Test",
+    supplier_name: "Test Supplies Co.", status, approvals: [], history: [], ...over,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await fsSetDoc(doc(db, "purchase_orders/PO-2026-000010"), base("PO-2026-000010", "Draft"));
+      await fsSetDoc(doc(db, "purchase_orders/PO-2026-000011"), base("PO-2026-000011", "Pending Approval"));
+      await fsSetDoc(
+        doc(db, "purchase_orders/PO-2026-000012"),
+        base("PO-2026-000012", "Approved", {
+          po_date: "2026-10-21",
+          signatories: { approved_by: { name: "TEST MAYOR", designation: "Municipal Mayor" }, bac_secretary: null },
+        }),
+      );
+      await fsSetDoc(doc(db, "purchase_orders/PO-2026-000013"), base("PO-2026-000013", "Released"));
+      await fsSetDoc(
+        doc(db, "purchase_orders/PO-2026-000014"),
+        base("PO-2026-000014", "Approved", { authorization: "pr-approval", authorized_items: [] }),
+      );
+      await fsSetDoc(doc(db, "purchase_requests/PR-2026-000070"), {
+        ...samplePR("PR-2026-000070", "Approved"),
+        po_number: "PO-2026-000014",
+        approvals: [],
+      });
+    });
+  });
+
+  it("an order authorized with its request is corrected by the server, never returned or edited from the browser", async () => {
+    await assertFails(updateDoc(ref("PO-2026-000014"), step("Draft", "Returned for correction")));
+    await assertFails(updateDoc(ref("PO-2026-000014"), { supplier_name: "Typed in the browser" }));
+    await assertFails(updateDoc(ref("PO-2026-000014"), { authorized_items: [{ description: "x" }] }));
+    await assertFails(updateDoc(ref("PO-2026-000014"), { authorization: null }));
+    await assertSucceeds(updateDoc(ref("PO-2026-000014"), { comments: [{ id: "c1", text: "Printed" }] }));
+  });
+
+  it("a request's link to its order is the server's, and a request with an order is not returned to draft", async () => {
+    const pr = (db: ReturnType<typeof anon>) => doc(db, "purchase_requests/PR-2026-000070");
+    await assertFails(updateDoc(pr(as("admin")), step("Draft", "Revise")));
+    await assertFails(updateDoc(pr(as("admin")), { po_number: "PO-2026-000099" }));
+    await assertFails(updateDoc(doc(as("admin"), "purchase_requests/PR-2026-000001"), { po_number: "PO-2026-000099" }));
+  });
+
+  it("an Administrator submits a draft and returns it; no browser approves", async () => {
+    await assertSucceeds(updateDoc(ref("PO-2026-000010"), step("Pending Approval")));
+    await assertSucceeds(updateDoc(ref("PO-2026-000011"), step("Draft", "Returned for correction")));
+    await assertFails(updateDoc(ref("PO-2026-000011"), step("Approved")));
+    await assertFails(updateDoc(ref("PO-2026-000010"), step("Approved")));
+  });
+
+  it("Approved is final: no release or completion and no edit; only a return to draft, a void, or a comment", async () => {
+    await assertFails(updateDoc(ref("PO-2026-000012"), step("Released")));
+    await assertFails(updateDoc(ref("PO-2026-000012"), step("Completed")));
+    await assertFails(updateDoc(ref("PO-2026-000012"), { supplier_name: "Changed after approval" }));
+    await assertFails(updateDoc(ref("PO-2026-000012"), { items: [] }));
+    await assertSucceeds(updateDoc(ref("PO-2026-000012"), { comments: [{ id: "c1", text: "Printed and sent for signing" }] }));
+    await assertSucceeds(updateDoc(ref("PO-2026-000012"), step("Draft", "Returned for correction")));
+  });
+
+  it("the signatory copy, the PO date and the source request are never written from the browser", async () => {
+    await assertSucceeds(updateDoc(ref("PO-2026-000010"), { supplier_name: "Corrected before approval" }));
+    await assertFails(
+      updateDoc(ref("PO-2026-000010"), { signatories: { approved_by: { name: "ANYONE", designation: "Mayor" } } }),
+    );
+    await assertFails(updateDoc(ref("PO-2026-000010"), { po_date: "2026-01-01" }));
+    await assertFails(updateDoc(ref("PO-2026-000010"), { pr_number: "PR-2026-000099" }));
+    await assertFails(updateDoc(ref("PO-2026-000010"), { department_code: "MHO" }));
+    await assertFails(updateDoc(ref("PO-2026-000010"), { approved_at: "2026-10-21" }));
+  });
+
+  it("only orders released under the earlier workflow take issue stamps, and they can still be completed", async () => {
+    await assertFails(updateDoc(ref("PO-2026-000010"), { issued_at: "2026-10-21", issued_by: "Admin" }));
+    await assertFails(updateDoc(ref("PO-2026-000012"), { issued_at: "2026-10-21", issued_by: "Admin" }));
+    await assertSucceeds(updateDoc(ref("PO-2026-000013"), { issued_at: "2026-10-21", issued_by: "Admin" }));
+    await assertSucceeds(updateDoc(ref("PO-2026-000013"), step("Completed")));
+  });
+
+  it("Settings text stays a sensible length", async () => {
+    const setting = (value: string) =>
+      setDoc(doc(as("admin"), "system_configuration/cfg-po-signatories-po-approving-name"), {
+        category: "PO Signatories",
+        key: "po_approving_name",
+        value,
+        updated_by_uid: staff.admin.uid,
+      });
+    await assertSucceeds(setting("TEST MAYOR"));
+    await assertFails(setting("x".repeat(2001)));
   });
 });
 
@@ -801,7 +836,7 @@ describe("utility and violation records", () => {
       updateDoc(open, { payment_status: "Cancelled", cancel_reason: "", cancelled_by_uid: "admin-1", cancelled_at: "x" }),
     );
     await assertFails(
-      updateDoc(open, { payment_status: "Cancelled", cancel_reason: "Issued in error", cancelled_by_uid: "dept-1", cancelled_at: "x" }),
+      updateDoc(open, { payment_status: "Cancelled", cancel_reason: "Issued in error", cancelled_by_uid: "colleague-1", cancelled_at: "x" }),
     );
     await assertSucceeds(
       updateDoc(open, { payment_status: "Cancelled", cancel_reason: "Issued in error", cancelled_by_uid: "admin-1", cancelled_at: "x" }),

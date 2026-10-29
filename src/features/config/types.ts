@@ -24,6 +24,8 @@ export const CONFIG_CATEGORIES = [
   "Inventory",
   "Facility Reservation",
   "Violation Management",
+  "Signatories",
+  "PO Signatories",
 ] as const;
 
 export type ConfigCategory = (typeof CONFIG_CATEGORIES)[number];
@@ -76,9 +78,9 @@ export const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { category: "General", key: "organization_name", label: "Organization Name", kind: "text", fallback: "Municipality of Alaminos, Laguna", note: "Printed on every official document and shown on the login screen." },
   { category: "General", key: "office_name", label: "Office Name", kind: "text", fallback: "General Services Office", note: "Appears under the municipality on printed letterheads." },
   { category: "General", key: "province", label: "Province", kind: "text", fallback: "Laguna", note: "Printed as \"Republic of the Philippines · Province of …\" on report headers." },
-  { category: "General", key: "municipality_address", label: "Municipality Address", kind: "text", fallback: "Poblacion, Alaminos, Laguna 4001", note: "Printed in the document footer." },
-  { category: "General", key: "contact_number", label: "Contact Number", kind: "text", fallback: "(049) 543-1234", note: "Printed in the document footer." },
-  { category: "General", key: "official_email", label: "Official Email", kind: "text", fallback: "gso@alaminos.gov.ph", note: "Printed in the document footer." },
+  { category: "General", key: "municipality_address", label: "Municipality Address", kind: "text", fallback: null, note: "Not set. Enter the office's verified address; the placeholder that stood here was not an official detail." },
+  { category: "General", key: "contact_number", label: "Contact Number", kind: "text", fallback: null, note: "Not set. Enter the office's verified contact number; the placeholder that stood here was not an official detail." },
+  { category: "General", key: "official_email", label: "Official Email", kind: "text", fallback: null, note: "Not set. Enter the office's verified email; the placeholder that stood here was not an official detail." },
   { category: "General", key: "municipality_logo", label: "Municipality Logo", kind: "text", fallback: null, note: "Storage path for the seal on printed documents. Blank uses the built-in mark." },
   { category: "General", key: "currency", label: "Currency", kind: "text", fallback: "PHP", note: "Currency code shown beside every peso figure." },
 
@@ -103,9 +105,106 @@ export const CONFIG_DEFINITIONS: ConfigDefinition[] = [
     key: "default_funding_source",
     label: "Default Funding Source",
     kind: "select",
-    fallback: FUNDING_SOURCES[0],
+    // No fallback (21 Oct 2026): a fund is used only once an Administrator
+    // has chosen it here; until then the public form offers an optional choice.
+    fallback: null,
     options: FUNDING_SOURCES,
-    note: "Recorded on every new Purchase Request. The form does not ask for it.",
+    note: "Recorded on every new Purchase Request when set. Leave unset to let the requester choose, or the GSO complete it.",
+  },
+
+  {
+    category: "Procurement",
+    key: "official_pr_prefix",
+    label: "Official PR Number Prefix",
+    kind: "text",
+    // PROVISIONAL (21 Oct 2026): "100" is taken from the PR template
+    // (100-___-___-___); it is not confirmed as the municipality's code.
+    fallback: "100",
+    note: "PROVISIONAL — pending formal municipal approval. Official PR numbers are issued at approval as PREFIX-YEAR-NUMBER (e.g. 100-2026-000001), separate from the PR-2026-000001 tracking reference. Changing it affects only numbers issued afterwards.",
+  },
+
+  /* ---------------- Purchase Order terms (21 Oct 2026) ----------------
+     Copied onto the order created when a request is approved — only what an
+     Administrator has saved here; unset, the order prints a blank line to
+     fill in by hand. The notes quote the office's PO template (P.O AND
+     ACCEPTANCE.xlsx, sheet PURCHASE ORDER) for reference. */
+  {
+    category: "Procurement",
+    key: "po_place_of_delivery",
+    label: "PO — Place of Delivery",
+    kind: "text",
+    fallback: null,
+    note: "Copied onto each new Purchase Order when set. The PO template reads \"Municipality of Alaminos, Laguna\". Unset, the order prints a blank line.",
+  },
+  {
+    category: "Procurement",
+    key: "po_delivery_term",
+    label: "PO — Delivery Term",
+    kind: "text",
+    fallback: null,
+    note: "Copied onto each new Purchase Order when set. The PO template reads \"7 working Days\" — pending the office's confirmation as the standard term.",
+  },
+  {
+    category: "Procurement",
+    key: "po_payment_term",
+    label: "PO — Payment Term",
+    kind: "text",
+    fallback: null,
+    note: "Copied onto each new Purchase Order when set. The PO template reads \"Cash\" — pending the office's confirmation as the standard term.",
+  },
+  {
+    category: "Procurement",
+    key: "po_procurement_modes",
+    label: "PO — Modes of Procurement",
+    kind: "list",
+    fallback: [],
+    note: "The modes offered on a Purchase Order, one per line, as the BAC authorises them. Empty until an Administrator enters them; the field can still be typed.",
+  },
+
+  /* ---------------- Signatories (fixed roles, 21 Oct 2026) ----------------
+     The official forms fix each signatory's role, designation and place; the
+     only setting is the printed name of the person holding the post (see
+     SIGNATORY_ROLES below). Copied onto a document when it is approved or
+     authorized, so a change here never alters an approved document. */
+  {
+    category: "Signatories",
+    key: "pr_requested_by_name",
+    label: "Requested by — General Services Officer",
+    kind: "text",
+    fallback: null,
+    note: "Printed name above \"General Services Officer\" on every Purchase Request — not the employee who filed it. Required before a request can be approved.",
+  },
+  {
+    category: "Signatories",
+    key: "pr_cash_availability_name",
+    label: "Cash Availability — Municipal Treasurer",
+    kind: "text",
+    fallback: null,
+    note: "Printed name above \"Municipal Treasurer\". Required before a Purchase Request can be approved.",
+  },
+  {
+    category: "Signatories",
+    key: "pr_approved_by_name",
+    label: "Approved by — Municipal Mayor",
+    kind: "text",
+    fallback: null,
+    note: "Printed name above \"Municipal Mayor\" on the Purchase Request, exactly as typed (the PR template reads \"Hon. …\"). Required before a request can be approved.",
+  },
+  {
+    category: "PO Signatories",
+    key: "po_approving_name",
+    label: "Very truly yours — Municipal Mayor",
+    kind: "text",
+    fallback: null,
+    note: "Printed name above \"Municipal Mayor\" on the Purchase Order, exactly as typed (the PO template reads it without \"Hon.\"). Unset, the order prints a blank name line.",
+  },
+  {
+    category: "PO Signatories",
+    key: "po_bac_secretary_name",
+    label: "Certified Correct — BAC Secretary",
+    kind: "text",
+    fallback: null,
+    note: "Printed name above \"BAC Secretary\" in the negotiated-purchase portion of the Purchase Order. Unset, that line prints empty.",
   },
 
   /* ---------------- Inventory ---------------- */
@@ -198,3 +297,30 @@ export function configDefinition(
 ): ConfigDefinition | undefined {
   return CONFIG_DEFINITIONS.find((d) => d.category === category && d.key === key);
 }
+
+/**
+ * The signatory blocks of the official forms (21 Oct 2026): the role and the
+ * designation are fixed by the form and printed as they are; only the name is
+ * a setting. The server keeps the same designations
+ * (functions/src/documents/signatories.ts).
+ */
+export interface SignatoryRole {
+  /** The setting holding the printed name. */
+  key: string;
+  /** The form's heading, e.g. "Requested by". */
+  role: string;
+  /** Printed under the name; never edited. */
+  designation: string;
+}
+
+export const SIGNATORY_ROLES: Record<"Signatories" | "PO Signatories", SignatoryRole[]> = {
+  Signatories: [
+    { key: "pr_requested_by_name", role: "Requested by", designation: "General Services Officer" },
+    { key: "pr_cash_availability_name", role: "Cash Availability", designation: "Municipal Treasurer" },
+    { key: "pr_approved_by_name", role: "Approved by", designation: "Municipal Mayor" },
+  ],
+  "PO Signatories": [
+    { key: "po_approving_name", role: "Very truly yours", designation: "Municipal Mayor" },
+    { key: "po_bac_secretary_name", role: "Certified Correct", designation: "BAC Secretary" },
+  ],
+};

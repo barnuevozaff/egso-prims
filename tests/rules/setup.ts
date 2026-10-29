@@ -26,13 +26,16 @@ export function createEnv(): Promise<RulesTestEnvironment> {
   });
 }
 
-/** Claims as the Admin SDK would set them; email matches the office domain. */
+const PASSWORD = { sign_in_provider: "password" } as const;
+
+/**
+ * Email-and-password sessions of accounts added in the Firebase console: every
+ * one is an Administrator, with no claims (29 Oct 2026). Two, for tests about
+ * who did what.
+ */
 export const staff = {
-  admin: { uid: "admin-1", token: { role: "Administrator", email: "admin@alaminos.gov.ph" } },
-  dept: { uid: "dept-1", token: { role: "Department User", email: "dept@alaminos.gov.ph" } },
-  viewer: { uid: "viewer-1", token: { role: "Viewer", email: "viewer@alaminos.gov.ph" } },
-  noRole: { uid: "norole-1", token: { email: "new@alaminos.gov.ph" } },
-  madeUpRole: { uid: "fake-1", token: { role: "Superuser", email: "x@alaminos.gov.ph" } },
+  admin: { uid: "admin-1", token: { email: "admin@alaminos.gov.ph", firebase: PASSWORD } },
+  colleague: { uid: "colleague-1", token: { email: "colleague@gmail.com", firebase: PASSWORD } },
 } as const;
 
 export const samplePR = (n = "PR-2026-000001", status = "Submitted") => ({
@@ -44,8 +47,8 @@ export const samplePR = (n = "PR-2026-000001", status = "Submitted") => ({
   status,
   items: [],
   approvals: [],
-  // Raised by the Department User test account, who therefore owns it.
-  created_by_uid: "dept-1",
+  // Raised by the second test account, who therefore owns it.
+  created_by_uid: "colleague-1",
   created_at: "2026-10-19T00:00:00.000Z",
   updated_at: "2026-10-19T00:00:00.000Z",
 });

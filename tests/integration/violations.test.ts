@@ -16,7 +16,7 @@ import {
   type ViolationInput,
 } from "@/features/violations/api";
 
-import { createTeam, manilaYear, resetEmulators, signInAs } from "./setup";
+import { createTeam, manilaYear, resetEmulators, signInAs, signOutToPublic } from "./setup";
 
 /** Synthetic names only; no real violators. */
 
@@ -119,10 +119,8 @@ describe("Violations on Firestore", () => {
     await expect(recordViolation({ violatorName: "Tester, Rosa", ...ticket() })).resolves.toBeTruthy();
   });
 
-  it("is recorded by Administrators only", async () => {
-    await signInAs("dept@alaminos.gov.ph");
+  it("is not recorded signed out", async () => {
+    await signOutToPublic();
     await expect(recordViolation({ violatorName: "Tester, Jose", ...ticket() })).rejects.toThrow(/permission/);
-    await signInAs("viewer@alaminos.gov.ph");
-    expect(await listViolators()).toEqual([]);
   });
 });

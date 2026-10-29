@@ -22,6 +22,14 @@ export const PO_STATUSES: POStatus[] = [
 ];
 
 /**
+ * The ordinary workflow since 21 Oct 2026: Draft → Pending Approval →
+ * Approved, where Approved is final. Released and Completed belong to the
+ * old workflow; orders that reached them keep them and stay readable.
+ */
+export const WORKFLOW_PO_STATUSES: POStatus[] = ["Draft", "Pending Approval", "Approved"];
+export const LEGACY_PO_STATUSES: POStatus[] = ["Released", "Completed"];
+
+/**
  * Stages an order can still be voided from — and only while it has not been
  * issued to the supplier. A Released or Completed order is final.
  */
@@ -72,13 +80,29 @@ export interface POItem {
   unit: string;
   /** Agreed unit cost in PHP. */
   unitCost: number;
+  /** The template's Stock/Property No. column; blank when the item has none. */
+  stockNo?: string;
+}
+
+/** A signatory as printed: copied from Settings when the order is approved. */
+export interface POSignatory {
+  name: string;
+  designation: string;
+}
+
+export interface POSignatories {
+  approvedBy: POSignatory | null;
+  /** Certifies the negotiated-purchase portion; null when not set at approval. */
+  bacSecretary: POSignatory | null;
 }
 
 export interface PurchaseOrder {
   id: string;
   poNumber: string;
-  /** Source purchase request this PO was raised from. */
+  /** Source purchase request this PO was raised from (its tracking reference). */
   prNumber: string;
+  /** The source request's official PR number, copied when the order was created. */
+  prOfficialNumber?: string;
   departmentCode: string;
   requester: string;
   purpose: string;
@@ -91,12 +115,32 @@ export interface PurchaseOrder {
   modeOfProcurement?: string;
   paymentTerm?: string;
   deliveryTerm?: string;
-  /** Officials who sign the printed order. */
+  /**
+   * Typed per order before 21 Oct 2026; kept so older orders print as they
+   * were. New orders take their signatories from Settings (`signatories`).
+   */
   municipalMayor?: string;
   bacSecretary?: string;
+  /** Copied from Settings at approval; absent until the order is approved. */
+  signatories?: POSignatories;
+  /** The order's date, set at approval (Manila). */
+  poDate?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  /**
+   * How the order was authorized: "pr-approval" for an order created with its
+   * request's approval (21 Oct 2026). Absent on orders approved on their own.
+   * Authorization is not delivery, inspection, acceptance or payment.
+   */
+  authorization?: "pr-approval";
+  /** The lines as authorized; corrections change `items`, never these. */
+  authorizedItems?: POItem[];
+  /** Negotiated purchase only (Section 369 (a), RA 7160). */
+  bacResolutionNo?: string;
+  bacResolutionSeries?: string;
   deliveryAddress: string;
-  /** Expected delivery date (ISO date). */
-  expectedDelivery: string;
+  /** Date of delivery (ISO date); optional, as on the paper form. */
+  expectedDelivery?: string;
   /** Date the PO was issued (ISO date). */
   issuedDate: string;
   status: POStatus;

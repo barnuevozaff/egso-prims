@@ -12,7 +12,6 @@ import {
   toast,
 } from "@/components";
 import { usePurchaseRequest } from "@/features/purchase-requests/hooks";
-import { canRaisePO } from "@/features/purchase-requests/lib";
 import { departmentByCode } from "@/features/purchase-requests/types";
 import { PRDetailPanels } from "@/features/purchase-requests/components/pr-detail-panels";
 import { PRPrintSheet } from "@/features/shared/procurement-sheets";
@@ -20,7 +19,7 @@ import { PRPrintSheet } from "@/features/shared/procurement-sheets";
 export function PRDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const { data: pr, loading, setData } = usePurchaseRequest(id);
+  const { data: pr, loading } = usePurchaseRequest(id);
 
   return (
     <PageTransition className="space-y-6">
@@ -68,21 +67,18 @@ export function PRDetailPage() {
                   <Pencil />
                   Edit
                 </Button>
-                {canRaisePO(pr.status) && (
-                  <Button
-                    onClick={() =>
-                      navigate(`/purchase-orders/new?pr=${encodeURIComponent(pr.prNumber)}`)
-                    }
-                  >
+                {/* The order created with the approval (21 Oct 2026): opened, never created again. */}
+                {pr.poNumber && (
+                  <Button onClick={() => navigate(`/purchase-orders/${encodeURIComponent(pr.poNumber!)}`)}>
                     <ShoppingCart />
-                    Generate PO
+                    Go to PO
                   </Button>
                 )}
               </>
             }
           />
           <ContainerCard padded className="mx-auto w-full max-w-3xl">
-            <PRDetailPanels pr={pr} onUpdated={setData} />
+            <PRDetailPanels pr={pr} />
           </ContainerCard>
           </div>
         </>

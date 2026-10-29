@@ -2,7 +2,8 @@
  * Unit-of-measure recognition and normalization for Smart Import.
  *
  * `normalizeUnit` cleans a unit token into a canonical spelling without
- * changing its meaning (PCS/Pieces → pcs, Litre → L, KG → kg). `isRecoverable`
+ * changing its meaning (PCS/Pieces → pc, Litre → L, KG → kg). The canonical
+ * spellings are the system's own units (ITEM_UNITS: "pc", not "pcs"). `isRecoverable`
  * says whether a loose token is confidently a unit, so the parser can pull the
  * unit out of a row even when the column split missed it — but never grabs a
  * stray single letter that only happens to look like a unit.
@@ -14,7 +15,7 @@ const define = (canonical: string, variants: string[]) => {
   for (const v of [canonical, ...variants]) CANONICAL[v.toLowerCase()] = canonical;
 };
 
-define("pcs", ["pc", "pcs", "piece", "pieces", "pce", "pces"]);
+define("pc", ["pc", "pcs", "piece", "pieces", "pce", "pces"]);
 define("box", ["box", "boxes", "bx"]);
 define("ream", ["ream", "reams", "rm"]);
 define("pack", ["pack", "packs", "packet", "packets", "pkg", "pkt"]);

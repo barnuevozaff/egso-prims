@@ -4,6 +4,30 @@ import { actorOf, buildAuditEntry, PUBLIC_PORTAL, SYSTEM } from "../src/audit.js
 
 const now = new Date("2026-10-19T02:00:00Z");
 
+describe("a Purchase Request edited by the GSO (21 Oct 2026)", () => {
+  it("records which fields changed, before and after, not only the status", () => {
+    const before = {
+      pr_number: "PR-2026-000006", status: "Submitted", purpose: null, funding_source: null, section: "Supply",
+      items: [{ description: "Bond paper", quantity: 5, estimatedCost: 250 }],
+    };
+    const after = {
+      ...before, purpose: "Office supplies for Q4", funding_source: "General Fund",
+      items: [{ description: "Bond paper", quantity: 6, estimatedCost: 250 }],
+    };
+    const entry = buildAuditEntry({ collection: "purchase_requests", docId: "PR-2026-000006", before, after, actor: SYSTEM, now });
+    expect(entry?.previous_value).toBe("Purpose: —; Fund: —; Items: 1 item, 1,250.00");
+    expect(entry?.updated_value).toBe("Purpose: Office supplies for Q4; Fund: General Fund; Items: 1 item, 1,500.00");
+  });
+
+  it("keeps the status line for a status change", () => {
+    const entry = buildAuditEntry({
+      collection: "purchase_requests", docId: "PR-1", actor: SYSTEM, now,
+      before: { status: "Submitted" }, after: { status: "Approved", official_pr_number: "100-2026-000001" },
+    });
+    expect(entry).toMatchObject({ previous_value: "Status: Submitted", updated_value: "Status: Approved" });
+  });
+});
+
 describe("buildAuditEntry (log_audit, migration 047)", () => {
   it("records a staff member creating a purchase request", () => {
     const entry = buildAuditEntry({

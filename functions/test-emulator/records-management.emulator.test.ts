@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken } from "./helpers.js";
+import { AUTH, call, accountToken } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -27,7 +27,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await clearFirestore();
   await fetch(`${AUTH}/emulator/v1/projects/${PROJECT_ID}/accounts`, { method: "DELETE" });
-  ({ token: admin, uid: adminUid } = await staffToken("admin@alaminos.gov.ph", "Administrator"));
+  ({ token: admin, uid: adminUid } = await accountToken("admin@alaminos.gov.ph"));
 });
 
 const series = (title: string, id?: string) => ({
@@ -136,9 +136,7 @@ describe("saveRecordsDocument", () => {
     expect((await db.doc(`document_counters/RDS-${year()}`).get()).exists).toBe(false);
   });
 
-  it("is for Administrators only", async () => {
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await save(rds(), dept)).error?.status).toBe("PERMISSION_DENIED");
+  it("is refused signed out", async () => {
     expect((await call("saveRecordsDocument", rds())).error?.status).toBe("PERMISSION_DENIED");
   });
 
@@ -210,11 +208,10 @@ describe("voidRecordsDocument", () => {
     expect((await save(rds())).result?.schedule_no).toBe(`RDS-${year()}-000002`);
   });
 
-  it("needs a reason and an Administrator, voids once, and a voided form cannot be changed", async () => {
+  it("needs a reason and an account, voids once, and a voided form cannot be changed", async () => {
     const id = String((await save(rds())).result?.id);
     expect((await call("voidRecordsDocument", { type: "RDS", id, reason: " " }, admin)).error?.status).toBe("INVALID_ARGUMENT");
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    expect((await call("voidRecordsDocument", { type: "RDS", id, reason: "x" }, dept)).error?.status).toBe("PERMISSION_DENIED");
+    expect((await call("voidRecordsDocument", { type: "RDS", id, reason: "x" })).error?.status).toBe("PERMISSION_DENIED");
     expect((await call("voidRecordsDocument", { type: "RDS", id, reason: "Duplicate" }, admin)).error).toBeUndefined();
     expect((await call("voidRecordsDocument", { type: "RDS", id, reason: "Again" }, admin)).error?.message).toMatch(/already voided/);
     expect((await save({ ...rds("Approved"), id })).error?.message).toMatch(/voided and can no longer be changed/);
@@ -274,11 +271,10 @@ describe("the Records Room", () => {
     expect((await docs("record_shelf_levels")).filter((l) => l.shelf_id === newId)).toEqual([]);
   });
 
-  it("is changed by Administrators only", async () => {
+  it("is never changed signed out", async () => {
     await room();
-    const { token: viewer } = await staffToken("viewer@alaminos.gov.ph", "Viewer");
-    expect((await call("createRecordShelf", { name: "X", position: 1 }, viewer)).error?.status).toBe("PERMISSION_DENIED");
-    expect((await call("moveRecordBox", { boxId: "RDS-2026-01", levelId: "x-A", slot: 1 }, viewer)).error?.status).toBe(
+    expect((await call("createRecordShelf", { name: "X", position: 1 })).error?.status).toBe("PERMISSION_DENIED");
+    expect((await call("moveRecordBox", { boxId: "RDS-2026-01", levelId: "x-A", slot: 1 })).error?.status).toBe(
       "PERMISSION_DENIED",
     );
   });

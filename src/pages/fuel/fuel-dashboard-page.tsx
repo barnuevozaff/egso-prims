@@ -521,7 +521,7 @@ export function FuelDashboardPage() {
       {/* Operational cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
         <FuelMetricCard
-          label="Registered Vehicles"
+          label="Registered Vehicles" tone="brand"
           value={allVehicles.data.length}
           icon={Car}
           hint={`${allVehicles.data.filter((v) => v.status === "Active").length} active`}
@@ -568,7 +568,7 @@ export function FuelDashboardPage() {
           loading={loading}
         />
         <FuelMetricCard
-          label="Pending Fuel Entries"
+          label="Pending Fuel Entries" tone="attention"
           value={pendingEntries}
           icon={pendingEntries > 0 ? CircleAlert : Gauge}
           hint={pendingEntries > 0 ? "Draft trips awaiting completion" : "Nothing pending"}

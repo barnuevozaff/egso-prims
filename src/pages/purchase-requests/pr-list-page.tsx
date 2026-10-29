@@ -1,33 +1,38 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { FileText, Plus } from "lucide-react";
+import { Ban, FileText, MoreHorizontal, Plus, Printer, Trash2 } from "lucide-react";
 
 import {
   Button,
+  Checkbox,
   CurrencyDisplay,
+  DeleteModal,
   DepartmentChip,
   DropdownFilter,
   EnterpriseTable,
-  ExportButton,
   Field,
   FilterBar,
+  IconButton,
   PageHeader,
   PageTransition,
   SearchBar,
   StatusBadge,
+  StatusTabs,
   TableCard,
   Textarea,
   WarningModal,
   toast,
 } from "@/components";
-import { useAuth } from "@/features/auth/auth-context";
-import { can } from "@/features/auth/types";
 import {
-  VOIDABLE_PR_STATUSES,
-  cancelPurchaseRequest,
-  exportPurchaseRequestsCsv,
-} from "@/features/purchase-requests/api";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/features/auth/auth-context";
+import { VOIDABLE_PR_STATUSES, cancelPurchaseRequest } from "@/features/purchase-requests/api";
 import { usePurchaseRequests } from "@/features/purchase-requests/hooks";
 import { formatDate } from "@/features/purchase-requests/lib";
 import {
@@ -37,9 +42,12 @@ import {
   prTotal,
   type PRStatus,
   type PurchaseRequest,
+  prSummary,
 } from "@/features/purchase-requests/types";
 import { PRBulkBar } from "@/features/purchase-requests/components/pr-bulk-bar";
 import { PRDrawer } from "@/features/purchase-requests/components/pr-drawer";
+import { usePRPrint } from "@/features/purchase-requests/components/use-pr-print";
+import { DEMO_CLEANUP, deleteDemoPurchaseRequests } from "@/features/purchase-requests/demo-cleanup";
 
 const ALL = "__all";
 
@@ -76,10 +84,18 @@ export function PRListPage() {
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [selectedRows, setSelectedRows] = React.useState<PurchaseRequest[]>([]);
-  const [confirmVoid, setConfirmVoid] = React.useState(false);
+  // The requests the void dialog is open for, and how many selected ones were already closed.
+  const [voidTarget, setVoidTarget] = React.useState<{ rows: PurchaseRequest[]; skipped: number } | null>(null);
+  // Kept while each dialog closes, so its text does not change as it fades out.
+  const [voidOpen, setVoidOpen] = React.useState(false);
   const [voidReason, setVoidReason] = React.useState("");
   const [voidError, setVoidError] = React.useState<string | undefined>();
   const [voiding, setVoiding] = React.useState(false);
+  // Local demo only: synthetic requests picked for deletion, and the "these are test records" tick.
+  const [deleteTarget, setDeleteTarget] = React.useState<PurchaseRequest[] | null>(null);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteConfirmed, setDeleteConfirmed] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -89,23 +105,48 @@ export function PRListPage() {
     setDrawerOpen(true);
   };
 
+  // Prints the official Purchase Request documents, never this screen.
+  const { print, sheet } = usePRPrint();
 
-  const downloadCsv = (rows: PurchaseRequest[], suffix: string) => {
-    const blob = new Blob([exportPurchaseRequestsCsv(rows)], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `purchase-requests-${suffix}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${rows.length} purchase request${rows.length === 1 ? "" : "s"}`);
+  // Every purchase request is numbered when it is filed, so none is ever
+  // deleted: an Administrator voids it (voidPurchaseRequest, 21 Oct 2026).
+  const isAdmin = user?.role === "Administrator";
+  const openVoid = React.useCallback((rows: PurchaseRequest[], skipped = 0) => {
+    setVoidError(undefined);
+    setVoidTarget({ rows, skipped });
+    setVoidOpen(true);
+  }, []);
+
+  // Deleting is test-data cleanup, offered only on the local demo build (DEMO_CLEANUP).
+  const canDemoDelete = DEMO_CLEANUP && isAdmin;
+  const openDelete = React.useCallback((rows: PurchaseRequest[]) => {
+    setDeleteConfirmed(false);
+    setDeleteTarget(rows);
+    setDeleteOpen(true);
+  }, []);
+
+  const deleteRows = async (rows: PurchaseRequest[]) => {
+    setDeleting(true);
+    try {
+      const { deleted, refused } = await deleteDemoPurchaseRequests(rows.map((r) => r.id));
+      if (deleted.length > 0) {
+        toast.success(`Deleted ${deleted.length} demo purchase request${deleted.length === 1 ? "" : "s"}`);
+      }
+      if (refused.length > 0) toast.error(refused.map((r) => r.reason).join(" · "));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "The demo records could not be deleted");
+    }
+    setDeleting(false);
+    setDeleteOpen(false);
+    setRowSelection({});
+    void refresh();
   };
 
   /**
    * Numbered requests are voided, never deleted: the status becomes
    * Cancelled and the number, record and history stay. Each request is voided
-   * on its own, so one the user may not void (or one already closed) is
-   * reported without stopping the rest.
+   * on its own, so one that cannot be voided (closed, or with a purchase
+   * order still in force) is reported without stopping the rest.
    */
   const voidRows = async (rows: PurchaseRequest[]) => {
     const reason = voidReason.trim();
@@ -126,7 +167,7 @@ export function PRListPage() {
     const voided = rows.length - failed.length;
     if (voided > 0) toast.success(`Voided ${voided} purchase request${voided === 1 ? "" : "s"}`);
     if (failed.length > 0) toast.error(failed.join(" · "));
-    setConfirmVoid(false);
+    setVoidOpen(false);
     setVoidReason("");
     setRowSelection({});
     void refresh();
@@ -142,7 +183,7 @@ export function PRListPage() {
         accessorKey: "purpose",
         cell: ({ row }) => (
           <div className="min-w-0 max-w-[420px]">
-            <div className="truncate font-medium text-neutral-900">{row.original.purpose}</div>
+            <div className="truncate font-medium text-neutral-900">{prSummary(row.original)}</div>
             <div className="mt-0.5 truncate text-[12.5px] text-[#5b606b]">
               <span className="font-['Geist_Mono',ui-monospace,monospace]">{row.original.prNumber}</span>
               {" · "}
@@ -178,9 +219,58 @@ export function PRListPage() {
         accessorKey: "status",
         cell: ({ getValue }) => <StatusBadge status={getValue<PRStatus>()} />,
       },
-
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => {
+          const pr = row.original;
+          const canVoid = isAdmin && VOIDABLE_PR_STATUSES.includes(pr.status);
+          return (
+            // The menu is not a row click: opening it leaves the drawer closed.
+            <span onClick={(e) => e.stopPropagation()} className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton variant="ghost" aria-label={`Actions for ${pr.prNumber}`} className="size-11 text-[#5b606b]">
+                    <MoreHorizontal />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem className="min-h-10 text-[13.5px]" onSelect={() => print([pr])}>
+                    <Printer />
+                    Print request
+                  </DropdownMenuItem>
+                  {canVoid && (
+                    <>
+                      <DropdownMenuSeparator />
+                      {/* Voiding keeps the record, so it is not styled as a deletion. */}
+                      <DropdownMenuItem className="min-h-10 text-[13.5px]" onSelect={() => openVoid([pr])}>
+                        <Ban />
+                        Void request…
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canDemoDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        className="min-h-10 text-[13.5px]"
+                        onSelect={() => openDelete([pr])}
+                      >
+                        <Trash2 />
+                        Delete (demo only)…
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          );
+        },
+        meta: { headerClassName: "w-14", className: "w-14 py-1" },
+      },
     ],
-    [navigate],
+    [isAdmin, canDemoDelete, print, openVoid, openDelete],
   );
 
   return (
@@ -189,13 +279,10 @@ export function PRListPage() {
         title="Purchase requests"
         description="Review what the offices filed and move it to a purchase order."
         actions={
-          <>
-            <ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />
-            <Button onClick={() => navigate("/purchase-requests/new")}>
-              <Plus />
-              New purchase request
-            </Button>
-          </>
+          <Button onClick={() => navigate("/purchase-requests/new")}>
+            <Plus />
+            New purchase request
+          </Button>
         }
       />
 
@@ -206,26 +293,7 @@ export function PRListPage() {
             <FilterBar
               className="shrink-0"
             >
-              <div role="tablist" aria-label="Filter by status" className="flex flex-wrap gap-1">
-                {tabs.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={status === t.value}
-                    onClick={() => setStatus(t.value)}
-                    className={
-                      "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-[13.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 " +
-                      (status === t.value
-                        ? "bg-[#f1f1ef] font-medium text-neutral-900"
-                        : "text-[#5b606b] hover:bg-[#f4f4f2] hover:text-neutral-900")
-                    }
-                  >
-                    {t.label}
-                    <span className="text-[12px] tabular-nums text-[#6b707a]">{t.count}</span>
-                  </button>
-                ))}
-              </div>
+              <StatusTabs tabs={tabs} value={status} onChange={setStatus} />
               <SearchBar
                 placeholder="Search PR number, requester, purpose…"
                 widthClassName="w-64"
@@ -272,34 +340,39 @@ export function PRListPage() {
 
       <PRBulkBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
-        onPrint={() => window.print()}
-        onVoid={
-          can(user, "manage:purchase-requests") && voidable.length > 0
-            ? () => {
-                setVoidError(undefined);
-                setConfirmVoid(true);
-              }
-            : undefined
-        }
+        onPrint={() => print(selectedRows)}
+        printLabel={selectedRows.length === 1 ? "Print" : `Print ${selectedRows.length}`}
+        onVoid={isAdmin && voidable.length > 0 ? () => openVoid(voidable, selectedRows.length - voidable.length) : undefined}
+        voidLabel={voidable.length === 1 ? "Void request" : `Void ${voidable.length} requests`}
+        voidTone="neutral"
+        onDelete={canDemoDelete ? () => openDelete(selectedRows) : undefined}
+        deleteLabel={canDemoDelete ? "Delete (demo)" : undefined}
         onClear={() => setRowSelection({})}
       />
 
+      {sheet}
+
       <WarningModal
-        open={confirmVoid}
+        open={voidOpen}
         onOpenChange={(open) => {
-          setConfirmVoid(open);
-          if (!open) setVoidReason("");
+          if (!open) {
+            setVoidOpen(false);
+            setVoidReason("");
+          }
         }}
-        title={`Void ${voidable.length} purchase request${voidable.length === 1 ? "" : "s"}?`}
-        description={`The status becomes Cancelled. The number, the request and its history are kept, and the reason is recorded with your name.${
-          voidable.length < selectedRows.length
-            ? ` ${selectedRows.length - voidable.length} selected request${selectedRows.length - voidable.length === 1 ? " is" : "s are"} already closed and will be left as they are.`
+        title={
+          voidTarget?.rows.length === 1
+            ? `Void ${voidTarget.rows[0].prNumber}?`
+            : `Void ${voidTarget?.rows.length ?? 0} purchase requests?`
+        }
+        description={`The status becomes Cancelled. Nothing is deleted: the tracking reference, any official PR number, the items and the history are kept, and the reason is recorded with your name and the time. A request with a purchase order or slip still in force is not voided.${
+          voidTarget && voidTarget.skipped > 0
+            ? ` ${voidTarget.skipped} selected request${voidTarget.skipped === 1 ? " is" : "s are"} already closed and will be left as ${voidTarget.skipped === 1 ? "it is" : "they are"}.`
             : ""
         }`}
-        confirmLabel="Void"
+        confirmLabel={voidTarget?.rows.length === 1 ? "Void request" : "Void requests"}
         loading={voiding}
-        onConfirm={() => void voidRows(voidable)}
+        onConfirm={() => voidTarget && void voidRows(voidTarget.rows)}
       >
         <Field label="Reason" required error={voidError} className="mt-4">
           <Textarea
@@ -313,6 +386,36 @@ export function PRListPage() {
           />
         </Field>
       </WarningModal>
+
+      {canDemoDelete && (
+        <DeleteModal
+          open={deleteOpen}
+          onOpenChange={(open) => {
+            if (!open) setDeleteOpen(false);
+          }}
+          title={
+            deleteTarget?.length === 1
+              ? `Delete ${deleteTarget[0].prNumber} from the demo?`
+              : `Delete ${deleteTarget?.length ?? 0} purchase requests from the demo?`
+          }
+          description={`Local demo only. ${
+            deleteTarget?.length === 1 ? "This test record is" : `These ${deleteTarget?.length ?? 0} test records are`
+          } removed from the demo database for good. Requests a purchase order or slip was raised from are kept, and numbers are never reused. Official requests are never deleted: in the real system they are voided.`}
+          confirmLabel={deleteTarget?.length === 1 ? "Delete 1 record" : `Delete ${deleteTarget?.length ?? 0} records`}
+          confirmDisabled={!deleteConfirmed}
+          loading={deleting}
+          onConfirm={() => deleteTarget && void deleteRows(deleteTarget)}
+        >
+          <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-[10px] border border-[#e6e6e3] px-3 py-3 text-[13.5px] text-neutral-900">
+            <Checkbox
+              className="mt-0.5"
+              checked={deleteConfirmed}
+              onCheckedChange={(v) => setDeleteConfirmed(v === true)}
+            />
+            <span>{deleteTarget?.length === 1 ? "This is test data" : "These are test data"}. Delete permanently.</span>
+          </label>
+        </DeleteModal>
+      )}
 
       <PRDrawer
         prId={activeId}

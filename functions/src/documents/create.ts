@@ -13,6 +13,9 @@ import {
 } from "./builders.js";
 import { PUBLIC_CALLABLE, callerOf, canCreate, enforcePublicLimit, requireRole, type Caller } from "./caller.js";
 import { BLOCKING_STATUSES, sameFacility, timesOverlap } from "./facilities.js";
+import { readSourcePR, type SourcePR } from "./po-source.js";
+import { sourceClaim } from "./linked-po.js";
+import { record, requiredText } from "./validate.js";
 
 /**
  * Creating a numbered document: the number is allocated and the document
@@ -34,6 +37,8 @@ async function createNumbered(options: {
   build: (number: string, at: string) => Row;
   /** Reads that must happen inside the transaction, before the number is taken. */
   before?: (tx: Transaction) => Promise<void>;
+  /** Further writes in the same transaction, after the document's own. */
+  after?: (tx: Transaction, row: Row) => void;
 }): Promise<Row> {
   const db = getFirestore();
   const settings = await readNumberingSettings();
@@ -54,6 +59,7 @@ async function createNumbered(options: {
         created_by_uid: options.caller.kind === "staff" ? options.caller.uid : null,
       };
       tx.create(db.collection(options.collection).doc(number), row);
+      options.after?.(tx, row);
       return row;
     },
     { maxAttempts: 10 },
@@ -66,7 +72,7 @@ async function createNumbered(options: {
  * storage.rules would refuse the upload), no drafts, rate limited.
  */
 async function admit(request: CallableRequest, what: string): Promise<Caller> {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   if (caller.kind === "staff" && !canCreate(caller)) {
     throw new HttpsError("permission-denied", `Viewers cannot file ${what}.`);
   }
@@ -88,21 +94,45 @@ export const createPurchaseRequest = onCall(PUBLIC_CALLABLE, async (request) => 
     type: "PR",
     collection: "purchase_requests",
     caller,
-    build: (number, at) => buildPurchaseRequest(input, number, at),
+    build: (number, at) => buildPurchaseRequest(input, number, at, { headings: caller.kind === "staff" }),
   });
 });
 
 export const createPurchaseOrder = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "raise purchase orders");
   const input = request.data?.input;
   const asDraft = request.data?.asDraft === true;
-  buildPurchaseOrder(input, "PO-0000-000000", new Date().toISOString(), asDraft);
+  // Reject bad input before a number is taken. The office, requester and
+  // purpose come from the request, so they are not asked of the caller here.
+  buildPurchaseOrder(input, "PO-0000-000000", new Date().toISOString(), asDraft, {
+    department_code: "-",
+    requester: "-",
+    purpose: "-",
+    official_pr_number: null,
+  });
+  const prNumber = requiredText(record(input).prNumber, "Purchase request", 40).trim();
+  // Only from an approved request, read in the same transaction (21 Oct 2026).
+  let source: SourcePR | undefined;
   return createNumbered({
     type: "PO",
     collection: "purchase_orders",
     caller,
-    build: (number, at) => buildPurchaseOrder(input, number, at, asDraft),
+    before: async (tx) => {
+      source = await readSourcePR(tx, prNumber);
+      // One order per request (21 Oct 2026): approving a request creates its
+      // order, so this older route refuses a request that already has one.
+      const claim = await tx.get(sourceClaim(prNumber));
+      const existing = source.po_number || (claim.exists ? String(claim.get("doc_id")) : "");
+      if (existing) {
+        throw new HttpsError("failed-precondition", `${prNumber} already has purchase order ${existing}.`);
+      }
+    },
+    build: (number, at) => buildPurchaseOrder(input, number, at, asDraft, source),
+    after: (tx, row) => {
+      tx.create(sourceClaim(prNumber), { collection: "purchase_orders", doc_id: row.po_number, created_at: row.created_at });
+      tx.update(getFirestore().collection("purchase_requests").doc(prNumber), { po_number: row.po_number });
+    },
   });
 });
 
@@ -111,12 +141,45 @@ export const createRisRequest = onCall(PUBLIC_CALLABLE, async (request) => {
   const input = request.data?.input;
   // Drafts are a staff convenience; a public slip is always submitted.
   const asDraft = caller.kind === "staff" && request.data?.asDraft === true;
-  buildRisRequest(input, "RIS-0000-000000", new Date().toISOString(), asDraft);
+  const checked = buildRisRequest(input, "RIS-0000-000000", new Date().toISOString(), asDraft);
+
+  // Items come from the Inventory catalog (22 Oct 2026). A portal slip names
+  // only register items; staff may still type one the register lacks, which
+  // must be linked before release. A linked line takes its name, unit and
+  // code from the register, whatever the browser sent. Filing never creates
+  // an item or moves stock.
+  const lines = checked.items as { inventoryItemId?: string }[];
+  if (caller.kind === "public" && lines.some((it) => !it.inventoryItemId)) {
+    throw new HttpsError("invalid-argument", "Choose each item from the GSO stock list.");
+  }
+  const catalog = new Map<string, { name: string; unit: string; code: string }>();
   return createNumbered({
     type: "RIS",
     collection: "ris_requests",
     caller,
-    build: (number, at) => buildRisRequest(input, number, at, asDraft),
+    before: async (tx) => {
+      const db = getFirestore();
+      for (const [i, it] of lines.entries()) {
+        if (!it.inventoryItemId || catalog.has(it.inventoryItemId)) continue;
+        const snap = await tx.get(db.collection("inventory_items").doc(it.inventoryItemId));
+        if (!snap.exists) {
+          throw new HttpsError("failed-precondition", `Item ${i + 1} is no longer on the GSO stock list. Choose it again.`);
+        }
+        catalog.set(snap.id, {
+          name: String(snap.get("name") ?? ""),
+          unit: String(snap.get("unit") ?? ""),
+          code: String(snap.get("item_code") ?? ""),
+        });
+      }
+    },
+    build: (number, at) => {
+      const row = buildRisRequest(input, number, at, asDraft);
+      row.items = (row.items as Record<string, unknown>[]).map((it) => {
+        const c = typeof it.inventoryItemId === "string" ? catalog.get(it.inventoryItemId) : undefined;
+        return c ? { ...it, name: c.name || it.name, unit: c.unit || it.unit, stockNo: c.code || null } : it;
+      });
+      return row;
+    },
   });
 });
 

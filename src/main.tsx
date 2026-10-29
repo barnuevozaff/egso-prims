@@ -10,13 +10,21 @@ import { PageFallback } from "@/components/feedback/page-fallback";
 import { Toaster } from "@/components/feedback/toaster";
 import { AuthProvider } from "@/features/auth/auth-context";
 import { applyCachedAppearance } from "@/features/config/theme";
-import { router } from "@/router";
 import "@/index.css";
 
 // Paint the stored theme before React mounts, so there is no flash of the
 // wrong palette on reload or a cold start at the login screen.
 applyCachedAppearance();
 
+/*
+ * The admin app, or the public portal site's portal-only routes
+ * (VITE_APP_SURFACE=portal, 22 Oct 2026). The condition is fixed at build
+ * time, so the portal build drops the admin router and every admin page.
+ */
+const loadRouter = () =>
+  import.meta.env.VITE_APP_SURFACE === "portal" ? import("@/portal-router") : import("@/router");
+
+void loadRouter().then(({ router }) =>
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {/*
@@ -40,4 +48,5 @@ createRoot(document.getElementById("root")!).render(
     </AuthProvider>
     </MotionConfig>
   </StrictMode>,
+),
 );

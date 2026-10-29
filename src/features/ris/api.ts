@@ -28,9 +28,11 @@ export const updateRequest = pick("updateRequest");
 export const deleteRequests = pick("deleteRequests");
 export const setRequestStatus = pick("setRequestStatus");
 export const cancelRequest = pick("cancelRequest");
+export const approveRequest = pick("approveRequest");
+export const rejectRequest = pick("rejectRequest");
 export const addRequestComment = pick("addRequestComment");
 export const removeRequestAttachment = pick("removeRequestAttachment");
-export const suggestStock = pick("suggestStock");
+export const listStock = pick("listStock");
 
 // The same for both databases.
 export const exportRequestsCsv = supabaseApi.exportRequestsCsv;

@@ -44,8 +44,22 @@ export function rowToPO(r: any): PurchaseOrder {
     deliveryTerm: r.delivery_term ?? undefined,
     municipalMayor: r.municipal_mayor ?? undefined,
     bacSecretary: r.bac_secretary ?? undefined,
+    prOfficialNumber: r.pr_official_number ?? undefined,
+    signatories: r.signatories
+      ? {
+          approvedBy: r.signatories.approved_by ?? null,
+          bacSecretary: r.signatories.bac_secretary ?? null,
+        }
+      : undefined,
+    poDate: r.po_date ?? undefined,
+    approvedAt: r.approved_at ?? undefined,
+    approvedBy: r.approved_by ?? undefined,
+    authorization: r.authorization ?? undefined,
+    authorizedItems: r.authorized_items ?? undefined,
+    bacResolutionNo: r.bac_resolution_no ?? undefined,
+    bacResolutionSeries: r.bac_resolution_series ?? undefined,
     deliveryAddress: r.delivery_address,
-    expectedDelivery: r.expected_delivery,
+    expectedDelivery: r.expected_delivery || undefined,
     issuedDate: r.issued_date,
     status: r.status,
     items: r.items ?? [],
@@ -100,10 +114,12 @@ export interface PODraftInput {
   modeOfProcurement?: string;
   paymentTerm?: string;
   deliveryTerm?: string;
-  municipalMayor?: string;
-  bacSecretary?: string;
+  /** Negotiated purchase only. */
+  bacResolutionNo?: string;
+  bacResolutionSeries?: string;
   deliveryAddress: string;
-  expectedDelivery: string;
+  /** Optional, as on the paper form. */
+  expectedDelivery?: string;
   items: Omit<POItem, "id">[];
   attachments: AttachmentInput[];
 }
@@ -135,10 +151,8 @@ export async function createPurchaseOrder(
     mode_of_procurement: input.modeOfProcurement?.trim() || null,
     payment_term: input.paymentTerm?.trim() || null,
     delivery_term: input.deliveryTerm?.trim() || null,
-    municipal_mayor: input.municipalMayor?.trim() || null,
-    bac_secretary: input.bacSecretary?.trim() || null,
     delivery_address: input.deliveryAddress,
-    expected_delivery: input.expectedDelivery,
+    expected_delivery: input.expectedDelivery || null,
     issued_date: at.slice(0, 10),
     status,
     items: input.items.map((it) => ({ ...it, id: uid() })),
@@ -183,10 +197,8 @@ export async function updatePurchaseOrder(id: string, input: PODraftInput): Prom
     mode_of_procurement: input.modeOfProcurement?.trim() || null,
     payment_term: input.paymentTerm?.trim() || null,
     delivery_term: input.deliveryTerm?.trim() || null,
-    municipal_mayor: input.municipalMayor?.trim() || null,
-    bac_secretary: input.bacSecretary?.trim() || null,
     delivery_address: input.deliveryAddress,
-    expected_delivery: input.expectedDelivery,
+    expected_delivery: input.expectedDelivery || null,
     items: input.items.map((it) => ({ ...it, id: uid() })),
     attachments: [
       ...current.attachments,
@@ -369,4 +381,30 @@ export function exportPurchaseOrdersCsv(rows: PurchaseOrder[]): string {
     ].join(","),
   );
   return [header.join(","), ...lines].join("\n");
+}
+
+/** The order's document details: every field optional (21 Oct 2026). */
+export interface PODetailsInput {
+  supplierName?: string;
+  supplierAddress?: string;
+  supplierTin?: string;
+  supplierContact?: string;
+  modeOfProcurement?: string;
+  deliveryAddress?: string;
+  /** YYYY-MM-DD */
+  expectedDelivery?: string;
+  deliveryTerm?: string;
+  paymentTerm?: string;
+  bacResolutionNo?: string;
+  bacResolutionSeries?: string;
+  items?: (Omit<POItem, "id"> & { id?: string })[];
+}
+
+/** Completing or correcting an order is a Cloud Function, which the Supabase version does not have. */
+export async function updatePurchaseOrderDetails(
+  _id: string,
+  _details: PODetailsInput,
+  _options: { reason?: string; by?: string } = {},
+): Promise<PurchaseOrder> {
+  throw new Error("Purchase order details are saved only on the Firebase backend.");
 }

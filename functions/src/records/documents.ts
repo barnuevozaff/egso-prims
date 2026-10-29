@@ -177,7 +177,7 @@ const isDocType = (t: unknown): t is DocType => t === "RDS" || t === "RIA" || t 
 const yearOf = (iso: string) => Number(iso.slice(0, 4));
 
 export const saveRecordsDocument = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "change Records Management documents");
   const uid = caller.kind === "staff" ? caller.uid : null;
   const input = record(request.data ?? {});
@@ -294,7 +294,7 @@ export const saveRecordsDocument = onCall(async (request) => {
  * or emptied. Any status can be voided; a voided form cannot be changed.
  */
 export const voidRecordsDocument = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "void Records Management documents");
   const input = record(request.data ?? {});
   if (!isDocType(input.type)) throw invalid("Unknown records document type.");

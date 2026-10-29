@@ -7,7 +7,9 @@ import { callerOf, requireRole } from "./caller.js";
 import { record, requiredText, text } from "./validate.js";
 
 /**
- * Voids a Released requisition and issue slip, putting its stock back.
+ * Voids an issued requisition and issue slip, putting its stock back: one
+ * Approved since 22 Oct 2026 (approval issues the stock), or Released under
+ * the earlier workflow.
  *
  * Releasing a slip took stock out (an "RIS Release" stock-card line per
  * item). Voiding it returns exactly what those lines took — not what the
@@ -25,7 +27,7 @@ import { record, requiredText, text } from "./validate.js";
 type Row = Record<string, unknown>;
 
 export const voidReleasedRis = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "void a released slip");
   const uid = caller.kind === "staff" ? caller.uid : "";
   const input = record(request.data ?? {});
@@ -42,8 +44,9 @@ export const voidReleasedRis = onCall(async (request) => {
     if (!risSnap.exists) throw new HttpsError("not-found", "That slip no longer exists.");
     const ris: Row = { ...risSnap.data(), id };
     const number = String(ris.ris_number);
-    if (ris.status !== "Released") {
-      throw new HttpsError("failed-precondition", `${number} is ${ris.status}; only a Released slip has stock to return.`);
+    const issued = ris.status === "Released" || (ris.status === "Approved" && !!ris.stock_issued_at);
+    if (!issued) {
+      throw new HttpsError("failed-precondition", `${number} is ${ris.status}; only an issued slip has stock to return.`);
     }
     if (ris.stock_reversed_at) {
       throw new HttpsError("failed-precondition", `${number}'s stock has already been returned.`);

@@ -70,7 +70,7 @@ export function PortalTrackPage() {
   );
 
   // Search when the address names a reference: on arrival (from the home
-  // page or a receipt) and when a row in "Filed on this computer" is picked.
+  // page or a receipt) and when a row in "Requests from this device" is picked.
   // search() records what it searched, so its own ?ref= write is skipped.
   const linked = params.get("ref");
   React.useEffect(() => {
@@ -85,7 +85,9 @@ export function PortalTrackPage() {
       title="Track a Request"
       description="Enter the reference number from your receipt to see where it is now."
     >
-      <div className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+      {/* grid-cols-1 (minmax(0, 1fr)) keeps a long title in the side panel
+          from widening the page past a phone's screen. */}
+      <div className="grid w-full grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
         <div className="flex min-w-0 flex-col gap-5">
           <form
             onSubmit={(e) => {
@@ -112,12 +114,12 @@ export function PortalTrackPage() {
                 spellCheck={false}
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? "track-ref-error" : "track-ref-helper"}
-                className="h-11 min-w-0 flex-1 rounded-[10px] border border-[#d4d5d2] bg-white px-3.5 font-['Geist_Mono',ui-monospace,monospace] text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif] placeholder:normal-case placeholder:text-[#6b707a] focus:border-neutral-900 focus:outline-none focus:ring-4 focus:ring-neutral-900/[0.08] aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
+                className="h-11 min-w-0 flex-1 rounded-[10px] border border-[#d4d5d2] bg-white px-3.5 font-['Geist_Mono',ui-monospace,monospace] text-[15px] uppercase text-neutral-900 transition-[border-color,box-shadow] placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif] placeholder:normal-case placeholder:text-[#6b707a] focus:border-[#a7353b] focus:outline-none focus:ring-4 focus:ring-[#a7353b]/15 aria-invalid:border-red-600 aria-invalid:ring-red-600/15"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="group inline-flex h-11 shrink-0 items-center gap-2 rounded-[10px] bg-neutral-900 px-[18px] text-[15px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+                className="group inline-flex h-11 shrink-0 items-center gap-2 rounded-[10px] ui-accent ui-accent-hover px-[18px] text-[15px] font-medium transition-[background-color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring) focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
               >
                 Track
                 {loading ? (
@@ -156,7 +158,7 @@ export function PortalTrackPage() {
             <div className="rounded-[14px] border border-dashed border-[#d4d5d2] px-6 py-10 text-center">
               <p className="text-[15px] font-medium text-neutral-900">The request's progress shows here</p>
               <p className="mt-1.5 text-[14px] text-[#5b606b]">
-                Type a reference number above, or pick one you filed on this computer.
+                Type a reference number above, or select one under Recent Requests.
               </p>
             </div>
           )}

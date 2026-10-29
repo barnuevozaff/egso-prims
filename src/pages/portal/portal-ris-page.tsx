@@ -5,6 +5,7 @@ import { toast } from "@/components";
 import { createRequest, type RISDraftInput } from "@/features/ris/api";
 import { RISForm } from "@/features/ris/components/ris-form/ris-form";
 import { PortalPage, SubmissionSuccess } from "@/features/portal/components/submission-success";
+import { portalPath } from "@/features/portal/paths";
 
 /** Public RIS form — the same one-page form as the admin's, without stock, no login. */
 export function PortalRISPage() {
@@ -45,7 +46,7 @@ export function PortalRISPage() {
           submitLabel="Submit Requisition"
           submitting={submitting}
           onSubmit={submit}
-          onCancel={() => navigate("/portal")}
+          onCancel={() => navigate(portalPath())}
         />
       )}
     </PortalPage>

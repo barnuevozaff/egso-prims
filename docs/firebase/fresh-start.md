@@ -18,30 +18,34 @@ Firebase is validated. Only `egso-b2c0a` is ever a target —
 | Numbers | No counters are seeded. Each type's counter is created by its first document, so the first PR is `PR-<year>-000001`, the first audit entry `AUD-<year>-0001`, the first trip of a month `<yyyy>-<mm>-0001` (tested). Old test sequences are not continued. | none |
 | Settings | Every setting has a built-in default (`src/features/config/types.ts`). The office's particulars are printed on official documents and their defaults are placeholders (`(049) 543-1234`, `gso@alaminos.gov.ph`). | confirm real values; write them at first run (4.4) |
 | Records Room | Empty. The first approved RDS/RIA/RAD adds "Shelf 1" with levels A–E by itself. | none |
-| Accounts | No accounts. The first Administrator is made by the setup script (roles can only be set by the Admin SDK). | 4.3 |
-| Staff accounts | **The app has no Users screen**: `setStaffRole` exists and is tested, but nothing in the app calls it. Until there is one, staff accounts are made with the setup script. | decision: build a Users screen (a new feature) or keep the script |
+| Accounts | Made in the Firebase console (Authentication → Users → Add user). Every account is an Administrator; there are no other roles and no Users screen in the app (29 Oct 2026; README, "Authentication"). | 4.4 |
 | Migration tooling | `functions/migration` is not used for go-live (no data to move). It stays as tested tooling; it is not deployed. | none |
 | Unique values | Claims (`unique_keys`) are created as records are saved; nothing to seed. | none |
 | Supabase / Vercel | Untouched; the live site keeps running on them. The Firebase build is a separate build (`VITE_DATA_BACKEND=firebase`). | none |
 
 ## 2. Nobody can make themselves an Administrator
 
-- A role is a **custom claim**, which only the Admin SDK can write. The
-  rules and the app trust nothing else.
-- An account without a role sees nothing: the app refuses it at sign-in and
-  `firestore.rules` / `storage.rules` give it no staff access.
-- Tested on the emulators (`functions/test-emulator/first-run.emulator.test.ts`):
-  an outside address cannot sign up at all (`requireOfficeEmail`); an office
-  address that signs up gets no role; writing a role into its own account
-  with its own token is refused; calling `setStaffRole` on itself is refused.
-- `setStaffRole` is Administrator-only and will not let an Administrator
-  remove their own role.
-- First-run setup refuses to create a second Administrator under another
-  address; more Administrators are made deliberately.
+Every account in Firebase Authentication is an Administrator (29 Oct 2026),
+so who has an account is who has access. Accounts therefore come only from
+the Firebase console:
 
-Console settings that close the remaining doors (4.2): turn **sign-up off**
-(only the Admin SDK then creates accounts), turn on **email enumeration
-protection**, set a **password policy**.
+- **Sign-up is off** (4.2): no browser, SDK or API call can create an
+  account. This is the setting that keeps the system closed; never turn it
+  on.
+- Only an **email-and-password** sign-in counts. An anonymous or
+  custom-token session is never staff, whatever its claims; custom claims
+  are ignored everywhere.
+- A disabled or deleted account is refused by every Cloud Function at once;
+  direct database access from a browser already signed in lasts until its
+  token expires, at most an hour (README, "What an open session can still
+  do").
+- Tested on the emulators: `tests/rules/accounts.test.ts` (rules) and
+  `functions/test-emulator/accounts.emulator.test.ts` (functions: a
+  console-style account with no claims is an Administrator; disabled,
+  deleted, revoked and anonymous sessions are refused).
+
+Console settings that close the remaining doors (4.2): **sign-up off**,
+**email enumeration protection** on, a **password policy**.
 
 ## 3. Blaze plan
 
@@ -52,7 +56,6 @@ protection**, set a **password policy**.
 | Authentication (email/password) | yes | — |
 | **Cloud Functions** (all create/void/numbering/audit functions) | no | **yes** — the app cannot save numbered documents without them |
 | **Cloud Storage** (attachments) | new default buckets require Blaze | **yes** |
-| Identity Platform upgrade (for the `requireOfficeEmail` blocking function and the sign-up switch) | — | effectively yes (billing account linked) |
 | App Check (reCAPTCHA Enterprise) | — | free tier, but a billing-enabled project |
 
 So the deploy needs **Blaze**, with a **budget alert** (suggested ₱1,000/month
@@ -84,11 +87,11 @@ Sign in at console.firebase.google.com with the account of 4.1 and open
       alerts at 50 %, 90 % and 100 %.
 - [ ] **Authentication** → Get started → **Sign-in method** → enable
       **Email/Password** (not "Email link"); leave every other provider off.
-- [ ] **Authentication** → **Settings** → upgrade to **Identity Platform**
-      (needed for the office-email check, `requireOfficeEmail`).
 - [ ] **Authentication** → **Settings** → **User actions** → untick
-      **Enable create (sign-up)** — accounts then come only from the setup
-      script. Leave **Enable deletion** unticked.
+      **Enable create (sign-up)** — accounts then come only from
+      Authentication → Users → **Add user**. Every account is an
+      Administrator, so this must stay off. Leave **Enable deletion**
+      unticked. (Set on egso-b2c0a; checked 29 Oct 2026.)
 - [ ] **Authentication** → **Settings** → **User account linking**: one
       account per email.
 - [ ] **Authentication** → **Settings** → **Email enumeration protection**:
@@ -140,15 +143,20 @@ credentials), with no emulator variables set:
 
 ```
 node functions/setup/cli.ts check    --remote --confirm-remote egso-b2c0a
-node functions/setup/cli.ts admin    --remote --confirm-remote egso-b2c0a --email <head>@alaminos.gov.ph --name "<Full Name>"
 node functions/setup/cli.ts settings --remote --confirm-remote egso-b2c0a --file settings.json
-node functions/setup/cli.ts staff    --remote --confirm-remote egso-b2c0a --email <clerk>@alaminos.gov.ph --role "Department User" [--approver]
 ```
 
 - `check` must report **Fresh** before anything else.
-- `admin` creates the account **without a password** and prints a one-time
-  link; give it to that person only, in person or over the office's own
-  channel; they set their password themselves. Nobody else ever sees it.
+- **Accounts** are added in the console: Authentication → **Users** →
+  **Add user** → email and password → **Add user**. The person signs in at
+  /login as an Administrator at once; nothing else is set up. Give the
+  password to that person only; they can change it with **Forgot
+  password?**.
+- Before the first Purchase Request can be approved, an Administrator sets
+  **Settings → Signatories** (the Requested-by signatory of each office, Cash
+  Availability and Approved by — the verified officeholders; nothing is built
+  in) and confirms the provisional **Official PR Number Prefix** (100) in
+  Settings → Procurement. Until then approval is refused and says what is missing.
 - `settings.json` starts from `functions/setup/settings.example.json`; the
   `CONFIRM WITH THE OFFICE` values must be replaced (address, contact
   number, official email). Existing values are never overwritten.
@@ -177,11 +185,11 @@ Run in Chrome on an office PC (Chrome 109) and a current Chrome:
       **one** from Zod's speed check (`Function("")` inside a try/catch —
       harmless, it falls back). Anything else is a gap in the policy to
       fix before enforcing.
-- [ ] The Administrator signs in with the password set from the link; a
+- [ ] An account added in the console signs in as an Administrator; a
       second browser shows sign-up is impossible.
 - [ ] Public portal: file a PR, RIS and reservation; track each by number.
-- [ ] Staff: approve the PR; raise a PO; release the RIS (stock moves); void
-      one of each (reason kept); void a released RIS (stock returns).
+- [ ] Staff: approve the PR; raise a PO; approve the RIS (stock moves); void
+      one of each (reason kept); void an approved RIS (stock returns).
 - [ ] Inventory, energy, water, fuel, violations: create, edit, check
       numbers start at 000001.
 - [ ] Records: create and approve an RDS — it files into Shelf 1, Level A,
@@ -189,7 +197,8 @@ Run in Chrome on an office PC (Chrome 109) and a current Chrome:
 - [ ] Reports, dashboard counts, notifications bell, audit trail entries
       name the right person.
 - [ ] Print each official form; compare with the paper form.
-- [ ] Department User and Viewer: the sidebar and buttons match the role.
+- [ ] Disable an account in the console: its next action that goes through
+      a Cloud Function (approve, void, number) is refused at once.
 - [ ] Phone width: each list page.
 - [ ] App Check metrics show verified requests; only then plan enforcing.
 - [ ] Record policies: correct a bill (reason required; history shows the
@@ -222,7 +231,7 @@ only after the office has used Firebase for an agreed period.
 1. Console checklist (4.2).
 2. `firebase deploy --only firestore:rules,firestore:indexes,storage`.
 3. `firebase deploy --only functions`.
-4. First run (4.4): `check` → `admin` → `settings` → `staff`.
+4. First run (4.4): `check` → `settings`; accounts added in the console.
 5. Preview channel (4.5); the testing checklist (section 5).
 6. Approval to go live → `firebase deploy --only hosting`.
 7. A week of office use; then App Check and CSP enforcement, one at a time.
@@ -248,8 +257,9 @@ only after the office has used Firebase for an agreed period.
   voided, never deleted (section 8); enable **Firestore point-in-time
   recovery** and a scheduled export to a Cloud Storage bucket before go-live
   (both need Blaze).
-- **Accounts**: disable an account in Authentication → Users; roles are
-  removed with the setup script or `setStaffRole`.
+- **Accounts**: disable or delete the account in Authentication → Users.
+  Cloud Functions refuse it at once; direct database access from an open
+  session ends when its token expires, within the hour.
 
 ## 7. Record policies (approved 2026-10-20, built locally)
 
@@ -308,8 +318,8 @@ it says so instead of pretending. It does not check archived or inactive
 holders either: the new rules are enforced on Firebase only.
 
 Unchanged: issued purchase orders are not voidable (a separate procedure
-waits for approval); staff accounts are provisioned with the setup script
-(no Users screen).
+waits for approval). Accounts are added in the Firebase console (no Users
+screen).
 
 ## 8. Blockers before a preview deployment
 

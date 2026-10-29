@@ -1,5 +1,7 @@
 import { CalendarDays, ClipboardList, FileText, SearchCheck } from "lucide-react";
 
+import { portalPath } from "@/features/portal/paths";
+
 /**
  * The staff portal's four services.
  *
@@ -25,33 +27,33 @@ export const PORTAL_SERVICES: PortalService[] = [
   {
     icon: FileText,
     title: "Purchase Request",
-    description: "Request supplies, equipment, or services your office needs to buy.",
-    cta: "Create PR",
+    description: "For supplies, equipment or services that your office needs to procure.",
+    cta: "Start Purchase Request",
     navLabel: "Purchase Request",
     kind: "filing",
     code: "PR",
-    to: "/portal/request",
+    to: portalPath("/request"),
   },
   {
     icon: ClipboardList,
     // The code sits on the card's corner, so the title does not repeat it.
     title: "Requisition & Issue Slip",
-    description: "Get items the GSO already has in stock, issued to your office.",
-    cta: "Request items",
+    description: "For items to be issued to your office from the GSO supply stock.",
+    cta: "Start Requisition",
     navLabel: "Requisition",
     kind: "filing",
     code: "RIS",
-    to: "/portal/ris",
+    to: portalPath("/ris"),
   },
   {
     icon: CalendarDays,
     title: "Facility Reservation",
-    description: "Book a municipal hall, room, or venue for a date and time.",
-    cta: "Reserve a facility",
+    description: "For the use of a municipal hall, room or venue on a set date and time.",
+    cta: "Start Reservation",
     navLabel: "Reservation",
     kind: "filing",
     code: "FR",
-    to: "/portal/reserve",
+    to: portalPath("/reserve"),
   },
   {
     icon: SearchCheck,
@@ -60,6 +62,6 @@ export const PORTAL_SERVICES: PortalService[] = [
     cta: "Track Request",
     navLabel: "Track",
     kind: "lookup",
-    to: "/portal/track",
+    to: portalPath("/track"),
   },
 ];

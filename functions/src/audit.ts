@@ -19,6 +19,9 @@ import { manilaYear } from "./numbering.js";
  */
 
 export const AUDITED_MODULES: Record<string, string> = {
+  // Settings (21 Oct 2026): a change to an official's printed name, or any
+  // other setting, is recorded with who made it and the old and new value.
+  system_configuration: "Settings",
   purchase_requests: "Purchase Requests",
   purchase_orders: "Purchase Orders",
   ris_requests: "RIS",
@@ -64,7 +67,21 @@ type Row = Record<string, unknown> | undefined;
 
 const text = (v: unknown) => (v === undefined || v === null ? undefined : String(v));
 
+/**
+ * A document's own number comes first (21 Oct 2026): a purchase order or slip
+ * also carries its request's pr_number, which the list above reaches first,
+ * so their entries were filed under the request's number.
+ */
+const OWN_NUMBER: Record<string, string> = {
+  purchase_orders: "po_number",
+  ris_requests: "ris_number",
+  reservations: "res_number",
+};
+
 function documentNumber(collection: string, row: Record<string, unknown>, id: string): string {
+  if (collection === "system_configuration") return `${text(row.category) ?? "Settings"} · ${text(row.key) ?? id}`;
+  const own = OWN_NUMBER[collection] && text(row[OWN_NUMBER[collection]]);
+  if (own) return own;
   for (const f of DOCUMENT_NUMBER_FIELDS) {
     const v = text(row[f]);
     if (v) return v;
@@ -144,6 +161,48 @@ export interface Actor {
 export const PUBLIC_PORTAL: Actor = { user: "Public Portal", role: "Public Portal" };
 export const SYSTEM: Actor = { user: "System", role: "System" };
 
+const PR_FIELDS: [string, string][] = [
+  ["department_code", "Office"],
+  ["requester", "Requested by"],
+  ["purpose", "Purpose"],
+  ["funding_source", "Fund"],
+  ["section", "Section"],
+  ["fpp", "FPP"],
+  ["official_pr_number", "Official PR No."],
+];
+
+/** "3 items, 4,250.00": an item list in a line, so a change in quantity or price shows. */
+function itemsLine(items: unknown): string {
+  const list = Array.isArray(items) ? (items as { quantity?: unknown; estimatedCost?: unknown }[]) : [];
+  const total = list.reduce((s, it) => s + Number(it.quantity ?? 0) * Number(it.estimatedCost ?? 0), 0);
+  return `${list.length} item${list.length === 1 ? "" : "s"}, ${total.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** The fields of a Purchase Request that changed, before and after; null when none did. */
+export function prFieldChanges(before: Record<string, unknown>, after: Record<string, unknown>): { before: string; after: string } | null {
+  const show = (v: unknown) => (v === undefined || v === null || v === "" ? "—" : String(v));
+  const was: string[] = [];
+  const now: string[] = [];
+  for (const [field, label] of PR_FIELDS) {
+    if (show(before[field]) !== show(after[field])) {
+      was.push(`${label}: ${show(before[field])}`);
+      now.push(`${label}: ${show(after[field])}`);
+    }
+  }
+  if (JSON.stringify(before.items ?? []) !== JSON.stringify(after.items ?? [])) {
+    was.push(`Items: ${itemsLine(before.items)}`);
+    now.push(`Items: ${itemsLine(after.items)}`);
+  }
+  if (JSON.stringify(before.headings ?? []) !== JSON.stringify(after.headings ?? [])) {
+    const n = (h: unknown) => (Array.isArray(h) ? h.length : 0);
+    was.push(`Headings: ${n(before.headings)}`);
+    now.push(`Headings: ${n(after.headings)}`);
+  }
+  if (!was.length) return null;
+  const cut = (s: string) => (s.length > 900 ? `${s.slice(0, 897)}…` : s);
+  return { before: cut(was.join("; ")), after: cut(now.join("; ")) };
+}
+
 /** The audit row for one write, or null when the collection is not audited. */
 export function buildAuditEntry(args: {
   collection: string;
@@ -159,6 +218,15 @@ export function buildAuditEntry(args: {
   if (!module || !ref) return null;
 
   const action = actionOf(collection, before, after);
+  // A Purchase Request edited by the GSO before approval (21 Oct 2026): the
+  // entry says which fields changed and from what, not only the status.
+  const show = (v: unknown) => (v === undefined || v === null || v === "" ? "—" : Array.isArray(v) ? v.join("; ") : String(v));
+  const edits =
+    collection === "purchase_requests" && before && after && statusOf(before) === statusOf(after)
+      ? prFieldChanges(before, after)
+      : collection === "system_configuration"
+        ? { before: before ? `Value: ${show(before.value)}` : "", after: after ? `Value: ${show(after.value)}` : "—" }
+        : null;
 
   return {
     timestamp: now.toISOString(),
@@ -168,8 +236,8 @@ export function buildAuditEntry(args: {
     module,
     action,
     document_number: documentNumber(collection, ref, docId),
-    previous_value: before ? `Status: ${statusOf(before)}` : null,
-    updated_value: after ? `Status: ${statusOf(after)}` : "—",
+    previous_value: edits ? edits.before || null : before ? `Status: ${statusOf(before)}` : null,
+    updated_value: edits ? edits.after : after ? `Status: ${statusOf(after)}` : "—",
     response: `${action} via GSO PRIMS`,
     severity: !after
       ? "Critical"

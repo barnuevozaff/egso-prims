@@ -33,7 +33,7 @@ import {
   Sidebar,
   SidebarBrand,
   SidebarContent,
-  SidebarDivider,
+  SidebarFooter,
   SidebarGroup,
   SidebarItem,
 } from "@/components/navigation/sidebar";
@@ -142,19 +142,20 @@ function readSidebarCollapsed(): boolean {
 }
 
 /**
- * The rail, top to bottom, in the order work moves: request, order, stock,
- * issue; then the services the office runs, the meters it reads, its records.
- * Every section is open; the groups used to start shut, so reaching Inventory
- * or Fuel took a click on a heading first.
+ * The rail, top to bottom: an overview (the dashboard, and the reports that
+ * span every module), then the work in the order it moves — request, order,
+ * stock, issue — the services the office runs, the meters it reads, its
+ * records. Every section is open; the groups used to start shut, so reaching
+ * Inventory or Fuel took a click on a heading first. Audit trail and Settings
+ * are pinned in the footer (redesign, 21 Oct 2026).
  */
 const NAV_SECTIONS: { label?: string; items: ModuleNavItem[] }[] = [
-  { items: [dashboardItem] },
+  { label: "Overview", items: [dashboardItem, reportsItem] },
   { label: "Procurement", items: procurementChildren },
   { label: "Supply", items: [inventoryItem, risItem] },
   { label: "Services", items: [reservationItem, violationItem] },
   { label: "Utilities", items: utilitiesChildren },
   { label: "Records", items: recordsChildren },
-  { items: [reportsItem] },
 ];
 
 const systemNav: (ModuleNavItem & { trailing?: React.ReactNode })[] = [
@@ -259,24 +260,23 @@ function AppSidebar({
             {sec.items.map(renderItem)}
           </SidebarGroup>
         ))}
-        {system.length > 0 && (
-          <>
-            <SidebarDivider />
-            <SidebarGroup>
-              {system.map(({ to, permission: _permission, ...item }) => (
-                <SidebarItem
-                  key={item.label}
-                  {...item}
-                  active={isActive(pathname, to)}
-                  onClick={to ? () => go(to) : undefined}
-                />
-              ))}
-            </SidebarGroup>
-          </>
-        )}
       </SidebarContent>
-      {/* No account block here: Settings is in the list above and Sign Out
-          is in the profile menu at the top right, where it was a third copy. */}
+      {/* Audit trail and Settings, out of the daily list. No account block:
+          Sign Out is in the profile menu at the top right. */}
+      {system.length > 0 && (
+        <SidebarFooter>
+          <nav aria-label="System" className="flex flex-col gap-px">
+            {system.map(({ to, permission: _permission, ...item }) => (
+              <SidebarItem
+                key={item.label}
+                {...item}
+                active={isActive(pathname, to)}
+                onClick={to ? () => go(to) : undefined}
+              />
+            ))}
+          </nav>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

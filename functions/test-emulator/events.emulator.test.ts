@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { AUTH, call, staffToken, waitFor } from "./helpers.js";
+import { AUTH, call, accountToken, waitFor } from "./helpers.js";
 import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
@@ -104,7 +104,7 @@ describe("notifications", () => {
 
 describe("audit attribution", () => {
   it("a document a staff member files through a function is audited under their email", async () => {
-    const { token } = await staffToken("clerk@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("clerk@alaminos.gov.ph");
     const res = await call("createPurchaseRequest", { input: pr }, token);
     const entry = await waitFor(() => createdEntryFor(res.result?.pr_number));
     expect(entry).toMatchObject({ user_name: "clerk@alaminos.gov.ph", user_role: "Authenticated User" });
@@ -132,7 +132,7 @@ describe("audit attribution", () => {
 
 describe("updateReservation", () => {
   it("moves a booking to a free slot and records it under the staff member", async () => {
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     const a = await call("createReservation", { input: fr() }, token);
     const moved = await call("updateReservation", { id: a.result?.id, input: fr({ startTime: "13:00", endTime: "15:00" }) }, token);
     expect(moved.result).toMatchObject({ start_time: "13:00", end_time: "15:00" });
@@ -148,7 +148,7 @@ describe("updateReservation", () => {
   });
 
   it("refuses to move a booking onto another, with the usual message", async () => {
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     const a = await call("createReservation", { input: fr() }, token);
     const b = await call("createReservation", { input: fr({ startTime: "13:00", endTime: "15:00" }) }, token);
     const clash = await call("updateReservation", { id: b.result?.id, input: fr({ startTime: "09:00", endTime: "11:00" }) }, token);
@@ -157,7 +157,7 @@ describe("updateReservation", () => {
   });
 
   it("lets only one of two simultaneous moves take the same free slot", async () => {
-    const { token } = await staffToken("dept@alaminos.gov.ph", "Department User");
+    const { token } = await accountToken("dept@alaminos.gov.ph");
     const a = await call("createReservation", { input: fr() }, token);
     const b = await call("createReservation", { input: fr({ startTime: "13:00", endTime: "15:00" }) }, token);
     const target = fr({ startTime: "16:00", endTime: "17:00" });
@@ -169,13 +169,9 @@ describe("updateReservation", () => {
     expect(results.filter((r) => r.error?.status === "FAILED_PRECONDITION")).toHaveLength(1);
   });
 
-  it("refuses Viewers, the public, and bookings already closed", async () => {
-    const { token: dept } = await staffToken("dept@alaminos.gov.ph", "Department User");
-    const { token: viewer } = await staffToken("viewer@alaminos.gov.ph", "Viewer");
+  it("refuses the public, and bookings already closed", async () => {
+    const { token: dept } = await accountToken("dept@alaminos.gov.ph");
     const a = await call("createReservation", { input: fr() }, dept);
-    expect((await call("updateReservation", { id: a.result?.id, input: fr() }, viewer)).error?.status).toBe(
-      "PERMISSION_DENIED",
-    );
     expect((await call("updateReservation", { id: a.result?.id, input: fr() })).error?.status).toBe("PERMISSION_DENIED");
     await db.doc(`reservations/${a.result?.id}`).update({ status: "Completed" });
     const closed = await call("updateReservation", { id: a.result?.id, input: fr() }, dept);

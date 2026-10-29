@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { buildNotification } from "../src/notifications.js";
 
 describe("buildNotification (notify_event, migration 012)", () => {
+  it("names a public request without a purpose by its first item, never an invented purpose", () => {
+    const items = [{ description: "Bond paper, A4" }, { description: "Ballpen" }, { description: "Stapler" }];
+    expect(buildNotification("purchase_requests", undefined, { pr_number: "PR-2026-000002", purpose: null, items })?.description).toBe(
+      "PR-2026-000002 — Bond paper, A4 and 2 more items",
+    );
+    expect(buildNotification("purchase_requests", undefined, { pr_number: "PR-2026-000003", purpose: null, items: [] })?.description).toBe(
+      "PR-2026-000003 — No purpose stated",
+    );
+  });
+
   it("announces a new purchase request with its number and purpose", () => {
     expect(buildNotification("purchase_requests", undefined, { pr_number: "PR-2026-000001", purpose: "Bond paper" })).toEqual({
       module: "Procurement",

@@ -11,26 +11,22 @@
  *
  * Commands:
  *   check                                   is the database fresh?
- *   admin  --email <a@alaminos.gov.ph> [--name "Full Name"]
- *                                           the first Administrator; prints a one-time set-password link
- *   staff  --email <…> --role "Department User"|Viewer|Administrator [--approver] [--name …]
- *                                           an office account with a role (the app has no Users screen yet)
  *   settings --file <settings.json>         the office's particulars and numbering format; never overwrites
+ *
+ * Accounts are not made here: add them in the Firebase console
+ * (Authentication → Users → Add user); every account is an Administrator
+ * (29 Oct 2026).
  */
 import { readFileSync } from "node:fs";
 
 import { initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 import {
   AUTHORISED_PROJECT,
   assertSetupTarget,
   freshStartCheck,
-  provisionAccount,
-  provisionFirstAdministrator,
   seedSettings,
-  type Role,
 } from "./provision.ts";
 
 const args = process.argv.slice(2);
@@ -47,7 +43,6 @@ assertSetupTarget({ projectId, remote, confirm: value("--confirm-remote") });
 process.env.GCLOUD_PROJECT = projectId;
 if (!remote) process.env.METADATA_SERVER_DETECTION = "none";
 initializeApp({ projectId });
-const auth = getAuth();
 const db = getFirestore();
 
 const say = (line: string) => console.log(line);
@@ -61,24 +56,6 @@ switch (command) {
     process.exit(r.fresh ? 0 : 1);
     break;
   }
-  case "admin":
-  case "staff": {
-    const email = value("--email");
-    if (!email) throw new Error("--email is required.");
-    const p =
-      command === "admin"
-        ? await provisionFirstAdministrator(auth, { email, displayName: value("--name") })
-        : await provisionAccount(auth, {
-            email,
-            displayName: value("--name"),
-            role: (value("--role") ?? "") as Role,
-            approver: args.includes("--approver"),
-          });
-    say(`${p.created ? "Created" : "Updated"} ${p.email} (${p.uid}) as ${p.role}${p.approver ? ", approver" : ""}.`);
-    say("Give this one-time link to that person only; it lets them set their own password:");
-    say(p.passwordLink);
-    break;
-  }
   case "settings": {
     const file = value("--file");
     if (!file) throw new Error("--file is required.");
@@ -89,6 +66,6 @@ switch (command) {
     break;
   }
   default:
-    console.error("Commands: check | admin | staff | settings  (see the top of functions/setup/cli.ts)");
+    console.error("Commands: check | settings  (see the top of functions/setup/cli.ts)");
     process.exit(2);
 }

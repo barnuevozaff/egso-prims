@@ -8,17 +8,19 @@ import {
 } from "firebase/auth";
 
 import { requireFirebase, sessionPersistence } from "@/lib/firebase";
-import { ROLES, type AuthUser, type Role } from "@/features/auth/types";
+import type { AuthUser } from "@/features/auth/types";
 
 /**
  * Firebase Authentication for the auth provider, used when
  * VITE_DATA_BACKEND=firebase. Loaded on demand, so the Supabase build never
  * downloads it.
  *
- * Who someone is comes from the ID token's custom claims (`role`,
- * `approver`, `office`), which only the Admin SDK can set (setStaffRole). An
- * account without a valid role is not let in: firestore.rules would refuse
- * it everything anyway, and a screen full of permission errors explains
+ * Every account in Firebase Authentication is an Administrator (29 Oct
+ * 2026): accounts are created only in the Firebase console, with sign-up
+ * disabled, so signing in with one is the authorisation
+ * (functions/src/accounts.ts). Only an email-and-password sign-in counts, as
+ * in firestore.rules; anything else is not let in, since the rules would
+ * refuse it everything and a screen full of permission errors explains
  * nothing.
  */
 
@@ -29,16 +31,15 @@ export class NoRoleError extends Error {
 }
 
 async function toAuthUser(user: User): Promise<AuthUser> {
-  const { claims } = await user.getIdTokenResult();
-  const role = claims.role;
-  if (typeof role !== "string" || !(ROLES as string[]).includes(role)) throw new NoRoleError();
+  const { signInProvider } = await user.getIdTokenResult();
+  if (signInProvider !== "password" || !user.email) throw new NoRoleError();
   return {
     id: user.uid,
-    email: user.email ?? "",
-    name: user.displayName || user.email || "Staff",
-    role: role as Role,
-    office: typeof claims.office === "string" ? claims.office : "General Services Office",
-    approver: claims.approver === true,
+    email: user.email,
+    name: user.displayName || user.email,
+    role: "Administrator",
+    office: "General Services Office",
+    approver: false,
   };
 }
 
@@ -46,7 +47,7 @@ async function toAuthUser(user: User): Promise<AuthUser> {
 export function firebaseAuthMessage(error: unknown): string {
   const code = String((error as { code?: unknown })?.code ?? "");
   if (error instanceof NoRoleError) {
-    return "This account has not been given access yet. Ask the General Services Office administrator.";
+    return "This account cannot sign in here. Ask the General Services Office administrator.";
   }
   switch (code) {
     case "auth/invalid-credential":
@@ -71,8 +72,9 @@ export function firebaseAuthMessage(error: unknown): string {
 export const firebaseDriver = {
   /**
    * Calls back with the signed-in user (or null) now and whenever it
-   * changes — sign-in, sign-out, a role change (setStaffRole revokes the old
-   * session), or an expired session. Returns the unsubscribe.
+   * changes — sign-in, sign-out, or a session that ended (an account
+   * disabled or deleted in the console cannot renew it). Returns the
+   * unsubscribe.
    */
   watch(onUser: (user: AuthUser | null, error?: unknown) => void): () => void {
     const { auth } = requireFirebase();

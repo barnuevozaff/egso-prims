@@ -210,10 +210,10 @@ export function ResListPage() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="Pending Reservations" value={pendingCount} icon={Clock3} loading={stats.loading} />
-        <MetricCard label="Approved Reservations" value={approvedCount} icon={CheckCircle2} loading={stats.loading} />
+        <MetricCard label="Pending Reservations" tone="attention" value={pendingCount} icon={Clock3} loading={stats.loading} />
+        <MetricCard label="Approved Reservations" tone="positive" value={approvedCount} icon={CheckCircle2} loading={stats.loading} />
         <MetricCard label="Active Today" value={activeCount} icon={CalendarClock} loading={stats.loading} />
-        <MetricCard label="Completed" value={completedCount} icon={CalendarCheck2} loading={stats.loading} />
+        <MetricCard label="Completed" tone="positive" value={completedCount} icon={CalendarCheck2} loading={stats.loading} />
         <MetricCard label="Today's Reservations" value={todayCount} icon={CalendarDays} loading={stats.loading} />
         <MetricCard label="Available Facilities" value={availableFacilities} icon={Building2} loading={stats.loading} />
       </div>

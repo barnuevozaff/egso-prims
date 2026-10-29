@@ -62,6 +62,15 @@ export function friendlyFirebaseError(error: unknown): Error {
     case "resource-exhausted":
     case "aborted":
       return new Error(message);
+    case "internal":
+      // A function that failed, or one not deployed yet (Spark, 21 Oct 2026):
+      // the browser sees only "internal". Never word it as if anything saved.
+      if (fromFunction) {
+        return new Error(
+          "The server could not complete this action, so it was not recorded. The server functions may not be available yet; please try again later or tell the GSO administrator.",
+        );
+      }
+      return new Error(`Database error: ${message}`);
     default:
       return new Error(`Database error: ${message}`);
   }

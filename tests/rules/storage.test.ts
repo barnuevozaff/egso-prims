@@ -29,22 +29,23 @@ beforeEach(async () => {
 });
 
 describe("attachments", () => {
-  it("are readable by staff only through the SDK", async () => {
-    await assertSucceeds(getBytes(ref(as("viewer"), PATH)));
+  it("are readable by accounts only, through the SDK", async () => {
+    await assertSucceeds(getBytes(ref(as("colleague"), PATH)));
     await assertFails(getBytes(ref(anon(), PATH)));
-    await assertFails(getBytes(ref(as("noRole"), PATH)));
+    const anonymous = env.authenticatedContext("anon-1", { firebase: { sign_in_provider: "anonymous" } }).storage();
+    await assertFails(getBytes(ref(anonymous, PATH)));
   });
 
-  it("accept PDFs and images from Administrators and Department Users", async () => {
+  it("accept PDFs and images from any account", async () => {
     await assertSucceeds(
-      uploadBytes(ref(as("dept"), "attachments/PR-2026-000002/a.pdf"), pdf, { contentType: "application/pdf" }),
+      uploadBytes(ref(as("colleague"), "attachments/PR-2026-000002/a.pdf"), pdf, { contentType: "application/pdf" }),
     );
     await assertSucceeds(
       uploadBytes(ref(as("admin"), "attachments/PO-2026-000001/b.png"), pdf, { contentType: "image/png" }),
     );
   });
 
-  it("refuse other file types, oversized files and read-only roles", async () => {
+  it("refuse other file types, oversized files and signed-out uploads", async () => {
     await assertFails(
       uploadBytes(ref(as("admin"), "attachments/PR-2026-000002/run.exe"), pdf, {
         contentType: "application/x-msdownload",
@@ -54,9 +55,6 @@ describe("attachments", () => {
       uploadBytes(ref(as("admin"), "attachments/PR-2026-000002/big.pdf"), new Uint8Array(10 * 1024 * 1024), {
         contentType: "application/pdf",
       }),
-    );
-    await assertFails(
-      uploadBytes(ref(as("viewer"), "attachments/PR-2026-000002/a.pdf"), pdf, { contentType: "application/pdf" }),
     );
     await assertFails(uploadBytes(ref(anon(), "attachments/PR-2026-000002/a.pdf"), pdf, { contentType: "application/pdf" }));
   });
@@ -74,10 +72,9 @@ describe("attachments", () => {
     await assertFails(uploadBytes(ref(as("admin"), "attachments/a.pdf"), pdf, { contentType: "application/pdf" }));
   });
 
-  it("can be deleted only by roles that can upload", async () => {
+  it("can be deleted by an account, never signed out", async () => {
     await assertFails(deleteObject(ref(anon(), PATH)));
-    await assertFails(deleteObject(ref(as("viewer"), PATH)));
-    await assertSucceeds(deleteObject(ref(as("dept"), PATH)));
+    await assertSucceeds(deleteObject(ref(as("colleague"), PATH)));
   });
 
   it("never overwrite an existing file", async () => {

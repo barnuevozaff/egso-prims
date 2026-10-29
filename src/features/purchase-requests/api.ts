@@ -30,6 +30,7 @@ export const setPurchaseRequestStatus = pick("setPurchaseRequestStatus");
 export const cancelPurchaseRequest = pick("cancelPurchaseRequest");
 export const addPurchaseRequestComment = pick("addPurchaseRequestComment");
 export const removePurchaseRequestAttachment = pick("removePurchaseRequestAttachment");
+export const ensurePurchaseOrderForPR = pick("ensurePurchaseOrderForPR");
 
 // The same for both databases.
 export const VOIDABLE_PR_STATUSES = supabaseApi.VOIDABLE_PR_STATUSES;

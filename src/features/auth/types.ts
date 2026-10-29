@@ -11,9 +11,8 @@ export interface AuthUser {
   role: Role;
   office: string;
   /**
-   * A Department User the Administrator has authorised to decide on purchase
-   * requests (the `approver` claim, set by setStaffRole). Firebase only;
-   * firestore.rules enforce it whatever the screen shows.
+   * The Supabase fallback's approver flag. On Firebase every account is an
+   * Administrator (29 Oct 2026), so it is always false there.
    */
   approver?: boolean;
 }

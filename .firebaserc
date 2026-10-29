@@ -1,5 +1,27 @@
 {
   "projects": {
     "default": "egso-b2c0a"
+  },
+  "targets": {
+    "egso-b2c0a": {
+      "hosting": {
+        "admin": [
+          "egso-b2c0a"
+        ],
+        "portal": [
+          "egso-public-portal"
+        ]
+      }
+    },
+    "demo-egso-prims": {
+      "hosting": {
+        "admin": [
+          "demo-egso-prims"
+        ],
+        "portal": [
+          "demo-egso-prims-portal"
+        ]
+      }
+    }
   }
 }

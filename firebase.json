@@ -1,42 +1,85 @@
 {
-  "hosting": {
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "cleanUrls": true,
-    "trailingSlash": false,
-    "rewrites": [{ "source": "**", "destination": "/index.html" }],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          { "key": "X-Content-Type-Options", "value": "nosniff" },
-          { "key": "X-Frame-Options", "value": "DENY" },
-          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-          { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
-          {
-            "key": "Content-Security-Policy-Report-Only",
-            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.google.com https://www.gstatic.com https://www.recaptcha.net https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://www.google.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://www.google.com https://www.recaptcha.net https://egso-b2c0a.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-          }
-        ]
-      },
-      {
-        "source": "/assets/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
-      },
-      {
-        "source": "/",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-      },
-      {
-        "source": "**/!(*.*)",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-      },
-      {
-        "source": "/index.html",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "admin",
+      "public": "dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [{ "source": "**", "destination": "/index.html" }],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            { "key": "X-Content-Type-Options", "value": "nosniff" },
+            { "key": "X-Frame-Options", "value": "DENY" },
+            { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+            { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+            {
+              "key": "Content-Security-Policy-Report-Only",
+              "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.google.com https://www.gstatic.com https://www.recaptcha.net https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://www.google.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://www.google.com https://www.recaptcha.net https://egso-b2c0a.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
+        {
+          "source": "/",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        },
+        {
+          "source": "**/!(*.*)",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        },
+        {
+          "source": "/index.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
+      ]
+    },
+    {
+      "target": "portal",
+      "public": "dist-portal",
+      "predeploy": ["npm run build:portal"],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [{ "source": "**", "destination": "/index.html" }],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            { "key": "X-Content-Type-Options", "value": "nosniff" },
+            { "key": "X-Frame-Options", "value": "DENY" },
+            { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+            { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+            {
+              "key": "Content-Security-Policy-Report-Only",
+              "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.google.com https://www.gstatic.com https://www.recaptcha.net https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://www.google.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://www.google.com https://www.recaptcha.net https://egso-b2c0a.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
+        {
+          "source": "/",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        },
+        {
+          "source": "**/!(*.*)",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        },
+        {
+          "source": "/index.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        }
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
@@ -57,6 +100,7 @@
         "test-emulator",
         "test-migration",
         "migration",
+        "setup",
         "tsconfig.json",
         "vitest.config.ts"
       ],

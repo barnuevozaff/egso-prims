@@ -4,14 +4,14 @@ rules_version = '2';
 //
 // Everything is denied unless a rule below allows it.
 //
-// Who is who comes only from the `role` custom claim, which the Admin SDK sets
-// (functions/ or a local admin script). Nothing a browser writes into a
-// document can make someone an administrator.
-//
-// Roles mirror ROLE_PERMISSIONS in src/features/auth/types.ts:
-//   Administrator    everything
-//   Department User  manages purchase requests, RIS and reservations
-//   Viewer           reads only
+// Who is who (29 Oct 2026): every account in Firebase Authentication is an
+// Administrator. Accounts are created only in the Firebase console
+// (Authentication → Users → Add user); sign-up is disabled for the project,
+// so no browser or API call can make one. Only an email-and-password
+// sign-in counts, so an anonymous or custom-token session is never staff,
+// and no custom claim makes anyone more or less than an Administrator.
+// Nothing a browser writes into a document can change that. The Department
+// User and Viewer branches below no longer apply to anyone.
 //
 // The public portal (no sign-in) may only:
 //   - read one purchase request, purchase order, RIS or reservation by its
@@ -32,8 +32,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // A console-created account, signed in with its email and password.
+    function isAccount() {
+      return signedIn()
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'password'
+        && request.auth.token.get('email', '') != '';
+    }
+
     function role() {
-      return signedIn() ? request.auth.token.get('role', '') : '';
+      return isAccount() ? 'Administrator' : '';
     }
 
     function isAdmin() {
@@ -109,11 +116,13 @@ service cloud.firestore {
     //
     // Only the workflow's own steps are allowed, for Administrators too:
     //   Draft → Submitted → Approved → Completed, Submitted → Rejected,
-    //   Submitted or Approved → Draft (returned), and voiding (→ Cancelled)
-    //   from Draft or Submitted by the owner, from any open stage by a decider.
+    //   Submitted or Approved → Draft (returned).
     // A numbered request is never deleted; it is voided, keeping its number,
-    // record and history. Each status change is signed by the account taking
-    // it, and a void carries its reason.
+    // record and history. Voiding (→ Cancelled) is the Administrator's, and
+    // only through the voidPurchaseRequest function (21 Oct 2026), which also
+    // refuses while a purchase order or slip raised from the request is in
+    // force — a check rules cannot make. Each status change is signed by the
+    // account taking it.
 
     function canApprovePR() {
       return isAdmin()
@@ -148,22 +157,25 @@ service cloud.firestore {
         && lastStep().remarks.size() <= 500;
     }
 
+    // Approval is not a browser write (21 Oct 2026): the approvePurchaseRequest
+    // function checks the purpose, the fund and the signatories, assigns the
+    // official PR number and copies the signatories, in one transaction.
     function prStatusChangeAllowed() {
       return (statusChange('Draft', 'Submitted') && canEditPR())
-        || (statusChange('Submitted', 'Approved') && canApprovePR())
         || (statusChange('Submitted', 'Rejected') && canApprovePR())
         || (statusChange('Submitted', 'Draft') && canApprovePR())
-        || (statusChange('Approved', 'Draft') && canApprovePR())
-        || (statusChange('Approved', 'Completed') && canApprovePR())
-        || (incoming().status == 'Cancelled'
-            && voidsWithReason()
-            && ((resource.data.status in ['Draft', 'Submitted'] && ownsPR())
-                || (resource.data.status in ['Draft', 'Submitted', 'Approved'] && canApprovePR())));
+        // Not once its purchase order exists (21 Oct 2026): the order was
+        // authorized by this approval; correct the order, or void it first.
+        || (statusChange('Approved', 'Draft') && canApprovePR()
+            && resource.data.get('po_number', null) == null)
+        || (statusChange('Approved', 'Completed') && canApprovePR());
     }
 
     // Closed requests keep their content; only the comment thread grows.
+    // An approved request is an official document: its content is not edited
+    // (21 Oct 2026); it is returned to draft to be revised, keeping its number.
     function prEditAllowed() {
-      return resource.data.status in ['Draft', 'Submitted', 'Approved']
+      return resource.data.status in ['Draft', 'Submitted']
         ? canEditPR()
         : canEditPR() && changesOnly(['comments', 'history', 'updated_at', 'updated_by_uid']);
     }
@@ -187,11 +199,30 @@ service cloud.firestore {
         && voidsWithReason();
     }
 
-    // Before release no stock has moved. A Released slip is voided only by
-    // the voidReleasedRis function, which returns its stock in the same
-    // transaction; a Completed slip is final.
+    // Before its stock is issued a slip is voided here. An issued slip —
+    // Approved since 22 Oct 2026 (approval issues the stock), or Released
+    // under the earlier workflow — is voided only by the voidReleasedRis
+    // function, which returns its stock in the same transaction; a Completed
+    // slip is final.
     function risVoidAllowed() {
-      return resource.data.status in ['Draft', 'Pending Approval', 'Approved'] && voidsWithReason();
+      return (resource.data.status in ['Draft', 'Pending Approval']
+              || (resource.data.status == 'Approved' && resource.data.get('stock_issued_at', null) == null))
+        && voidsWithReason();
+    }
+
+    // RIS workflow (22 Oct 2026): submitted → Approved or Rejected, with no
+    // Release step. Approval issues the stock, so it is never a browser
+    // write: the approveRisRequest function approves and deducts in one
+    // transaction. From the browser: submit a draft, return a pending slip
+    // to draft, reject it with a reason, void it before its stock is issued,
+    // and mark a slip released under the earlier workflow Completed.
+    function risStatusChangeAllowed() {
+      return keepsStatus()
+        || statusChange('Draft', 'Pending Approval')
+        || statusChange('Pending Approval', 'Draft')
+        || (statusChange('Pending Approval', 'Rejected') && voidsWithReason())
+        || statusChange('Released', 'Completed')
+        || incoming().status == 'Cancelled';
     }
 
     function signedStatusChange(voidAllowed) {
@@ -203,9 +234,40 @@ service cloud.firestore {
       allow list: if isStaff();
       allow update: if numberedUpdate('pr_number',
              ['Draft', 'Submitted', 'Approved', 'Rejected', 'Cancelled', 'Completed'])
+        // Written once, by approvePurchaseRequest.
+        && keeps(['official_pr_number', 'official_pr_number_assigned_at', 'official_pr_number_assigned_by',
+                  'official_pr_number_assigned_by_uid', 'signatories', 'po_number'])
         && (keepsStatus()
               ? prEditAllowed()
               : prStatusChangeAllowed() && signsNewStep());
+    }
+
+    // ---------- purchase orders: simplified workflow (21 Oct 2026) ----------
+    // Draft → Pending Approval → Approved, where Approved is final. Approval
+    // is not a browser write: the approvePurchaseOrder function checks the
+    // source request and the signatory, copies the signatories and dates the
+    // order. From the browser: submit, return to draft (from Pending Approval,
+    // or from Approved while not issued), void with a reason, and — for
+    // orders released under the old workflow only — Released → Completed.
+    // Content is edited only in Draft or Pending Approval; afterwards only the
+    // comment thread, history and the old issue/acknowledge stamps change.
+    function poStatusChangeAllowed() {
+      return statusChange('Draft', 'Pending Approval')
+        || statusChange('Pending Approval', 'Draft')
+        // An order authorized by its request's approval is corrected through
+        // updatePurchaseOrderDetails, not returned to draft (21 Oct 2026).
+        || (statusChange('Approved', 'Draft') && resource.data.get('issued_at', null) == null
+            && resource.data.get('authorization', '') != 'pr-approval')
+        || statusChange('Released', 'Completed')
+        || (incoming().status == 'Cancelled' && poVoidAllowed());
+    }
+
+    function poEditAllowed() {
+      return resource.data.status in ['Draft', 'Pending Approval']
+        ? keeps(['issued_at', 'issued_by', 'acknowledged_at', 'acknowledged_by'])
+        : changesOnly(['comments', 'history', 'updated_at', 'updated_by_uid'].concat(
+            resource.data.status in ['Released', 'Completed']
+              ? ['issued_at', 'issued_by', 'acknowledged_at', 'acknowledged_by'] : []));
     }
 
     match /purchase_orders/{id} {
@@ -215,7 +277,14 @@ service cloud.firestore {
         && numberedUpdate('po_number',
              ['Draft', 'Pending Approval', 'Approved', 'Released', 'Completed', 'Cancelled'])
         && voidedStaysVoided()
-        && signedStatusChange(poVoidAllowed());
+        // Written once, by approvePurchaseOrder; the source request and what
+        // the create function copied from it never change afterwards.
+        && keeps(['signatories', 'po_date', 'approved_at', 'approved_by', 'approved_by_uid',
+                  'pr_number', 'pr_official_number', 'department_code', 'requester', 'purpose',
+                  'authorization', 'authorized_items'])
+        && (keepsStatus()
+              ? poEditAllowed()
+              : poStatusChangeAllowed() && signsNewStep());
     }
 
     match /ris_requests/{id} {
@@ -223,10 +292,14 @@ service cloud.firestore {
       allow list: if isStaff();
       allow update: if canManage('ris_requests')
         && numberedUpdate('ris_number',
-             ['Draft', 'Pending Approval', 'Approved', 'Released', 'Completed', 'Cancelled'])
-        && keeps(['stock_reversed_at', 'stock_reversed_by_uid'])
+             ['Draft', 'Pending Approval', 'Approved', 'Rejected', 'Released', 'Completed', 'Cancelled'])
+        && keeps(['stock_reversed_at', 'stock_reversed_by_uid',
+                  'stock_issued_at', 'stock_issued_by_uid', 'approved_at', 'approved_by', 'approved_by_uid'])
         && voidedStaysVoided()
-        && signedStatusChange(risVoidAllowed());
+        && risStatusChangeAllowed()
+        && signedStatusChange(risVoidAllowed())
+        // What was issued stays as issued.
+        && (resource.data.get('stock_issued_at', null) == null || keeps(['items', 'issued_by', 'issue_date']));
     }
 
     // A booking's slot — facility, date, times — changes only through the
@@ -255,29 +328,31 @@ service cloud.firestore {
     }
 
     // ---------- inventory: one item per item code ----------
-    // Firestore has no unique constraint, so each item claims its code in
-    // unique_keys/inventory_items.item_code:{code}, written in the same
-    // transaction as the item (src/features/inventory/api.firebase.ts). An
-    // item cannot be saved under a code another item has claimed.
+    // Each item claims its code in unique_keys/inventory_items.item_code:{code},
+    // written by the createInventoryItems function with the item.
 
-    function itemCodeClaim(code) {
-      return /databases/$(database)/documents/unique_keys/$('inventory_items.item_code:' + code);
-    }
-
-    function claimsItsCode(id) {
-      return incoming().item_code is string
-        && incoming().item_code.matches('^[^/]{1,60}$')
-        && existsAfter(itemCodeClaim(incoming().item_code))
-        && getAfter(itemCodeClaim(incoming().item_code)).data.doc_id == id;
-    }
-
+    // Items are created only by the createInventoryItems function
+    // (functions/src/documents/inventory.ts, 22 Oct 2026), which issues the
+    // code INV-<year>-<sequence> from the shared counter and writes the
+    // opening stock-card line in the same transaction. A code never changes.
     match /inventory_items/{id} {
       allow read: if isStaff();
-      allow create: if isAdmin() && claimsItsCode(id) && signsCreation() && signsWrite();
-      allow update: if isAdmin() && keeps(['id', 'created_at', 'created_by_uid'])
-        && (keeps(['item_code']) || claimsItsCode(id))
+      allow update: if isAdmin() && keeps(['id', 'created_at', 'created_by_uid', 'item_code'])
         && signsWrite();
       allow delete: if isAdmin();
+    }
+
+    // Categories an Administrator added (standard ones live in the app).
+    // Saved by createInventoryItems, or when an item is edited into a new
+    // category; never renamed or removed, so items filed under one keep it.
+    // The ID is the name in lower case with single spaces (and "/" as %2F).
+    match /inventory_categories/{id} {
+      allow read: if isStaff();
+      allow create: if isAdmin() && signsCreation()
+        && incoming().keys().hasOnly(['id', 'name', 'created_at', 'created_by_uid'])
+        && incoming().id == id
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 100
+        && id == incoming().name.lower().replace('/', '%2F');
     }
 
     // ---------- violators: one profile per person ----------
@@ -499,8 +574,12 @@ service cloud.firestore {
     match /system_configuration/{id} {
       allow read: if isStaff();
       allow create, update: if isAdmin()
+        // Signed, so the audit trail names who changed a setting (21 Oct 2026).
+        && signsWrite()
         && incoming().category is string
-        && incoming().key is string;
+        && incoming().key is string
+        // A text setting (a signatory's name, a term) stays a sensible length.
+        && (!(incoming().value is string) || incoming().value.size() <= 2000);
       allow delete: if isAdmin();
     }
 

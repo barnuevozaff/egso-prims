@@ -134,13 +134,56 @@ export interface ApprovalRecord {
   byUid?: string;
 }
 
+export interface PRHeading {
+  id?: string;
+  /** Index of the item the heading stands above. */
+  position: number;
+  text: string;
+}
+
+export interface PRSignatory {
+  name: string;
+  designation: string;
+}
+
+export interface PRSignatories {
+  requestedBy: PRSignatory | null;
+  cashAvailability: PRSignatory | null;
+  approvedBy: PRSignatory | null;
+}
+
 export interface PurchaseRequest {
   id: string;
   prNumber: string;
   departmentCode: string;
   requester: string;
+  /**
+   * Empty until the GSO completes it: the public form no longer asks for it
+   * (approved 21 Oct 2026), and a request is not approved without one.
+   */
   purpose: string;
-  fundingSource: FundingSource;
+  /** Unset when Settings has no default fund and the filer chose none. */
+  fundingSource?: FundingSource;
+  /** Optional lines of the official form, printed as blanks when empty. */
+  section?: string;
+  fpp?: string;
+  /** Group headings the GSO adds to the item table; not items (no number, no cost). */
+  headings?: PRHeading[];
+  /**
+   * The official PR number (e.g. 100-2026-000001), assigned at approval by
+   * the approvePurchaseRequest function. Separate from `prNumber`, the
+   * PR-YYYY-NNNNNN tracking reference. The prefix is provisional.
+   */
+  officialPrNumber?: string;
+  officialPrNumberAssignedAt?: string;
+  officialPrNumberAssignedBy?: string;
+  /**
+   * The Purchase Order created with this request's approval (21 Oct 2026),
+   * e.g. PO-2026-000004. Set by the server only.
+   */
+  poNumber?: string;
+  /** The signatories as they stood when the request was approved; fixed from then on. */
+  signatories?: PRSignatories;
   /** Date the request was raised (ISO). */
   requestDate: string;
   status: PRStatus;
@@ -156,6 +199,30 @@ export interface PurchaseRequest {
   createdByUid?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * What a request is, for a one-line summary (lists, tracking, pickers): its
+ * purpose, or else its first item, or else its number. Never an invented
+ * purpose (approved 21 Oct 2026).
+ */
+/**
+ * An item description as the official form prints it: the first letter in
+ * capitals, everything after it exactly as typed, so acronyms, brands, sizes
+ * and codes are kept ("bond paper a4" → "Bond paper a4", "EPSON ink 003" stays).
+ */
+export function capitalizeFirstLetter(value: string): string {
+  const i = value.search(/\p{L}/u);
+  return i < 0 ? value : value.slice(0, i) + value.charAt(i).toLocaleUpperCase("en-PH") + value.slice(i + 1);
+}
+
+export function prSummary(pr: Pick<PurchaseRequest, "purpose" | "items" | "prNumber">): string {
+  const purpose = pr.purpose?.trim();
+  if (purpose) return purpose;
+  const first = pr.items[0]?.description?.trim();
+  if (!first) return pr.prNumber;
+  const more = pr.items.length - 1;
+  return more > 0 ? `${first} and ${more} more item${more === 1 ? "" : "s"}` : first;
 }
 
 export function departmentByCode(code: string): Department {

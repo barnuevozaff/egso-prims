@@ -15,6 +15,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    // The dev server's file watcher holds handles on what it watches, and on
+    // Windows that stops the emulators from saving their data
+    // (emulator-data/, written through a firebase-export-* folder).
+    watch: { ignored: ["**/emulator-data/**", "**/firebase-export-*/**"] },
+  },
   build: {
     // Vite's default CSS target is Chrome 111, the first to read oklch(), so
     // every Tailwind colour ships without a fallback. Office PCs on Windows 7

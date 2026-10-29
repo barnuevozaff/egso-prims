@@ -5,6 +5,7 @@ import { toast } from "@/components";
 import { createReservation, type ReservationDraftInput } from "@/features/reservations/api";
 import { ResForm } from "@/features/reservations/components/res-form/res-form";
 import { PortalPage, SubmissionSuccess } from "@/features/portal/components/submission-success";
+import { portalPath } from "@/features/portal/paths";
 
 /**
  * Public facility reservation form — the same one-page form as the admin's, no
@@ -43,7 +44,7 @@ export function PortalReservePage() {
           submitLabel="Submit Reservation"
           submitting={submitting}
           onSubmit={submit}
-          onCancel={() => navigate("/portal")}
+          onCancel={() => navigate(portalPath())}
         />
       )}
     </PortalPage>

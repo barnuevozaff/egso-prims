@@ -85,9 +85,10 @@ network requests beyond the local emulators.
 
 `npm run dev:emulators` runs the app with `.env.emulators` (committed; demo
 values only, no secrets): Firebase data layer and sign-in, demo project,
-local emulators. Accounts are created in the Emulator UI (Authentication tab)
-or by the test helpers; give one a role with custom claims such as
-`{"role": "Administrator"}`.
+local emulators. Accounts are created in the Emulator UI (Authentication tab),
+by `npm run demo:setup` or by the test helpers. As on egso-b2c0a, every
+email-and-password account is an Administrator; no claim is needed
+(see Authentication below).
 
 Requirements: Node 22+ and Java 11+ (the Firestore emulator is a Java program).
 The emulator programs are downloaded once from Google's
@@ -216,39 +217,138 @@ The site will live at the default Firebase Hosting URL of `egso-b2c0a`
 a separately approved custom domain. No municipal domain, DNS record or
 certificate is involved.
 
-## Authentication
+### Online testing on egso-b2c0a (21 Oct 2026)
 
-| Today (Supabase) | Firebase |
+Approved: Hosting only, on the Spark plan, for testing (not the municipal
+go-live). `.env.production` (git-ignored) holds the web app's public config,
+so `npm run build` makes the Firebase build for egso-b2c0a.
+
+Two Hosting sites (22 Oct 2026), as deploy targets in `.firebaserc`:
+`admin` → site `egso-b2c0a` (https://egso-b2c0a.web.app, the whole app,
+portal still under `/portal`) from `dist/`; `portal` → site
+`egso-public-portal` (https://egso-public-portal.web.app, the portal's pages
+only, at the root) from `dist-portal/`, built by `npm run build:portal`
+(`VITE_APP_SURFACE=portal`; `src/portal-router.tsx`). The portal build holds
+no admin page, sign-in screen or guard; portal links go through
+`portalPath()` (`src/features/portal/paths.ts`). Both sites use the same
+Firebase project, rules and functions. **`--only hosting` without a target
+deploys both sites** — always name one.
+
+| Change | Build | Deploy |
+|---|---|---|
+| Admin screens, styles, copy (`src/`) | `npm run build` | `firebase deploy --only hosting:admin --project egso-b2c0a` |
+| Portal pages | built by predeploy | `firebase deploy --only hosting:portal --project egso-b2c0a` |
+| Firestore rules / indexes | — | `firebase deploy --only firestore:rules,firestore:indexes --project egso-b2c0a` |
+| Storage rules (Storage set up) | — | `firebase deploy --only storage --project egso-b2c0a` |
+| Functions (Blaze only) | built by predeploy | `firebase deploy --only functions:<name> --project egso-b2c0a` (or `--only functions`) |
+
+Every command names `--project egso-b2c0a`. Rules, numbering, approvals and
+transactions changes still run their emulator suites before deploying; UI-only
+changes do not.
+
+On Spark the site loads and Authentication works, but every save goes
+through Cloud Functions (Blaze only) and the live Firestore rules are
+deny-all until `firestore.rules` is deployed: nothing can be filed, read or
+approved. A callable that is not deployed reports "The server could not
+complete this action, so it was not recorded …" — never a success.
+
+Accounts: see Authentication below.
+
+## Authentication (29 Oct 2026)
+
+EGSO-PRIMS has **one role, Administrator**. Every account in Firebase
+Authentication on egso-b2c0a is an Administrator with full access to the
+admin site. There are no other roles, no role settings or custom claims, no
+list of allowed addresses and no account screen in the app: **Firebase
+Authentication is the only list of who may sign in.**
+
+### Adding an account
+
+1. Open console.firebase.google.com → project **egso-b2c0a** →
+   **Authentication** → **Users** → **Add user**.
+2. Enter the person's email address and a password, and click **Add user**.
+3. They sign in at https://egso-b2c0a.web.app/login with that email and
+   password, as a full Administrator. Nothing else needs setting up.
+
+Any email address works, office or not. Give the password to that person
+only; they can change it with **Forgot password?** on the sign-in page.
+
+### Disabling or removing an account
+
+Authentication → **Users** → the account's ⋮ menu → **Disable account**
+(reversible) or **Delete account**. Read "What an open session can still do"
+below.
+
+### Why a visitor cannot make themselves an Administrator
+
+- **Sign-up is disabled for the project**: Authentication → **Settings** →
+  **User actions** → **Enable create (sign-up)** is unticked (checked
+  29 Oct 2026: `disabledUserSignup` is true). No browser, SDK or API call
+  can create an account; only the console, or someone holding the project's
+  Admin SDK credentials, can. **Keep it off**: with sign-up on, anyone could
+  create an account, and every account is an Administrator.
+- **Only the Email/Password provider is enabled**; anonymous, phone and
+  federated sign-in (Google and others) are off. The rules and functions
+  count only an email-and-password sign-in anyway, so an anonymous or
+  custom-token session is never staff, even if another provider were turned
+  on by mistake.
+- **Claims are ignored**: nothing in a token or a document makes anyone more
+  or less than an Administrator.
+
+The same rule is applied in four places, which must stay identical:
+
+| Where | Check |
 |---|---|
-| Email + password | Email + password provider |
-| "Remember me" picks localStorage or sessionStorage | `setPersistence(sessionPersistence(remember))` from `lib/firebase.ts` |
-| `resetPasswordForEmail`, redirect to /login | `sendPasswordResetEmail` with an action URL back to /login |
-| Role read from `user_metadata` — editable by the user, defaults to Administrator | `role` **custom claim**, set only by the Admin SDK (`setStaffRole` callable or a local admin script). Rules trust nothing else. No role means no access. |
-| `@alaminos.gov.ph` only (database trigger, migration 036) | `requireOfficeEmail` blocking function (needs the free Identity Platform upgrade) |
+| `firestore.rules` | `isAccount()`: `sign_in_provider == 'password'` and an email |
+| `storage.rules` | `role()`: the same test |
+| `functions/src/accounts.ts` → `documents/caller.ts` | `isAccountToken`, then `callerOf` looks the account up on every call |
+| `src/features/auth/firebase-driver.ts` | `toAuthUser`: the same test; any other session is signed out with "This account cannot sign in here" |
 
-Built in Phase 3 (`features/auth/firebase-driver.ts`, used by the existing
-login page and auth provider when `VITE_DATA_BACKEND=firebase`):
+The public portal does not sign in and is unaffected: visitors file and
+track through the callable functions and may read one document by its
+number; they cannot list a collection or read the register.
 
-- The role, the `approver` flag and the office come from the ID token's
-  claims. An account without a valid role is signed out with "This account
-  has not been given access yet".
+### What an open session can still do after an account is disabled or deleted
+
+Firebase sign-in tokens last **up to one hour**, and disabling or deleting an
+account does not cancel a token already issued. So, from a browser that was
+already signed in when the account was disabled or deleted:
+
+- **Every Cloud Function refuses it at once.** `callerOf` looks the account
+  up on each call and refuses it when it is disabled, deleted or its sessions
+  were revoked. Numbering, approving, issuing or returning stock, voiding,
+  registering inventory, recording bills, trips and violations, filing
+  records and every other function call stop working immediately.
+- **Direct database access lasts until the token expires, at most one hour.**
+  Firestore rules cannot look an account up, so that browser can still read
+  records and make the edits the rules allow straight from the browser (a
+  draft's details, a setting, an inventory item's description) until its
+  token runs out. It cannot get a new token, so the app then signs it out.
+  Nothing in the console shortens this hour; a password change does not
+  either.
+
+So disable the account as soon as access should end, and treat the hour that
+follows as the remaining exposure. Every write in it is still signed with
+the account and appears in the audit trail.
+
+### Sign-in behaviour
+
+Used by the login page and auth provider when `VITE_DATA_BACKEND=firebase`:
+
 - Wrong password and unknown address get the same message, and a password
   reset gives the same answer either way, so the form does not reveal which
   addresses have accounts.
 - "Keep me signed in" keeps the session in localStorage; otherwise it lives
   in sessionStorage and ends with the browser.
-- When `setStaffRole` changes someone's role it revokes their session; the
-  provider shows "Your session has expired" and they sign in again with the
-  new role.
-- Routes: every staff page needs a signed-in account (as before), and
-  Settings, the Audit trail, Reports and each module's create and edit pages
-  also need the matching permission (`PermissionRoute`), otherwise the person
-  is sent to the dashboard. The sidebar still lists those pages for everyone.
+- Every admin page needs a signed-in account. `PermissionRoute` and the
+  role-aware sidebar remain in the code, but an Administrator passes every
+  check. The Supabase fallback build still reads its role from
+  `user_metadata` as before; it is not in use.
 
-Moving existing users (Phase 4, with approval): Supabase stores bcrypt
-password hashes, and `firebase auth:import` accepts bcrypt, so staff keep
-their passwords. Each user then gets a role claim. No real user is imported,
-created or changed before then.
+Moving existing users (with approval): Supabase stores bcrypt password
+hashes, and `firebase auth:import` accepts bcrypt, so staff would keep their
+passwords. Every imported account is an Administrator, so import only the
+people who should have access. No real user has been imported.
 
 ## Cloud Functions
 
@@ -256,7 +356,7 @@ All in `asia-southeast1`, capped at 5 instances each, in `functions/`.
 
 | Function | Replaces | State |
 |---|---|---|
-| `createPurchaseRequest` (callable) | `next_document_number` + browser insert | numbers and saves in one transaction; public portal (no attachments, rate limited), Administrators and Department Users |
+| `createPurchaseRequest` (callable) | `next_document_number` + browser insert | numbers and saves in one transaction; public portal (no attachments, rate limited) and Administrators |
 | `createPurchaseOrder` (callable) | same | Administrators only |
 | `createRisRequest` (callable) | same | public slips are always submitted; staff may save drafts |
 | `createReservation` (callable) | same + browser conflict check | double-booking check inside the transaction: of simultaneous requests for one slot, exactly one succeeds |
@@ -270,10 +370,9 @@ All in `asia-southeast1`, capped at 5 instances each, in `functions/`.
 | `voidReleasedRis` (callable) | — (new) | Administrators only; returns a released slip's stock and voids it in one transaction (see Voiding) |
 | `recordEvents` (Firestore trigger) | `log_audit` on 31 tables and `notify_event` on 12 | one trigger per write: the audit entry and, for notify_event's events, the notification, with its wording |
 | `cascadeDeletes` (Firestore trigger) | 19 `on delete cascade` keys | ported; tested end to end (account → bills, submeters → submeter bills). Since the final hardening a holder is deleted only while empty, so these cascades are a safety net |
-| `requireOfficeEmail` (blocking) | `enforce_office_domain` | ported; tested against the Auth emulator |
-| `setStaffRole` (callable) | — (roles were unprotected) | Administrator only; sets `role` and the `approver` grant |
 | `saveRecordsDocument`, `voidRecordsDocument` (callable) | browser insert + `next_document_number` (RDS, RIA, RAD) + `record_file_on_approval` trigger; browser delete | form, lines, number and Records Room filing in one transaction; forms are voided with a reason, never deleted (fresh-start.md, section 7) |
 | `correctUtilityRecord`, `voidUtilityRecord` (callable) | browser update / delete of bills, fuel purchases and trips | Administrators only; a correction keeps the previous values in `revisions`, a void keeps the record out of totals and frees a bill's month (fresh-start.md, section 7). Also corrects and voids submeter bills, water meter readings and odometer readings; a trip's date stays in its control number's month |
+| `approvePurchaseRequest` (callable) | browser status change Submitted → Approved | Administrators only; requires the purpose and the signatories in Settings → Signatories (the fund is optional); assigns the official PR number PREFIX-YYYY-NNNNNN (own yearly sequence, never reused; prefix PROVISIONAL, default 100) separate from the PR-YYYY-NNNNNN tracking reference; copies the signatories onto the request so later Settings changes never alter it — one transaction (21 Oct 2026) |
 | `createUtilityEntry` (callable) | browser insert of submeter bills, water meter readings and odometer readings | Administrators only; refuses an archived account, an inactive or archived submeter and an inactive vehicle, and keeps one active submeter bill per month — in one transaction (fresh-start.md, section 7) |
 | `deleteRecordHolders`, `setRecordHolderArchived` (callable) | browser delete of accounts, submeters, vehicles and violator profiles (with `on delete cascade`) | Administrators only; deletes only what holds no records, checked inside the delete, and releases its unique claim; the rest are kept and named. Accounts and profiles are archived and restored with who and when (fresh-start.md, section 7) |
 | `createRecordShelf`, `deleteRecordShelf`, `moveRecordBox` (callable) | `record_shelf_add_levels`, `record_level_keep`, the box position constraint | five levels per shelf; a shelf with boxes cannot go; one box per position |
@@ -299,26 +398,196 @@ against scripted use.
 ## Purchase requests: decisions, ownership, voiding
 
 Deciding on a purchase request — approving, rejecting, **returning it to the
-requester**, **marking it completed** — belongs to Administrators and to
-Department Users given the `approver` claim (`setStaffRole` with
-`approver: true`). A Department User edits, submits and voids only the
-requests they raised (`created_by_uid`, stamped by the create function);
-portal requests have no owner, so only deciders act on them. Viewers change
-nothing. `firestore.rules` enforce all of it, and allow only the workflow's
-own steps — Draft → Submitted → Approved → Completed, Submitted → Rejected,
-Submitted or Approved → Draft (returned), and voiding — for Administrators
-too. Each status change must append one approval step signed with the
-account taking it (`byUid`).
+requester**, **marking it completed** — is done by any account, since every
+account is an Administrator (see Authentication). `firestore.rules` allow
+only the workflow's own steps — Draft → Submitted → Approved → Completed,
+Submitted → Rejected, Submitted or Approved → Draft (returned). Approving and
+voiding are not browser writes: the `approvePurchaseRequest` and
+`voidPurchaseRequest` functions do them. Each status change must append one
+approval step signed with the account taking it (`byUid`).
 
-The drawer shows Approve, Return and Mark Completed only to deciders, Submit
-only to the owner or a decider, and Edit only while the request is open.
+The drawer shows Edit only while the request is open.
 
-**A numbered request is never deleted.** The list's Delete action is now
-**Void**: it asks for a reason, sets the status to Cancelled, and keeps the
-number, the record and its history; the reason, the person and the time go
-into the approval timeline and the history. The owner may void their own
-request while it is a Draft or Submitted; a decider may void any open
-request. The rules refuse deletion of a purchase request by anyone.
+**A numbered request is never deleted.** Every purchase request is numbered
+when it is filed, so there is no Delete; the list offers **Void request**
+(row menu, or the bulk bar for several). It asks for a reason, sets the
+status to Cancelled, and keeps the tracking reference, any official PR
+number, the items and the history; the reason, the person and the time go
+into the approval timeline and the history. Voiding goes through
+`voidPurchaseRequest` (since 21 Oct 2026), and only while the
+request is Draft, Submitted or Approved. It is refused while a purchase
+order or requisition slip raised from the request (`pr_number`) is still in
+force — void that document first. The rules refuse deletion of a purchase
+request by anyone, and refuse a browser write to Cancelled.
+
+**Deleting test data on the local demo** (21 Oct 2026) is separate from
+record management. On the Vite dev server against the demo emulators
+(`npm run dev:emulators`, project `demo-egso-prims`) an Administrator sees
+**Delete (demo only)** in the row menu and **Delete (demo)** on the bulk
+bar; the dialog states the count and needs a "These are test data" tick.
+`deleteDemoPurchaseRequests` refuses unless it runs inside the Functions
+emulator for `demo-egso-prims`, refuses a signed-out caller, keeps any
+request a purchase order or slip was raised from (whatever its status), and
+leaves the counters and number claims alone. A production build contains
+none of it (`DEMO_CLEANUP` is false when `import.meta.env.DEV` is), and the
+rules still refuse every browser delete.
+
+**Printing from the list** (21 Oct 2026) prints the official Purchase
+Request documents, never the screen: the row menu's Print request, or Print
+on the bulk bar for several, mounts only the documents (each starting on a
+new sheet) and opens one print dialog. A voided or rejected request prints
+marked VOIDED or REJECTED. The list has no Export.
+
+## Purchase orders: created with the request's approval (21 Oct 2026)
+
+**Proposed local workflow — the single-approval authorization must be
+confirmed by the municipality before production use.** Approving a Purchase
+Request authorizes its Purchase Order: Public PR → GSO review → **Approve PR**
+→ the PO exists → **Go to PO** → complete optional details or print. There is
+no "Generate PO", no second PO approval, no Release or Mark Completed.
+Approval is not delivery, inspection, acceptance or payment; inventory is not
+touched.
+
+- `approvePurchaseRequest` creates the order in the same transaction
+  (`linked-po.ts`): status Approved, `authorization: "pr-approval"`, the
+  request's office, requester, purpose and items (`items` and the immutable
+  `authorized_items`), its official PR number, the PO Signatories copied from
+  Settings (null when unset — prints a blank line), and only those PO terms an
+  Administrator saved in Settings. Supplier and the other document details
+  start blank. The PO number comes from the existing PO counter.
+- **One order per request:** the request stores `po_number`, and a claim
+  `unique_keys/purchase_orders.source_pr:{PR}` is created with the order.
+  Approving an approved request with an order returns it unchanged (double
+  click, retry); simultaneous approvals serialize on the request document and
+  the later ones find the order. The rules keep `po_number` from the browser
+  and refuse returning a request with an order to draft.
+- `ensurePurchaseOrderForPR` (Administrators): for requests approved before
+  this — links an order raised from it earlier, or creates one, once.
+- `updatePurchaseOrderDetails` (Administrators): every document field is
+  optional. Filling a blank is a completion; changing or clearing a recorded
+  value, or the items, is a correction — on an approved order it needs a
+  reason — and every change is kept with before/after values. Approvals,
+  `authorized_items`, signatories and PO date are never changed. The browser
+  cannot edit an approved order, and an order authorized with its request is
+  not returned to draft.
+- `createPurchaseOrder` and `approvePurchaseOrder` remain for the earlier
+  route (no screen uses them); `createPurchaseOrder` refuses a request that
+  already has an order. Orders from the earlier workflow keep Draft / Pending
+  Approval / Released / Completed and their actions on the order's page.
+- Screens: `/purchase-orders/:id` (the order's page: source request,
+  supplier and procurement, delivery and payment, items, history; Save, Print
+  PO). The list opens it; `/purchase-orders/new` returns to the list.
+- Printing (`po-print-sheet.tsx`) follows the PURCHASE ORDER sheet of
+  "P.O AND ACCEPTANCE (3).xlsx". A blank field prints a ruled line to the
+  edge of its cell; long values wrap inside the form; the table repeats its
+  headings and continues over as many A4 pages as the items need.
+- The audit trail now files a PO's, slip's or booking's entries under its own
+  number rather than its request's.
+
+## Inventory: Add Item, Scan / Import, item codes (22 Oct 2026)
+
+Two ways in, one function behind both: `createInventoryItems`
+(`functions/src/documents/inventory.ts`, Administrators only).
+
+- **Add Item** (`/inventory/new`): one page — name, category, unit,
+  quantity (0 allowed), unit price (0 allowed), optional reorder and critical
+  levels (blank: the Settings percentages of the quantity). No attachments,
+  no steps. Editing changes details, price and levels only; the code and the
+  stock on hand never change there.
+- **Scan / Import Items** (`/inventory/import`): one JPG/PNG/WebP/PDF (15 MB,
+  10 PDF pages) is read in the browser — pdf.js for a PDF's text, Tesseract.js
+  for images and scanned pages (engine and English data downloaded once from
+  cdn.jsdelivr.net and tessdata.projectnaptha.com; no cloud OCR, no billing).
+  The document is not uploaded or kept. Rows are reviewed in an editable
+  table; the reviewer must say whether the document shows **stock on hand**
+  (quantities become opening stock) or is an **item list only** (PR, PO,
+  price list: items registered at 0 on hand). An item already on the register
+  (same name) is skipped unless the reviewer chooses "Add quantity as stock
+  received" (a stock-card line, stock-on-hand documents only) or "Create a
+  separate item". Nothing is written until **Confirm Import**; the result
+  lists what Firestore saved and what it did not.
+- **Item codes**: `INV-<year>-<sequence>` from the shared document counter
+  (type `INV`, refused by `nextDocumentNumber`), allocated in each item's own
+  transaction, claimed in `unique_keys/inventory_items.item_code:{code}`,
+  never reused. `firestore.rules` refuse browser creates and any change of
+  `item_code`. Items made before this keep their codes.
+- **Retries**: each row's documents are named after the request ID and the
+  row's key, so a double click or a retry returns rows already saved instead
+  of saving them twice.
+- **Categories**: standard list + `inventory_categories` (saved by the
+  function, or by an item edit; create-only, Administrators) + categories on
+  items. Matched ignoring capitals and extra spaces.
+- **RIS**: the Inventory is the catalog. The portal's item picker
+  (`portalStockSuggestions`: ID, code, name, unit, in stock or not — never the
+  quantity; cached 30 s) must be used: picking links the line, typing over it
+  unlinks it, and `createRisRequest` refuses a public slip with an unlinked
+  line and takes each line's name, unit and code from the register. Filing
+  never creates items or moves stock. The admin item picker shows and
+  searches codes. Release deducts stock only from an Approved slip, once (a
+  second Release changes nothing), and only when every issued line is linked.
+  With an empty Inventory the portal RIS cannot be submitted.
+
+### Simplified register, Add Stocks and the Stock Card (24 Oct 2026)
+
+- The Inventory screens show and take only: item name, category, unit,
+  quantity (opening stock) and unit price. Location, supplier, reorder and
+  critical levels, comments and attachments are no longer shown or asked
+  for; stored values are kept. An item is Available or Out of Stock; the
+  sidebar count and the dashboard flag out-of-stock items only. (Reports
+  still has its own Low Stock Report, unchanged.)
+- **Add Stocks** (item drawer, Administrators): `addInventoryStock` adds the
+  quantity received in one transaction with a "Stock Receipt" stock-card line
+  (date, optional reference, quantity, balance after). Retry-safe: the line is
+  named `stk-add-{requestId}`. Editing an item never changes its stock.
+- RIS approval's issue lines now carry `office` (the slip's department code);
+  older lines take it from their slip when shown or printed.
+- **Print Stock Card** prints the official Appendix 53 form
+  (`stock-card-sheet.tsx`) through `PrintSheet`: LGU, item, Stock No. (item
+  code), unit, and every stock-card line oldest first — Receipt Qty., Issue
+  Qty. and Office, Balance Qty. as saved. Fund, Description, Re-order Point
+  and No. of Days to Consume print blank. 28 ruled lines fit one A4 page;
+  longer histories continue with the headings repeated. Printing writes
+  nothing. (The old Print printed the app screen, hence the blank page; the
+  old Export PDF only showed a notification.)
+
+## Signatories: fixed roles, configurable names (21 Oct 2026)
+
+Each form's signature block is fixed by the form; Settings changes only the
+person's printed name. Roles and designations live in code
+(`SIGNATORY_ROLES` in `src/features/config/types.ts`,
+`functions/src/documents/signatories.ts`) and cannot be edited, added or
+removed.
+
+| Form | Role | Designation (fixed) | Setting |
+|---|---|---|---|
+| Purchase Request | Requested by | General Services Officer | `Signatories / pr_requested_by_name` |
+| Purchase Request | Cash Availability | Municipal Treasurer | `Signatories / pr_cash_availability_name` |
+| Purchase Request | Approved by | Municipal Mayor | `Signatories / pr_approved_by_name` |
+| Purchase Order | Very truly yours | Municipal Mayor | `PO Signatories / po_approving_name` |
+| Purchase Order | Certified Correct | BAC Secretary | `PO Signatories / po_bac_secretary_name` |
+
+- "Requested by" is the General Services Officer for every request, whatever
+  office filed it; the requester's own name prints only in the small GSO
+  PRIMS reference line. The former office-code list `pr_requested_by` and the
+  `*_designation` settings are no longer read (an old demo may still hold
+  them, unused).
+- Names print exactly as saved (no upper-casing), so the PR's
+  "Hon. ERICSON R. LOPEZ" and the PO's "ERICSON R. LOPEZ" stay as typed.
+  The supplier's Conforme block is part of the PO form, not a setting.
+- A Purchase Request cannot be approved while any of its three names is
+  blank. A blank PO name prints a ruled line.
+- Approval copies the names onto the request (`signatories`) and onto its
+  order; a later change in Settings reaches new documents only.
+- Settings writes are Administrator-only and carry `updated_by_uid`, which
+  the rules require to be the writer's own account. The audit trail
+  (module "Settings") records each change with its old and new value, e.g.
+  "Signatories · pr_cash_availability_name", "Value: A" → "Value: B".
+- **Demo only:** `npm run demo:setup` fills these names from the official
+  templates (FLORENTINO J. DESTACAMENTO, ROWENA C. LANDICHO,
+  Hon. ERICSON R. LOPEZ, ERICSON R. LOPEZ, NEMIA B. MONZONES). They are
+  template names, not verified officials; the setup replaces only its own
+  earlier "DEMO …" placeholders and never a name someone saved. Production
+  has no defaults: the municipality enters verified names in Settings.
 
 ## Voiding purchase orders, slips and bookings (Phase 4)
 
@@ -332,10 +601,10 @@ its comments can grow) and its drawer no longer offers Edit.
 
 | Document | Can be voided | By |
 |---|---|---|
-| Purchase order | Draft, Pending Approval, Approved — and **not yet issued** to the supplier | Administrators |
-| RIS | Draft, Pending Approval, Approved (no stock has moved) | Administrators, Department Users |
-| RIS | **Released** — its stock is returned (below) | Administrators only |
-| Reservation | Draft, Pending, Approved (the slot is freed) | Administrators, Department Users |
+| Purchase order | Draft, Pending Approval, Approved — and **not yet issued** to the supplier | any account |
+| RIS | Draft, Pending Approval (no stock has moved) | any account |
+| RIS | **Approved** (stock issued since 22 Oct 2026), or **Released** under the earlier workflow — its stock is returned (below) | any account, through `voidReleasedRis` |
+| Reservation | Draft, Pending, Approved (the slot is freed) | any account |
 
 Issued, Released or Completed orders, Completed slips, and Rejected or
 Completed bookings are final: nothing is reversed automatically.
@@ -425,9 +694,8 @@ Records screens use is created by 040–048.
   the room tracks where each box stands and what is in it. Moving a box and
   correcting its label are what the office does.
 - **Attachments**: none. No Records screen uploads a file.
-- **Who**: every staff role reads; only Administrators change anything
-  (`manage:records`), as approved on 2026-10-20 (Supabase had let any
-  signed-in account write). Forms are voided, never deleted.
+- **Who**: every account reads and changes Records (every account is an
+  Administrator; Supabase had let any signed-in account write). Forms are voided, never deleted.
 - **History**: the audit trail names Records changes as `log_audit` did —
   Schedule Submitted / Approved, Disposal Requested / Authorised, Box
   Created / Moved, Record Filed / Unfiled.

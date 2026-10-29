@@ -3,8 +3,10 @@ import { z } from "zod";
 export const risItemSchema = z.object({
   /** What the requester asked for, typed by hand. */
   name: z.string().min(2, "Name the item"),
-  /** Set when the typed name matches the stock register. */
+  /** The register item the line issues from: picked on the portal, matched on the admin form. */
   inventoryItemId: z.string().optional(),
+  /** Its item code, kept with the line (22 Oct 2026). */
+  stockNo: z.string().optional(),
   unit: z.string().min(1, "Pick a unit"),
   requestedQty: z.number({ error: "Enter the quantity" }).positive("Must be more than 0"),
   /**

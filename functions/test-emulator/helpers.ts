@@ -52,8 +52,12 @@ export async function signIn(email: string, password = "test-password-1") {
   return ((await res.json()) as { idToken: string }).idToken;
 }
 
-export async function staffToken(email: string, role: string, extra: Record<string, unknown> = {}) {
+/**
+ * An account as Firebase console → Authentication → Add user leaves it: an
+ * email and a password, no claims. Every account is an Administrator
+ * (29 Oct 2026).
+ */
+export async function accountToken(email: string) {
   const user = await getAuth().createUser({ email, password: "test-password-1" });
-  await getAuth().setCustomUserClaims(user.uid, { role, ...extra });
   return { uid: user.uid, token: await signIn(email) };
 }

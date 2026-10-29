@@ -10,14 +10,15 @@ import {
   toast,
 } from "@/components";
 import { updateInventoryItem, type ItemDraftInput } from "@/features/inventory/api";
-import { useInventoryItem } from "@/features/inventory/hooks";
-import { InvWizard } from "@/features/inventory/components/inv-form/inv-wizard";
+import { useInventoryItem, useInventoryItems } from "@/features/inventory/hooks";
+import { InvItemForm } from "@/features/inventory/components/inv-form/inv-item-form";
 
 export function InventoryEditPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { data: item, loading } = useInventoryItem(id);
   const [submitting, setSubmitting] = React.useState(false);
+  const { data: existing } = useInventoryItems(React.useMemo(() => ({}), []));
 
   const submit = async (input: ItemDraftInput) => {
     setSubmitting(true);
@@ -35,7 +36,7 @@ export function InventoryEditPage() {
     <PageTransition className="space-y-6">
       <PageHeader
         title={item ? `Edit ${item.itemCode}` : "Edit Inventory Item"}
-        description="Update item details, stock levels, pricing, or attachments."
+        description="Update the item's name, category, unit and price. Its code and stock on hand do not change here; use Add Stocks for received items."
       />
       {loading ? (
         <ContainerCard padded className="mx-auto w-full max-w-3xl">
@@ -50,8 +51,9 @@ export function InventoryEditPage() {
           />
         </ContainerCard>
       ) : (
-        <InvWizard
+        <InvItemForm
           initial={item}
+          existing={existing}
           submitting={submitting}
           onSubmit={submit}
           onCancel={() => navigate("/inventory")}

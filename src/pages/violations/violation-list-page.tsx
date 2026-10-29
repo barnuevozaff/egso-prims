@@ -300,7 +300,7 @@ export function ViolationListPage() {
 
       <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          label="Total Violators"
+          label="Total Violators" tone="brand"
           value={stats.totalViolators}
           icon={Users}
           loading={loading}
@@ -312,13 +312,13 @@ export function ViolationListPage() {
           loading={loading}
         />
         <MetricCard
-          label="Pending Payments"
+          label="Pending Payments" tone="attention"
           value={stats.pendingPayments}
           icon={Clock3}
           loading={loading}
         />
         <MetricCard
-          label="Total Amount Collected"
+          label="Total Amount Collected" tone="positive"
           kind="peso"
           value={stats.totalCollected}
           icon={Banknote}

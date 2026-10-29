@@ -22,6 +22,8 @@ export const AUDIT_MODULES = [
   "Inventory",
   "Reservations",
   "Reports",
+  // Changes to Settings, such as an official's printed name (21 Oct 2026).
+  "Settings",
   "System",
 ] as const;
 export type AuditModule = (typeof AUDIT_MODULES)[number];

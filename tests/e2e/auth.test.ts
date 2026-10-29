@@ -1,7 +1,7 @@
 import type { Browser } from "playwright-core";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { APP_URL, createStaff, launch, newPage, resetEmulators, shot, signIn } from "./browser";
+import { APP_URL, createAccount, launch, newPage, resetEmulators, shot, signIn } from "./browser";
 
 let browser: Browser;
 
@@ -15,9 +15,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetEmulators();
-  await createStaff("admin@alaminos.gov.ph", "Administrator", {}, "Ana Reyes");
-  await createStaff("viewer@alaminos.gov.ph", "Viewer", {}, "Vic Santos");
-  await createStaff("newhire@alaminos.gov.ph", "");
+  await createAccount("admin@alaminos.gov.ph", "Ana Reyes");
+  await createAccount("newhire@alaminos.gov.ph");
 });
 
 /**
@@ -66,7 +65,7 @@ describe("signing in with Firebase Authentication", () => {
     await kept.context.close();
   });
 
-  it("refuses a wrong password and an account with no role, with a clear message", async () => {
+  it("refuses a wrong password with a clear message; any account added in the console signs in", async () => {
     const { context, page } = await newPage(browser);
     await page.goto(`${APP_URL}/login`);
     await page.getByLabel("Email Address").fill("admin@alaminos.gov.ph");
@@ -77,19 +76,10 @@ describe("signing in with Firebase Authentication", () => {
     await page.getByLabel("Email Address").fill("newhire@alaminos.gov.ph");
     await page.getByLabel("Password", { exact: true }).fill("test-password-1");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByText(/not been given access yet/).first().waitFor();
-    expect(page.url()).toMatch(/\/login$/);
-    await shot(page, "03-login-no-role");
+    // No claims, no office role: every account is an Administrator (29 Oct 2026).
+    await page.getByText("Needs your attention").first().waitFor({ timeout: 30_000 });
+    await shot(page, "03-login-new-account");
     await context.close();
   });
 
-  it("a Viewer is kept out of Settings and the Audit trail", async () => {
-    const { context, page } = await newPage(browser);
-    await signIn(page, "viewer@alaminos.gov.ph");
-    for (const path of ["/settings", "/audit", "/purchase-requests/new"]) {
-      await page.goto(`${APP_URL}${path}`);
-      await page.waitForURL(`${APP_URL}/`);
-    }
-    await context.close();
-  });
 });

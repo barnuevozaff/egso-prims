@@ -4,6 +4,8 @@ import { getConfigNumber, getConfigString } from "@/features/config/api";
 import {
   itemValue,
   stockStatusOf,
+  type ImportRequest,
+  type ImportRowResult,
   type InventoryItem,
   type InventoryListFilters,
   type StockCardEntry,
@@ -92,7 +94,19 @@ export function rowToEntry(r: any): StockCardEntry {
     balance: r.balance,
     remarks: r.remarks ?? undefined,
     user: r.user_name,
+    office: r.office ?? undefined,
   };
+}
+
+/** Add Stocks needs the addInventoryStock function, which only the Firebase backend has. */
+export async function addInventoryStock(input: {
+  requestId: string;
+  itemId: string;
+  quantity: number;
+  reference?: string;
+}): Promise<{ onHand: number; already: boolean }> {
+  void input;
+  throw new Error("Adding stock needs the Firebase backend; nothing was changed.");
 }
 
 export async function listInventoryItems(
@@ -124,7 +138,10 @@ export async function getInventoryItem(id: string): Promise<InventoryItem | null
 }
 
 export interface ItemDraftInput {
-  /** Omit to have the next code for the category issued automatically. */
+  /**
+   * Supabase only. On Firebase the code is always issued by the
+   * createInventoryItems function and never typed (22 Oct 2026).
+   */
   itemCode?: string;
   name: string;
   category: InventoryItem["category"];
@@ -134,9 +151,15 @@ export interface ItemDraftInput {
   location?: string;
   supplierId?: string;
   unitPrice: number;
-  /** Units being stocked. Also sets the reorder and critical thresholds. */
+  /** Units being stocked. Also sets the reorder and critical thresholds when they are left blank. */
   beginningBalance: number;
-  attachments: AttachmentInput[];
+  /** Optional; blank takes the Settings percentages of the opening quantity. */
+  reorderLevel?: number;
+  criticalLevel?: number;
+  /** Items no longer carry attachments (22 Oct 2026); kept for the Supabase records. */
+  attachments?: AttachmentInput[];
+  /** Same ID on a retry of the same save, so the item is not created twice (Firebase). */
+  requestId?: string;
 }
 
 /**
@@ -178,7 +201,7 @@ export async function createInventoryItem(input: ItemDraftInput): Promise<Invent
     getConfigString("Inventory", "default_stock_location"),
   ]);
   const thresholds = stockThresholds(input.beginningBalance, reorderPercent, criticalPercent);
-  const attachments = (await uploadAttachmentInputs(input.attachments, itemCode)).map(
+  const attachments = (await uploadAttachmentInputs(input.attachments ?? [], itemCode)).map(
     (a) => ({ ...a, id: uid(), uploadedAt: at }),
   );
   const row = {
@@ -190,8 +213,8 @@ export async function createInventoryItem(input: ItemDraftInput): Promise<Invent
     unit: input.unit,
     location: input.location ?? (defaultLocation || DEFAULT_LOCATION),
     on_hand: input.beginningBalance,
-    reorder_level: thresholds.reorderLevel,
-    critical_level: thresholds.criticalLevel,
+    reorder_level: input.reorderLevel ?? thresholds.reorderLevel,
+    critical_level: input.criticalLevel ?? thresholds.criticalLevel,
     supplier_id: input.supplierId ?? null,
     unit_price: input.unitPrice,
     attachments,
@@ -229,7 +252,7 @@ export async function updateInventoryItem(
   const at = nowIso();
   const itemCode = input.itemCode?.trim() || current.itemCode;
   const uploaded = await uploadAttachmentInputs(
-    input.attachments.filter((a) => !current.attachments.some((e) => e.name === a.name)),
+    (input.attachments ?? []).filter((a) => !current.attachments.some((e) => e.name === a.name)),
     itemCode,
   );
   const row = {
@@ -241,6 +264,8 @@ export async function updateInventoryItem(
     location: input.location ?? current.location,
     supplier_id: input.supplierId ?? current.supplierId ?? null,
     unit_price: input.unitPrice,
+    reorder_level: input.reorderLevel ?? current.reorderLevel,
+    critical_level: input.criticalLevel ?? current.criticalLevel,
     attachments: [
       ...current.attachments,
       ...uploaded.map((a) => ({ ...a, id: uid(), uploadedAt: at })),
@@ -301,6 +326,17 @@ export async function removeInventoryAttachment(
     updated_at: at,
   };
   return rowToItem(unwrap(await db.from(TABLE).update(row).eq("id", id).select().single()));
+}
+
+/** Categories the office added. Supabase has no table for them; the items' own categories are used. */
+export async function listInventoryCategories(): Promise<string[]> {
+  return [];
+}
+
+/** Scan / Import saves through the createInventoryItems function, which only the Firebase backend has. */
+export async function importInventoryItems(request: ImportRequest): Promise<ImportRowResult[]> {
+  void request;
+  throw new Error("Scan / Import needs the Firebase backend; nothing was saved.");
 }
 
 export interface StockDeduction {

@@ -92,7 +92,7 @@ export const ENTRIES: Record<string, Entry> = {
 };
 
 export const createUtilityEntry = onCall(async (request) => {
-  const caller = callerOf(request);
+  const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "record this");
   const type = String(request.data?.type ?? "");
   const entry = ENTRIES[type];
