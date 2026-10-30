@@ -131,6 +131,8 @@ export function actionOf(collection: string, before: Row, after: Row): string {
   if (collection === "record_box_contents") {
     if (!before) return "Record Filed";
     if (!after) return "Record Unfiled";
+    // Placed in another box by hand (30 Oct 2026).
+    if (before.box_id !== after.box_id) return "Record Moved";
   }
   return !before ? "Record Created" : !after ? "Record Deleted" : "Record Updated";
 }

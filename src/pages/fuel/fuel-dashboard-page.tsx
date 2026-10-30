@@ -661,7 +661,6 @@ export function FuelDashboardPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => exportVehicles(selectedRows)}
         onPrint={() => navigate("/fuel/summary")}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}

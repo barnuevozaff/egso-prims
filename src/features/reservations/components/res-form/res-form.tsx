@@ -63,6 +63,8 @@ export interface ResFormProps {
   submitting: boolean;
   onSubmit: (input: ReservationDraftInput) => void | Promise<void>;
   onCancel: () => void;
+  /** Told when the form gains or loses unsaved changes: the record's page holds its actions until they are saved (30 Oct 2026). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type FormApi = ReturnType<typeof useForm<ResFormValues>>;
@@ -70,7 +72,7 @@ type FormApi = ReturnType<typeof useForm<ResFormValues>>;
 /** A day's bookings as [start, end) pairs, for the slot grid and the list. */
 type Booking = Pick<Reservation, "id" | "resNumber" | "status" | "startTime" | "endTime" | "date" | "facilityId">;
 
-export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }: ResFormProps) {
+export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel, onDirtyChange }: ResFormProps) {
   const form = useForm<ResFormValues>({
     resolver: zodResolver(resFormSchema),
     mode: "onTouched",
@@ -194,6 +196,8 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
   }, focusFirstError);
 
   const err = form.formState.errors;
+  const dirty = form.formState.isDirty;
+  React.useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   return (
     <form
@@ -265,15 +269,21 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel }
             />
           </LabelledField>
 
-          <div className="mt-5 grid gap-6 md:grid-cols-[minmax(316px,340px)_minmax(0,1fr)]">
-            <DatePickerMonth
-              form={form}
-              month={month}
-              setMonth={setMonth}
-              bookings={facilityBookings}
-              initialDate={initial ? new Date(`${initial.date}T00:00:00`) : undefined}
-            />
-            <TimeSlots form={form} bookings={facilityBookings} loading={loadingBookings} />
+          {/* Side by side only when this card is wide enough (30 Oct 2026). The
+              window's width misled: beside the admin sidebar the card is 240px
+              narrower, the slots fell into one column behind the Summary, and
+              a tall empty space opened under the calendar. */}
+          <div className="mt-5 @container">
+            <div className="grid gap-6 @min-[33rem]:grid-cols-[minmax(316px,340px)_minmax(0,1fr)]">
+              <DatePickerMonth
+                form={form}
+                month={month}
+                setMonth={setMonth}
+                bookings={facilityBookings}
+                initialDate={initial ? new Date(`${initial.date}T00:00:00`) : undefined}
+              />
+              <TimeSlots form={form} bookings={facilityBookings} loading={loadingBookings} />
+            </div>
           </div>
         </Section>
 

@@ -99,7 +99,7 @@ export function RecordsDetailPage() {
           <RecordsScheduleSheet schedule={schedule} />
         </PaperSheet>
 
-        <FiledLocation type="RDS" sourceId={schedule.id} />
+        <FiledLocation type="RDS" sourceId={schedule.id} status={schedule.status} />
       </PageTransition>
 
       <RecordsPrintForm schedule={schedule} />

@@ -124,7 +124,7 @@ describe("Purchase Orders on Firestore", () => {
     await expect(createPurchaseOrder(manual)).rejects.toThrow(`${pr.prNumber} already has purchase order ${pr.poNumber}`);
   });
 
-  it("blank details are completed later without a reason; a correction needs one and is kept", async () => {
+  it("blank details are completed later, and a correction is kept, without a reason (30 Oct 2026)", async () => {
     const { po } = await approved();
     const completed = await updatePurchaseOrderDetails(
       po.id,
@@ -134,18 +134,16 @@ describe("Purchase Orders on Firestore", () => {
     expect(completed).toMatchObject({ supplierName: "Test Supplies Co.", paymentTerm: "Cash", status: "Approved" });
     expect(completed.history.at(-1)?.kind).toBe("update");
 
-    await expect(
-      updatePurchaseOrderDetails(po.id, details({ supplierName: "Other Supplier", paymentTerm: "Cash", items: completed.items }), { by: "Ana Reyes" }),
-    ).rejects.toThrow(/Give the reason/);
     const corrected = await updatePurchaseOrderDetails(
       po.id,
       details({ supplierName: "Other Supplier", paymentTerm: "Cash", items: completed.items.map((it, i) => (i === 0 ? { ...it, quantity: 12 } : it)) }),
-      { reason: "Award changed after canvass (test data)", by: "Ana Reyes" },
+      { by: "Ana Reyes" },
     );
     expect(corrected.supplierName).toBe("Other Supplier");
     expect(corrected.items[0].quantity).toBe(12);
     expect(corrected.authorizedItems?.[0].quantity).toBe(10);
-    expect(corrected.history.at(-1)?.kind).toBe("correction");
+    expect(corrected.history.at(-1)).toMatchObject({ kind: "correction", text: "Changed by Ana Reyes" });
+    expect(corrected.history.at(-1)?.lines).toContain("Supplier: Test Supplies Co. → Other Supplier");
   });
 
   it("the browser cannot edit, release or return an order authorized with its request", async () => {

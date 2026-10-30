@@ -43,7 +43,8 @@ export type Standing = "moving" | "finished" | "stopped";
 
 export function standingOf(steps: ApprovalTimelineStep[]): Standing {
   if (steps.some((s) => s.status === "rejected")) return "stopped";
-  if (steps.every((s) => s.status === "approved")) return "finished";
+  // A return earlier on does not keep a document from finishing.
+  if (steps.every((s) => s.status === "approved" || s.status === "returned")) return "finished";
   return "moving";
 }
 

@@ -60,6 +60,8 @@ export interface PRFormProps {
   submitting: boolean;
   onSubmit: (input: PRDraftInput) => void | Promise<void>;
   onCancel: () => void;
+  /** Told when the form gains or loses unsaved changes: the record's page holds its actions until they are saved (30 Oct 2026). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type FormApi = ReturnType<typeof useForm<PRFormValues>>;
@@ -69,7 +71,7 @@ const NO_FUND = "__none__";
 const isFund = (v: string): v is PRDraftInput["fundingSource"] & string =>
   (FUNDING_SOURCES as readonly string[]).includes(v);
 
-export function PRForm({ initial, audience = "staff", submitLabel, submitting, onSubmit, onCancel }: PRFormProps) {
+export function PRForm({ initial, audience = "staff", submitLabel, submitting, onSubmit, onCancel, onDirtyChange }: PRFormProps) {
   const isPublic = audience === "public";
   // The fund chosen in Settings → Procurement. Only a value an Administrator
   // has set counts: there is no built-in fallback any more (21 Oct 2026).
@@ -132,6 +134,8 @@ export function PRForm({ initial, audience = "staff", submitLabel, submitting, o
   });
 
   const err = form.formState.errors;
+  const dirty = form.formState.isDirty;
+  React.useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   return (
     <form
@@ -307,7 +311,7 @@ function LabelledField({
 /** A cell's name on a phone, where the column headings are hidden. Screen readers use the aria-label. */
 function CellLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span aria-hidden="true" className="mb-1 block text-[12px] font-medium text-[#5b606b] sm:hidden">
+    <span aria-hidden="true" className="mb-1 block text-[12px] font-medium text-[#5b606b] @min-[37rem]:hidden">
       {children}
     </span>
   );
@@ -325,13 +329,15 @@ function ItemsSection({ form }: { form: FormApi }) {
   );
   const itemsError = formState.errors.items;
   // Description takes every spare pixel; the numeric columns are sized to
-  // their longest likely value.
-  const cols = "sm:grid-cols-[20px_minmax(0,1fr)_64px_92px_104px_100px_36px]";
+  // their longest likely value. The rows become a table only when this card
+  // is wide enough (30 Oct 2026): beside the admin sidebar the card is 240px
+  // narrower than the window, and the fixed columns ran under the Summary.
+  const cols = "@min-[37rem]:grid-cols-[20px_minmax(0,1fr)_64px_92px_104px_100px_36px]";
 
   return (
     <section
       aria-labelledby="pr-items-title"
-      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
+      className="@container rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
     >
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 id="pr-items-title" className="text-[15px] font-semibold text-neutral-900">
@@ -343,7 +349,7 @@ function ItemsSection({ form }: { form: FormApi }) {
       </div>
 
       <div className={cn(fields.length > 10 && "max-h-[620px] overflow-y-auto pr-1")}>
-      <div className={cn("sticky top-0 z-10 hidden gap-x-2 bg-white pb-2 text-[12px] font-medium text-[#5b606b] sm:grid", cols)}>
+      <div className={cn("sticky top-0 z-10 hidden gap-x-2 bg-white pb-2 text-[12px] font-medium text-[#5b606b] @min-[37rem]:grid", cols)}>
         <span>No.</span>
         <span>Item description</span>
         <span>Quantity</span>
@@ -353,28 +359,28 @@ function ItemsSection({ form }: { form: FormApi }) {
         <span />
       </div>
 
-      <ul className="list-none space-y-2 sm:space-y-0">
+      <ul className="list-none space-y-2 @min-[37rem]:space-y-0">
         {fields.map((row, i) => {
           const rowErr = itemsError?.[i];
           const amount =
             (Number(items?.[i]?.quantity) || 0) * (Number(items?.[i]?.estimatedCost) || 0);
           return (
-            // On a phone each item is its own bordered block; from sm it is a table row.
+            // In a narrow card each item is its own bordered block; in a wide one it is a table row.
             <li
               key={row.id}
               className={cn(
-                "grid grid-cols-2 items-start gap-x-2 gap-y-2.5 rounded-[10px] border border-[#e4e4e1] p-3 sm:items-center sm:rounded-none sm:border-0 sm:border-t sm:border-[#f0f0ee] sm:px-0 sm:py-1.5",
+                "grid grid-cols-2 items-start gap-x-2 gap-y-2.5 rounded-[10px] border border-[#e4e4e1] p-3 @min-[37rem]:items-center @min-[37rem]:rounded-none @min-[37rem]:border-0 @min-[37rem]:border-t @min-[37rem]:border-[#f0f0ee] @min-[37rem]:px-0 @min-[37rem]:py-1.5",
                 cols,
               )}
             >
               <span
                 aria-hidden="true"
-                className={cn("col-span-2 text-[13px] font-medium text-[#5b606b] sm:col-span-1 sm:self-center", MONO)}
+                className={cn("col-span-2 text-[13px] font-medium text-[#5b606b] @min-[37rem]:col-span-1 @min-[37rem]:self-center", MONO)}
               >
-                <span className="sm:hidden">Item </span>
+                <span className="@min-[37rem]:hidden">Item </span>
                 {i + 1}
               </span>
-              <div className="col-span-2 sm:col-span-1">
+              <div className="col-span-2 @min-[37rem]:col-span-1">
                 <CellLabel>Item description</CellLabel>
                 <Input
                   aria-label={`Item ${i + 1} description`}
@@ -434,10 +440,10 @@ function ItemsSection({ form }: { form: FormApi }) {
                   {...register(`items.${i}.estimatedCost`, { valueAsNumber: true })}
                 />
               </div>
-              {/* On a phone the total and the remove button share a row; from
-                  sm they are the row's last two cells. */}
-              <div className="flex items-end justify-between gap-2 sm:contents">
-                <div className="sm:self-center sm:text-right">
+              {/* In a narrow card the total and the remove button share a row;
+                  in a wide one they are the row's last two cells. */}
+              <div className="flex items-end justify-between gap-2 @min-[37rem]:contents">
+                <div className="@min-[37rem]:self-center @min-[37rem]:text-right">
                   <CellLabel>Total cost</CellLabel>
                   <span className={cn("block h-10 text-[14px] font-medium leading-10 text-neutral-900", MONO)}>
                     {peso(amount)}
@@ -448,13 +454,13 @@ function ItemsSection({ form }: { form: FormApi }) {
                   aria-label={`Remove item ${i + 1}`}
                   onClick={() => remove(i)}
                   disabled={fields.length === 1}
-                  className="grid h-10 w-10 place-items-center justify-self-end rounded-lg text-[#5b606b] transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 disabled:pointer-events-none disabled:opacity-40 sm:w-9"
+                  className="grid h-10 w-10 place-items-center justify-self-end rounded-lg text-[#5b606b] transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 disabled:pointer-events-none disabled:opacity-40 @min-[37rem]:w-9"
                 >
                   <Trash2 aria-hidden="true" className="h-4 w-4" />
                 </button>
               </div>
               {rowErr && (
-                <p role="alert" className="col-span-2 text-[13px] text-red-700 sm:col-span-7">
+                <p role="alert" className="col-span-2 text-[13px] text-red-700 @min-[37rem]:col-span-7">
                   Item {i + 1}: {rowErr.description?.message ?? rowErr.quantity?.message ?? rowErr.estimatedCost?.message ?? rowErr.unit?.message}
                 </p>
               )}

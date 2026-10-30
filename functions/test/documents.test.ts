@@ -180,13 +180,10 @@ describe("buildReservation", () => {
     attachments: [],
   };
 
-  it("is Pending with the same approval trail", () => {
+  it("is Pending, with the filing as its only step: no review is invented", () => {
     const row = buildReservation(fr, "FR-2026-000001", AT);
     expect(row).toMatchObject({ status: "Pending", facility_id: "Session Hall", start_time: "08:00" });
-    expect(row.approvals).toMatchObject([
-      { step: "Created", by: "Office of the Mayor" },
-      { step: "Reviewed", by: "Marites Villanueva", office: "General Services Office" },
-    ]);
+    expect(row.approvals).toEqual([{ step: "Created", by: "Office of the Mayor", at: AT }]);
   });
 
   it("refuses an end time that is not after the start", () => {

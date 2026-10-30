@@ -2,7 +2,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Check, Clock3, X } from "lucide-react";
+import { ArrowRight, Check, Clock3, Undo2, X } from "lucide-react";
 
 import { Skeleton, Spinner, type ApprovalTimelineStep } from "@/components";
 import {
@@ -255,6 +255,7 @@ const STEP_STATE_TEXT: Record<ApprovalTimelineStep["status"], string> = {
   current: "In progress",
   pending: "Not yet",
   rejected: "Stopped",
+  returned: "Returned for revision",
 };
 
 function ProgressSteps({ steps }: { steps: ApprovalTimelineStep[] }) {
@@ -288,7 +289,7 @@ function ProgressSteps({ steps }: { steps: ApprovalTimelineStep[] }) {
                     "text-[14px] font-medium",
                     step.status === "pending" && "text-neutral-500",
                     step.status === "rejected" && "text-red-700",
-                    (step.status === "approved" || isCurrent) && "text-neutral-900",
+                    (step.status === "approved" || step.status === "returned" || isCurrent) && "text-neutral-900",
                   )}
                 >
                   {step.label}
@@ -347,6 +348,13 @@ function StepMarker({ status }: { status: ApprovalTimelineStep["status"] }) {
     return (
       <span aria-hidden="true" className={cn(base, "bg-red-700 text-white")}>
         <X className="h-3.5 w-3.5" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (status === "returned") {
+    return (
+      <span aria-hidden="true" className={cn(base, "border border-neutral-900 bg-white text-neutral-900")}>
+        <Undo2 className="h-3.5 w-3.5" strokeWidth={2.5} />
       </span>
     );
   }

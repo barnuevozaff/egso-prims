@@ -639,7 +639,6 @@ export function WaterDashboardPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => exportCsv(selectedRows)}
         onPrint={() => navigate("/water/summary")}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}

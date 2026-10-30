@@ -294,10 +294,9 @@ export function buildReservation(raw: unknown, resNumber: string, at: string): R
       { id: uid(), kind: "create", text: `${resNumber} created by ${input.borrower}`, at },
       { id: uid(), kind: "status", text: "Status → Pending", at },
     ],
-    approvals: [
-      { step: "Created", by: input.borrower, at },
-      { step: "Reviewed", by: "Marites Villanueva", office: "General Services Office", at },
-    ],
+    // Filing records only the filing. Until 30 Oct 2026 a "Reviewed" step was
+    // added here under a fixed name; no one had reviewed anything.
+    approvals: [{ step: "Created", by: input.borrower, at }],
     created_at: at,
     updated_at: at,
   };

@@ -129,7 +129,7 @@ const stubPrint = (page: Page) =>
   });
 
 describe("purchase orders, created with the request's approval (21 Oct 2026)", () => {
-  it("approve once → Go to PO → complete details → correct with a reason → print with blanks as lines", async () => {
+  it("approve once → Go to PO → complete details → change without a reason → print with blanks as lines", async () => {
     const { id: prId } = await filePortalRequest("Office supplies for the fourth quarter (test data)", [
       { description: "Bond paper, A4", quantity: 10, unit: "ream", estimatedCost: 250 },
       { description: "Ballpen, black", quantity: 3, unit: "box", estimatedCost: 120 },
@@ -180,16 +180,20 @@ describe("purchase orders, created with the request's approval (21 Oct 2026)", (
       await page.getByRole("button", { name: "Save changes" }).click();
       await page.getByText(`${poNumber} saved`).waitFor({ timeout: 30_000 });
 
-      // Changing what is recorded is a correction: a reason first.
+      // Changing what is recorded needs no reason either (30 Oct 2026); each change is listed.
       await page.getByLabel("Item 1 quantity").fill("12");
       await page.getByLabel("Supplier", { exact: true }).fill("Other Supplies Co. (test data)");
-      await page.getByRole("button", { name: "Save correction" }).click();
-      await page.getByText("Give the reason for this correction.").first().waitFor();
-      await page.getByLabel(/^Reason for the correction/).fill("Award changed after canvass (test data)");
-      await shot(page, "72-po-correction");
-      await page.getByRole("button", { name: "Save correction" }).click();
-      await page.getByText(`${poNumber} corrected`).waitFor({ timeout: 30_000 });
-      await page.getByText(/Corrected by Ana Reyes \(Award changed after canvass \(test data\)\)/).first().waitFor();
+      expect(await page.getByLabel(/^Reason for the correction/).count()).toBe(0);
+      await page.getByRole("button", { name: "Save changes" }).click();
+      await page.getByText(`${poNumber} saved`).waitFor({ timeout: 30_000 });
+      // History has only Approval steps and Changes (30 Oct 2026); the correction is a change.
+      for (const gone of [/Authorization/, /Comments/, /Supporting documents/]) {
+        expect(await page.getByRole("tab", { name: gone }).count()).toBe(0);
+      }
+      await page.getByRole("tab", { name: "Changes" }).click();
+      await page.getByText("Changed by Ana Reyes").first().waitFor();
+      await page.getByText("Bond paper, A4: quantity 10 → 12").first().waitFor();
+      await shot(page, "72-po-changes");
 
       // Refreshing, or approving again, never makes another order.
       await page.reload();

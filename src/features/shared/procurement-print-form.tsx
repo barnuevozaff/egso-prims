@@ -81,6 +81,23 @@ export function PrintSheet({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The municipal seal and name above the Purchase Request, Purchase Order and
+ * Requisition and Issue Slip (30 Oct 2026): one treatment, the Purchase
+ * Request's, so the three read as one office's papers. Each form's own title
+ * and fields follow it unchanged.
+ */
+export function MunicipalLetterhead() {
+  return (
+    <div className="text-center font-['Tahoma','Arial',sans-serif] leading-[1.35] text-black">
+      <img src={BRAND_LOGO} alt="Municipality of Alaminos seal" className="mx-auto h-[56px] w-[56px] object-contain" />
+      <div className="mt-0.5 text-[11.5px]">Republic of the Philippines</div>
+      <div className="text-[13px] font-bold">MUNICIPALITY OF ALAMINOS</div>
+      <div className="text-[11.5px]">Province of Laguna</div>
+    </div>
+  );
+}
+
 /** Peso amount spelled out, e.g. "One Thousand Pesos Only". */
 export function amountInWords(amount: number): string {
   const ones = [

@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 
 import {
-  ApprovalTimeline,
   Button,
   ConfirmationModal,
   ContainerCard,
@@ -32,11 +31,6 @@ import {
   Skeleton,
   SkeletonText,
   StatusBadge,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-  Textarea,
   toast,
 } from "@/components";
 import { useAuth } from "@/features/auth/auth-context";
@@ -44,7 +38,6 @@ import { can } from "@/features/auth/types";
 import { useConfigOptions } from "@/features/config/use-module-config";
 import {
   acknowledgePurchaseOrder,
-  addPurchaseOrderComment,
   issuePurchaseOrder,
   listPurchaseOrders,
   setPurchaseOrderStatus,
@@ -63,10 +56,8 @@ import { supplierById, type PurchaseOrder } from "@/features/purchase-orders/typ
 import { POPrintSheet } from "@/features/shared/procurement-sheets";
 import { getPurchaseRequest } from "@/features/purchase-requests/api";
 import { departmentByCode, prTotal, type PurchaseRequest } from "@/features/purchase-requests/types";
-import { AttachmentList } from "@/features/shared/attachment-list";
-import { CommentThread } from "@/features/shared/comment-thread";
-import { HistoryFeed } from "@/features/shared/history-feed";
 import { reportLoadFailure } from "@/features/shared/load-guard";
+import { HistoryTabs } from "@/features/shared/record-history";
 import { formatPHP } from "@/lib/format";
 
 /**
@@ -74,9 +65,9 @@ import { formatPHP } from "@/lib/format";
  * approved, already authorized by that approval; here an Administrator
  * completes its document details, corrects it if needed, and prints the
  * official form. Every document field is optional: what is blank prints as a
- * line to fill in by hand. Filling in a blank is a completion; changing what
- * is recorded is a correction, which needs a reason once the order is
- * approved, and is kept with its before and after values.
+ * line to fill in by hand. Every save is kept in History → Changes: what was
+ * filled in, and items added, removed or changed, with the before and after
+ * values. Since 30 Oct 2026 no reason is asked for.
  *
  * Orders from the earlier workflow (Draft, Pending Approval, Released) keep
  * their own actions here: submit, approve, return, issue, acknowledge,
@@ -138,22 +129,6 @@ const toForm = (po: PurchaseOrder): DetailsForm => ({
 });
 
 const dateValue = (d?: Date) => (d ? format(d, "yyyy-MM-dd") : "");
-
-/** What a save would correct (change or clear a recorded value), as the server judges it. */
-function correctionsOf(po: PurchaseOrder, v: DetailsForm): string[] {
-  const out = FIELDS.filter((f) => str(f.of(po)) && str(f.of(po)) !== str(v[f.name])).map((f) => f.label);
-  if (str(po.expectedDelivery) && str(po.expectedDelivery) !== dateValue(v.expectedDelivery)) out.push("Date of delivery");
-  const items = v.items ?? [];
-  const essential = (it: { description: string; quantity: number; unit: string; unitCost: number }) =>
-    `${str(it.description)}|${Number(it.quantity)}|${str(it.unit)}|${Number(it.unitCost)}`;
-  if (items.length !== po.items.length || items.some((it, i) => po.items[i] && essential(it) !== essential(po.items[i]))) {
-    out.push("Items");
-  }
-  if (items.some((it, i) => str(po.items[i]?.stockNo) && str(po.items[i]?.stockNo) !== str(it.stockNo))) {
-    out.push("Stock/property no.");
-  }
-  return out;
-}
 
 const itemError = (it: ItemRow) =>
   !str(it.description) || str(it.description).length < 3
@@ -235,8 +210,6 @@ function POPageBody({
   const values = useWatch({ control }) as DetailsForm;
   const items = values.items ?? [];
   const dirty = formState.isDirty;
-  const [reason, setReason] = React.useState("");
-  const [reasonError, setReasonError] = React.useState<string | undefined>();
   const [saving, setSaving] = React.useState(false);
   const [pastOrders, setPastOrders] = React.useState<PurchaseOrder[]>([]);
   const { options: modes } = useConfigOptions("Procurement", "po_procurement_modes");
@@ -277,8 +250,6 @@ function POPageBody({
     }
   };
 
-  const corrections = correctionsOf(po, values);
-  const needsReason = po.status === "Approved" && corrections.length > 0;
   const total = items.reduce((s, it) => s + (Number(it?.quantity) || 0) * (Number(it?.unitCost) || 0), 0);
   const authorized = po.authorizedItems ?? source?.items.map((it) => ({ ...it, unitCost: it.estimatedCost }));
   const comparison = compareWithPR(
@@ -299,10 +270,6 @@ function POPageBody({
       toast.error(`Item ${firstItemError + 1}: ${itemError(items[firstItemError])}`);
       return;
     }
-    if (needsReason && reason.trim().length < 5) {
-      setReasonError("Give the reason for this correction. It is kept in the order's history.");
-      return;
-    }
     setSaving(true);
     try {
       const details: PODetailsInput = {
@@ -317,15 +284,11 @@ function POPageBody({
           stockNo: str(it.stockNo) || undefined,
         })),
       };
-      const updated = await updatePurchaseOrderDetails(po.id, details, {
-        reason: needsReason ? reason.trim() : undefined,
-        by: userName,
-      });
+      // No reason is asked for (30 Oct 2026): what was added, removed or changed is kept in History → Changes.
+      const updated = await updatePurchaseOrderDetails(po.id, details, { by: userName });
       onUpdated(updated);
       reset(toForm(updated));
-      setReason("");
-      setReasonError(undefined);
-      toast.success(needsReason ? `${po.poNumber} corrected` : `${po.poNumber} saved`);
+      toast.success(`${po.poNumber} saved`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "The purchase order could not be saved");
     }
@@ -481,7 +444,7 @@ function POPageBody({
             title="Items"
             description={
               po.authorization === "pr-approval"
-                ? "As authorized with the request. A change here is a correction and needs a reason; the request is not changed."
+                ? "As authorized with the request. Items added, removed or changed here are kept in the history; the request is not changed."
                 : "The items on this order."
             }
           >
@@ -592,31 +555,9 @@ function POPageBody({
 
           <section id="history" className="border-t border-[#f0f0ee] pt-5">
             <h2 className="text-[15px] font-semibold text-neutral-900">History</h2>
-            <Tabs defaultValue="history" className="mt-3">
-              <TabsList className="w-full justify-start overflow-x-auto bg-neutral-100">
-                <TabsTrigger value="history" className="text-[12.5px]">History</TabsTrigger>
-                <TabsTrigger value="timeline" className="text-[12.5px]">Authorization</TabsTrigger>
-                <TabsTrigger value="comments" className="text-[12.5px]">Comments ({po.comments.length})</TabsTrigger>
-                <TabsTrigger value="documents" className="text-[12.5px]">Supporting documents ({po.attachments.length})</TabsTrigger>
-              </TabsList>
-              <TabsContent value="history" className="pt-3">
-                <HistoryFeed entries={po.history} />
-              </TabsContent>
-              <TabsContent value="timeline" className="pt-3">
-                <ApprovalTimeline steps={buildPOTimeline(po)} />
-              </TabsContent>
-              <TabsContent value="comments" className="pt-3">
-                <CommentThread
-                  comments={po.comments}
-                  onSubmit={async (text) => {
-                    onUpdated(await addPurchaseOrderComment(po.id, { author: userName, office: "General Services Office", text }));
-                  }}
-                />
-              </TabsContent>
-              <TabsContent value="documents" className="pt-3">
-                <AttachmentList attachments={po.attachments} readOnly />
-              </TabsContent>
-            </Tabs>
+            <div className="mt-3">
+              <HistoryTabs steps={buildPOTimeline(po)} changes={po.history} />
+            </div>
           </section>
         </form>
 
@@ -655,28 +596,11 @@ function POPageBody({
             </li>
           </ul>
 
-          {editable && needsReason && (
-            <div className="border-t border-[#f0f0ee] px-5 py-4">
-              <Field label="Reason for the correction" required error={reasonError}>
-                <Textarea
-                  rows={3}
-                  maxLength={1000}
-                  value={reason}
-                  onChange={(e) => {
-                    setReason(e.target.value);
-                    if (reasonError) setReasonError(undefined);
-                  }}
-                />
-              </Field>
-              <p className="mt-1.5 text-[12px] text-[#5b606b]">Correcting: {corrections.join(", ")}. Kept with the before and after values.</p>
-            </div>
-          )}
-
           <div className="space-y-2 border-t border-[#f0f0ee] px-5 py-4">
             {editable && (
               <Button className="h-11 w-full" onClick={() => void save()} loading={saving} disabled={!dirty}>
                 <Save />
-                {needsReason ? "Save correction" : "Save changes"}
+                Save changes
               </Button>
             )}
             <Button variant="secondary" className="h-11 w-full" onClick={print} disabled={dirty}>

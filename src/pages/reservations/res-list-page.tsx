@@ -23,7 +23,6 @@ import {
   MetricCard,
   PageHeader,
   PageTransition,
-  PrintButton,
   SearchBar,
   StatusBadge,
   TableCard,
@@ -47,7 +46,6 @@ import { useOfficeOptions } from "@/features/offices/use-offices";
 import { departmentByCode } from "@/features/purchase-requests/types";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
-import { ResDrawer } from "@/features/reservations/components/res-drawer";
 import { ReservationCalendar } from "@/features/reservations/components/reservation-calendar";
 
 const ALL = "__all";
@@ -89,14 +87,10 @@ export function ResListPage() {
   const [selectedRows, setSelectedRows] = React.useState<Reservation[]>([]);
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const { options: officeOptions } = useOfficeOptions();
-  const [activeId, setActiveId] = React.useState<string | null>(null);
 
-  const openDrawer = (r: Reservation) => {
-    setActiveId(r.id);
-    setDrawerOpen(true);
-  };
+  // A reservation opens on its own page, ready to edit while it can be (30 Oct 2026).
+  const openReservation = (r: Reservation) => navigate(`/reservations/${encodeURIComponent(r.id)}`);
 
 
   const refreshAll = () => {
@@ -224,7 +218,7 @@ export function ResListPage() {
       <ReservationCalendar
         reservations={stats.data}
         loading={stats.loading}
-        onSelectReservation={openDrawer}
+        onSelectReservation={openReservation}
       />
 
       <div className="h-[540px]">
@@ -233,12 +227,7 @@ export function ResListPage() {
           toolbar={
             <FilterBar
               className="shrink-0"
-              end={
-                <>
-                  <ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />
-                  <PrintButton onClick={() => window.print()} />
-                </>
-              }
+              end={<ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />}
             >
               <SearchBar
                 placeholder="Search reservation, borrower…"
@@ -290,7 +279,7 @@ export function ResListPage() {
             onRowSelectionChange={setRowSelection}
             onSelectedRowsChange={setSelectedRows}
             getRowId={(r) => r.id}
-            onRowClick={openDrawer}
+            onRowClick={openReservation}
             emptyState={{
               icon: CalendarDays,
               title: "No reservations found",
@@ -301,10 +290,10 @@ export function ResListPage() {
         </TableCard>
       </div>
 
+      {/* Void and Cancel, as on the other registers (30 Oct 2026). A reservation has no official
+          form, so there is no Print here: printing the screen is not a document. */}
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
-        onPrint={() => window.print()}
         onVoid={can(user, "manage:reservations") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined}
         onClear={() => setRowSelection({})}
       />
@@ -324,13 +313,6 @@ export function ResListPage() {
         }}
       />
 
-      <ResDrawer
-        resId={activeId}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onChanged={refreshAll}
-        onEdit={(id) => navigate(`/reservations/${id}/edit`)}
-      />
     </PageTransition>
   );
 }

@@ -1,5 +1,4 @@
-import { BRAND_LOGO } from "@/lib/brand";
-import { PrintSheet, printAmount, printDate } from "@/features/shared/procurement-print-form";
+import { MunicipalLetterhead, PrintSheet, printAmount, printDate } from "@/features/shared/procurement-print-form";
 import {
   useCurrentSignatories,
   type CurrentSignatories,
@@ -57,16 +56,15 @@ function lines(pr: PurchaseRequest): Line[] {
 
 const cell = "border border-black px-1.5 py-[3px] align-top";
 
-/** A label with its value, or a ruled blank for the office to fill in by hand. */
+/**
+ * A label and its writing line (30 Oct 2026): the value is printed on the
+ * line, and a blank keeps the line, to the cell's edge, for handwriting.
+ */
 function Field({ label, value }: { label: string; value?: string }) {
   return (
-    <span className="font-bold">
-      {label}{" "}
-      {value ? (
-        <span>{value}</span>
-      ) : (
-        <span className="inline-block h-[12px] w-[120px] border-b border-black align-bottom" />
-      )}
+    <span className="flex min-w-0 items-baseline gap-1 font-bold">
+      <span className="shrink-0">{label}</span>
+      <span className="min-w-[48px] flex-1 break-words border-b border-black">{value?.trim() || " "}</span>
     </span>
   );
 }
@@ -132,13 +130,8 @@ function PRDocument({ pr, current }: { pr: PurchaseRequest; current: CurrentSign
 
   return (
     <div className="font-['Tahoma','Arial',sans-serif] text-[11.5px] leading-[1.35] text-black">
-      {/* Letterhead — provisional (see above). */}
-      <div className="text-center">
-        <img src={BRAND_LOGO} alt="Municipality of Alaminos seal" className="mx-auto h-[56px] w-[56px] object-contain" />
-        <div className="mt-0.5 text-[11.5px]">Republic of the Philippines</div>
-        <div className="text-[13px] font-bold">MUNICIPALITY OF ALAMINOS</div>
-        <div className="text-[11.5px]">Province of Laguna</div>
-      </div>
+      {/* Letterhead — provisional (see above); shared with the PO and the RIS. */}
+      <MunicipalLetterhead />
       <div className="mb-2 mt-2 text-center text-[17px] font-bold tracking-[0.02em]">PURCHASE REQUEST</div>
       {/* A voided or rejected request printed for the file must not pass for a valid one. */}
       {closedMark && (

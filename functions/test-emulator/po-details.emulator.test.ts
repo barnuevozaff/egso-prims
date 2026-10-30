@@ -6,8 +6,8 @@ import { clearFirestore, connect, disconnect, PROJECT_ID } from "./setup.js";
 
 /**
  * Completing and correcting a Purchase Order (21 Oct 2026): blanks are filled
- * in freely; changing what is recorded on an approved order needs a reason and
- * is kept with its before and after values; the authorization is never
+ * in freely; changing what is recorded is kept with its before and after
+ * values, without a reason since 30 Oct 2026; the authorization is never
  * touched. Synthetic data only.
  */
 
@@ -57,30 +57,33 @@ describe("completing and correcting a purchase order", () => {
     expect(po.history.at(-1).changes).toEqual([
       { field: "Supplier", from: "", to: "Test Supplies Co.", kind: "completed" },
       { field: "Payment term", from: "", to: "Cash", kind: "completed" },
-      { field: "Item 1 stock/property no.", from: "", to: "SP-1", kind: "completed" },
+      { field: "Bond paper, A4 stock/property no.", from: "", to: "SP-1", kind: "completed" },
     ]);
   });
 
-  it("needs a reason to change a recorded value or the items, and keeps the authorization", async () => {
+  it("changes recorded values and the items without a reason, lists each change, and keeps the authorization", async () => {
     await order({ supplier_name: "First Supplier" });
-    const refused = await save({ supplierName: "Second Supplier", items: lines() });
-    expect(refused.error?.message).toMatch(/Give the reason for correcting PO-2026-000001 \(Supplier\)/);
-    // Every field is sent each time: one left out would be read as cleared.
-    expect((await save({ supplierName: "First Supplier", items: lines({ quantity: 12 }) })).error?.message).toMatch(/\(Item 1\)/);
-
-    const ok = await save({ supplierName: "Second Supplier", items: lines({ quantity: 12 }) }, "Supplier withdrew; quantity per canvass");
+    // No reason asked for since 30 Oct 2026.
+    const added = { id: "", description: "Ballpen, black", quantity: 2, unit: "box", unitCost: 120, stockNo: null };
+    const ok = await save({ supplierName: "Second Supplier", items: [{ ...item, quantity: 12 }, added] });
     expect(ok.error).toBeUndefined();
     const po = await read();
     expect(po.supplier_name).toBe("Second Supplier");
-    expect(po.items[0].quantity).toBe(12);
+    expect(po.items[0]).toMatchObject({ id: "i1", quantity: 12 });
+    expect(po.items[1].id).toBeTruthy();
     // As authorized, unchanged.
     expect(po.authorized_items).toEqual([item]);
     expect(po.approvals).toEqual([{ step: "Created" }, { step: "Approved", byUid: "someone" }]);
-    expect(po.history.at(-1)).toMatchObject({ kind: "correction", reason: "Supplier withdrew; quantity per canvass" });
-    expect(po.history.at(-1).changes).toEqual([
-      { field: "Supplier", from: "First Supplier", to: "Second Supplier", kind: "corrected" },
-      { field: "Item 1", from: "10 ream Bond paper, A4 at 250", to: "12 ream Bond paper, A4 at 250", kind: "corrected" },
+    expect(po.history.at(-1)).toMatchObject({ kind: "correction", text: "Changed by Test Admin" });
+    expect(po.history.at(-1).lines).toEqual([
+      "Supplier: First Supplier → Second Supplier",
+      "Bond paper, A4: quantity 10 → 12",
+      "Added: Ballpen, black · 2 box at ₱120.00",
     ]);
+
+    // Removing a line reads as that line removed, not as every later line changed.
+    expect((await save({ supplierName: "Second Supplier", items: [po.items[1]] })).error).toBeUndefined();
+    expect((await read()).history.at(-1).lines).toEqual(["Removed: Bond paper, A4 · 12 ream at ₱250.00"]);
   });
 
   it("keeps the items' essentials: every line needs a description, quantity, unit and cost", async () => {

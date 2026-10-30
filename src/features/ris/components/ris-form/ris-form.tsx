@@ -67,6 +67,8 @@ export interface RISFormProps {
   submitting: boolean;
   onSubmit: (input: RISDraftInput) => void | Promise<void>;
   onCancel: () => void;
+  /** Told when the form gains or loses unsaved changes: the record's page holds its actions until they are saved (30 Oct 2026). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type FormApi = ReturnType<typeof useForm<RISFormValues>>;
@@ -80,6 +82,7 @@ export function RISForm({
   submitting,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: RISFormProps) {
   const admin = variant === "admin";
   const [approvedPRs, setApprovedPRs] = React.useState<PurchaseRequest[]>([]);
@@ -238,6 +241,8 @@ export function RISForm({
   });
 
   const err = form.formState.errors;
+  const dirty = form.formState.isDirty;
+  React.useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   const prNumber = useWatch({ control: form.control, name: "prNumber" });
 
   return (
@@ -472,15 +477,32 @@ function ItemsSection({
   );
   const itemsError = formState.errors.items;
   // The name takes every spare pixel; the rest are sized to their values.
-  const cols = admin
-    ? "sm:grid-cols-[minmax(0,1fr)_96px_80px_80px_100px_40px]"
-    : "sm:grid-cols-[minmax(0,1fr)_96px_112px_40px]";
-  const span = admin ? "sm:col-span-6" : "sm:col-span-4";
+  // The admin's rows become a table only when this card is wide enough (30 Oct
+  // 2026): beside the sidebar the card is 240px narrower than the window, and
+  // the fixed columns ran under the Summary. The portal keeps its breakpoint.
+  const layout = admin
+    ? {
+        cols: "@min-[38rem]:grid-cols-[minmax(0,1fr)_96px_80px_80px_100px_40px]",
+        span: "@min-[38rem]:col-span-6",
+        head: "@min-[38rem]:grid",
+        list: "@min-[38rem]:space-y-0",
+        line: "@min-[38rem]:items-center @min-[38rem]:rounded-none @min-[38rem]:border-0 @min-[38rem]:border-t @min-[38rem]:border-[#f0f0ee] @min-[38rem]:px-0 @min-[38rem]:py-1.5",
+        name: "@min-[38rem]:col-span-1",
+      }
+    : {
+        cols: "sm:grid-cols-[minmax(0,1fr)_96px_112px_40px]",
+        span: "sm:col-span-4",
+        head: "sm:grid",
+        list: "sm:space-y-0",
+        line: "sm:items-center sm:rounded-none sm:border-0 sm:border-t sm:border-[#f0f0ee] sm:px-0 sm:py-1.5",
+        name: "sm:col-span-1",
+      };
+  const { cols, span } = layout;
 
   return (
     <section
       aria-labelledby="ris-items-title"
-      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6"
+      className={cn("rounded-[14px] border border-[#e4e4e1] bg-white p-5 sm:p-6", admin && "@container")}
     >
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 id="ris-items-title" className="text-[15px] font-semibold text-neutral-900">
@@ -491,7 +513,7 @@ function ItemsSection({
         </span>
       </div>
 
-      <div className={cn("hidden gap-2 pb-2 text-[12px] font-medium text-[#5b606b] sm:grid", cols)}>
+      <div className={cn("hidden gap-2 pb-2 text-[12px] font-medium text-[#5b606b]", layout.head, cols)}>
         <span>Item</span>
         {admin ? (
           <>
@@ -506,7 +528,7 @@ function ItemsSection({
         <span />
       </div>
 
-      <ul className="list-none space-y-2 sm:space-y-0">
+      <ul className={cn("list-none space-y-2", layout.list)}>
         {fields.map((row, i) => {
           const rowErr = itemsError?.[i];
           const inv = inventory.find((s) => s.id === items?.[i]?.inventoryItemId);
@@ -523,11 +545,12 @@ function ItemsSection({
             <li
               key={row.id}
               className={cn(
-                "grid grid-cols-2 items-start gap-2 rounded-[10px] border border-[#e4e4e1] p-3 sm:items-center sm:rounded-none sm:border-0 sm:border-t sm:border-[#f0f0ee] sm:px-0 sm:py-1.5",
+                "grid grid-cols-2 items-start gap-2 rounded-[10px] border border-[#e4e4e1] p-3",
+                layout.line,
                 cols,
               )}
             >
-              <div className="col-span-2 sm:col-span-1">
+              <div className={cn("col-span-2", layout.name)}>
                 {admin ? (
                   <Controller
                     control={control}

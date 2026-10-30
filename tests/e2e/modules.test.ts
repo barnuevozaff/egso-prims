@@ -99,7 +99,7 @@ describe("Phase 4 screens in the browser, on Firebase", () => {
     }
   });
 
-  it("a Department User voids a booking from the list, with a reason, and the comment box shows who they are", async () => {
+  it("a Department User voids a booking from the list, with a reason, and its history shows who they are", async () => {
     const purpose = "Assembly to be voided (test data)";
     await bookPortalReservation(purpose);
     await session("void-reservation", async (page) => {
@@ -124,11 +124,15 @@ describe("Phase 4 screens in the browser, on Firebase", () => {
       await drawer.getByText(/Assembly moved to the covered court/).first().waitFor();
       // Closed for editing once voided.
       expect(await drawer.getByRole("button", { name: "Edit", exact: true }).count()).toBe(0);
-      await drawer.getByRole("tab", { name: /Comments/ }).click();
-      // Dante Cruz → "DC", not the old hard-coded "AD".
-      const composerAvatar = drawer.getByTitle("Dante Cruz");
-      await composerAvatar.waitFor();
-      expect(await composerAvatar.textContent()).toBe("DC");
+      // History has only Approval steps and Changes (30 Oct 2026).
+      expect(await drawer.getByRole("tab", { name: /Comments|Attachments|Timeline/ }).count()).toBe(0);
+      await drawer.locator("summary", { hasText: "History" }).click();
+      await drawer.getByRole("tab", { name: "Approval steps" }).waitFor();
+      expect(await drawer.getByRole("tab", { name: "Changes" }).count()).toBe(1);
+      // The void is a step under the clerk's own name: Dante Cruz → "DC", not a hard-coded "AD".
+      const voidedBy = drawer.getByTitle("Dante Cruz").first();
+      await voidedBy.waitFor();
+      expect(await voidedBy.textContent()).toBe("DC");
       await shot(page, "52-reservation-voided");
     });
   });

@@ -21,7 +21,6 @@ import {
   MetricCard,
   PageHeader,
   PageTransition,
-  PrintButton,
   SearchBar,
   StatusBadge,
   StatusTabs,
@@ -50,7 +49,7 @@ const isIssued = (r: RequestForIssuance) =>
   !!r.stockIssuedAt || r.status === "Released" || r.status === "Completed";
 import { BulkActionBar } from "@/features/shared/bulk-action-bar";
 import { VoidDialog } from "@/features/shared/void-dialog";
-import { RISDrawer } from "@/features/ris/components/ris-drawer";
+import { useRISPrint } from "@/features/ris/components/use-ris-print";
 
 const ALL = "__all";
 
@@ -95,9 +94,8 @@ export function RISListPage() {
   const [selectedRows, setSelectedRows] = React.useState<RequestForIssuance[]>([]);
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const { options: officeOptions } = useOfficeOptions();
-  const [activeId, setActiveId] = React.useState<string | null>(null);
+  const { print, sheet: printSheet } = useRISPrint();
 
 
   const refreshAll = () => {
@@ -225,15 +223,7 @@ export function RISListPage() {
           toolbar={
             <FilterBar
               className="shrink-0"
-              end={
-                <>
-                  <ExportButton
-                    onClick={() => downloadCsv(data, "all")}
-                    disabled={data.length === 0}
-                  />
-                  <PrintButton onClick={() => window.print()} />
-                </>
-              }
+              end={<ExportButton onClick={() => downloadCsv(data, "all")} disabled={data.length === 0} />}
             >
               <StatusTabs tabs={TABS.map((t) => ({ value: t.value, label: t.label, count: allRows.filter((r) => t.match(r.status)).length }))} value={tab} onChange={setTab} />
               <SearchBar
@@ -268,10 +258,8 @@ export function RISListPage() {
             onRowSelectionChange={setRowSelection}
             onSelectedRowsChange={setSelectedRows}
             getRowId={(r) => r.id}
-            onRowClick={(r) => {
-              setActiveId(r.id);
-              setDrawerOpen(true);
-            }}
+            // A slip opens on its own page, ready to edit while it can be (30 Oct 2026).
+            onRowClick={(r) => navigate(`/ris/${encodeURIComponent(r.id)}`)}
             emptyState={{
               icon: ClipboardList,
               title: "No issuance slips found",
@@ -283,13 +271,14 @@ export function RISListPage() {
         </TableCard>
       </div>
 
+      {/* Print, Void and Cancel, as on the purchase orders (30 Oct 2026); Print sends the selected slips' official forms. */}
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
-        onPrint={() => window.print()}
+        onPrint={() => print(selectedRows)}
         onVoid={can(user, "manage:ris") && voidable.length > 0 ? () => setConfirmVoid(true) : undefined}
         onClear={() => setRowSelection({})}
       />
+      {printSheet}
 
       <VoidDialog
         open={confirmVoid}
@@ -308,14 +297,6 @@ export function RISListPage() {
           setRowSelection({});
           refreshAll();
         }}
-      />
-
-      <RISDrawer
-        risId={activeId}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onChanged={refreshAll}
-        onEdit={(id) => navigate(`/ris/${id}/edit`)}
       />
     </PageTransition>
   );

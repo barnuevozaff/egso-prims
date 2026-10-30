@@ -15,6 +15,7 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { RecordsNav } from "@/features/records/room/records-nav";
 import { useAuth } from "@/features/auth/auth-context";
 import { can } from "@/features/auth/types";
 import { useAppraisals } from "@/features/records/inventory-hooks";
@@ -101,6 +102,7 @@ export function InventoryListPage() {
           ) : undefined
         }
       />
+      <RecordsNav />
 
       <TableCard
         toolbar={

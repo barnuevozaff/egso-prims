@@ -15,6 +15,7 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { RecordsNav } from "@/features/records/room/records-nav";
 import { useAuth } from "@/features/auth/auth-context";
 import { can } from "@/features/auth/types";
 import { useDisposalRequests } from "@/features/records/disposal-hooks";
@@ -106,6 +107,7 @@ export function DisposalListPage() {
           ) : undefined
         }
       />
+      <RecordsNav />
 
       <TableCard
         toolbar={

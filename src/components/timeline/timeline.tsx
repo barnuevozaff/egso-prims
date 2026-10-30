@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Clock3, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Clock3, Undo2, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/utilities/avatar";
@@ -80,7 +80,8 @@ export function HistoryTimeline({
 
 /* ---------------- Approval timeline ---------------- */
 
-export type ApprovalStepStatus = "approved" | "current" | "pending" | "rejected";
+/** "returned": sent back to draft for revision; the document stays open. */
+export type ApprovalStepStatus = "approved" | "current" | "pending" | "rejected" | "returned";
 
 export interface ApprovalTimelineStep {
   label: string;
@@ -99,6 +100,16 @@ const stepIcon: Record<ApprovalStepStatus, { icon: React.ComponentType<{ classNa
   current: { icon: Clock3, tone: "text-blue-600 bg-blue-50" },
   pending: { icon: Circle, tone: "text-neutral-400 bg-neutral-100" },
   rejected: { icon: XCircle, tone: "text-red-600 bg-red-50" },
+  returned: { icon: Undo2, tone: "text-amber-700 bg-amber-50" },
+};
+
+/** Each step's state in words, for screen readers. */
+const stepStateText: Record<ApprovalStepStatus, string> = {
+  approved: "done",
+  current: "current",
+  pending: "not yet",
+  rejected: "closed",
+  returned: "returned for revision",
 };
 
 /** Sequential approval chain with a connecting rail between steps. */
@@ -131,6 +142,7 @@ export function ApprovalTimeline({
                   )}
                 >
                   {step.label}
+                  <span className="sr-only">, {stepStateText[step.status]}</span>
                 </span>
                 {step.time && <span className="shrink-0 text-[10.5px] text-neutral-500">{step.time}</span>}
               </div>

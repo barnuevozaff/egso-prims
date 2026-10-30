@@ -26,6 +26,10 @@ export interface HistoryEntry {
     | "correction";
   text: string;
   at: string;
+  /** Who made the change, where the entry records it (Cloud Functions do). */
+  by?: string;
+  /** What was added, removed or changed, one line each (purchase orders since 30 Oct 2026). */
+  lines?: string[];
 }
 
 type Presentation = { icon: React.ComponentType<{ className?: string }>; tone: string };
@@ -45,11 +49,11 @@ const kindPresentation: Record<HistoryEntry["kind"], Presentation> = {
 const presentationOf = (kind: string): Presentation =>
   kindPresentation[kind as HistoryEntry["kind"]] ?? kindPresentation.update;
 
-/** Chronological audit feed shared across document modules. */
+/** Chronological change log shared across document modules, newest first. */
 export function HistoryFeed({ entries }: { entries: HistoryEntry[] }) {
   if (entries.length === 0) {
     return (
-      <EmptyState title="No history" description="Changes to this record will be logged here." />
+      <EmptyState title="No changes recorded" description="Changes to this record will be listed here." />
     );
   }
   const items = [...entries]
@@ -57,8 +61,22 @@ export function HistoryFeed({ entries }: { entries: HistoryEntry[] }) {
     .map((h) => ({
       icon: presentationOf(h.kind).icon,
       tone: presentationOf(h.kind).tone,
-      text: h.text,
-      time: format(new Date(h.at), "d MMM yyyy · h:mm a"),
+      text: h.lines?.length ? (
+        <>
+          {h.text}
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12px] text-[#4a4f59]">
+            {h.lines.map((line, i) => (
+              <li key={i} className="break-words">
+                {line}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        h.text
+      ),
+      // The name only where the text does not already say who.
+      time: `${format(new Date(h.at), "d MMM yyyy · h:mm a")}${h.by && !h.text.includes(h.by) ? ` · ${h.by}` : ""}`,
     }));
   return <ActivityTimeline items={items} />;
 }

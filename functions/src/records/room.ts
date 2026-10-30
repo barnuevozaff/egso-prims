@@ -233,7 +233,12 @@ export const createRecordShelf = onCall(async (request) => {
   return shelf;
 });
 
-/** Removes an empty shelf and its levels; refused while any box stands on it. */
+/**
+ * Removes a shelf that holds no records, with its levels and its empty
+ * (perhaps named) boxes. Refused while any record — a voided one included —
+ * is in a box on it: its records are moved to another shelf first
+ * (30 Oct 2026; before, any box at all refused it).
+ */
 export const deleteRecordShelf = onCall(async (request) => {
   const caller = await callerOf(request);
   requireRole(caller, ["Administrator"], "change the Records Room");
@@ -241,11 +246,17 @@ export const deleteRecordShelf = onCall(async (request) => {
   await db().runTransaction(async (tx) => {
     const shelf = await tx.get(db().collection("record_shelves").doc(id));
     if (!shelf.exists) throw new HttpsError("not-found", "That shelf no longer exists.");
-    const boxes = await tx.get(db().collection("record_box_positions").where("shelf_id", "==", id).limit(1));
-    if (!boxes.empty) {
-      throw new HttpsError("failed-precondition", "Boxes still stand on this shelf. Move them to another shelf first.");
+    const positions = await tx.get(db().collection("record_box_positions").where("shelf_id", "==", id));
+    const boxIds = positions.docs.map((p) => String(p.get("box_id")));
+    for (const boxId of boxIds) {
+      const held = await tx.get(db().collection("record_box_contents").where("box_id", "==", boxId).limit(1));
+      if (!held.empty) {
+        throw new HttpsError("failed-precondition", "Records are still filed on this shelf. Move them to another shelf first.");
+      }
     }
     const levels = await tx.get(db().collection("record_shelf_levels").where("shelf_id", "==", id));
+    positions.docs.forEach((p) => tx.delete(p.ref));
+    boxIds.forEach((boxId) => tx.delete(db().collection("record_boxes").doc(boxId)));
     levels.docs.forEach((l) => tx.delete(l.ref));
     tx.delete(shelf.ref);
   });

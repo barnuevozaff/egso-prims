@@ -296,7 +296,6 @@ export function InventoryListPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}
       />

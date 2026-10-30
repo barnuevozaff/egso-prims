@@ -27,17 +27,17 @@ export function PODrawer({
   poId,
   open,
   onOpenChange,
-  onChanged,
 }: {
   poId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Kept for callers written before 30 Oct 2026; nothing in the drawer changes the order. */
   onChanged?: () => void;
   /** Kept for callers written before 21 Oct 2026; editing is on the order's page. */
   onEdit?: (poId: string) => void;
 }) {
   const navigate = useNavigate();
-  const { data: po, loading, setData } = usePurchaseOrder(open ? poId : null);
+  const { data: po, loading } = usePurchaseOrder(open ? poId : null);
 
   return (
     <>
@@ -62,13 +62,7 @@ export function PODrawer({
               </div>
             </DrawerHeader>
             <DrawerBody>
-              <PODetailPanels
-                po={po}
-                onUpdated={(updated) => {
-                  setData(updated);
-                  onChanged?.();
-                }}
-              />
+              <PODetailPanels po={po} />
             </DrawerBody>
             <DrawerFooter>
               <DrawerActions>

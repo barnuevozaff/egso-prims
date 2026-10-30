@@ -1,6 +1,6 @@
 import * as React from "react";
 import { format } from "date-fns";
-import { FileDown, Globe, Monitor, Printer } from "lucide-react";
+import { Globe, Monitor, Printer } from "lucide-react";
 
 import {
   ApprovalTimeline,
@@ -23,18 +23,11 @@ import {
   toast,
   type ApprovalTimelineStep,
 } from "@/components";
-import {
-  addAuditComment,
-  getAuditEntry,
-  listRelatedEntries,
-  listSessionEntries,
-} from "@/features/audit/api";
+import { getAuditEntry, listRelatedEntries, listSessionEntries } from "@/features/audit/api";
 import type { AuditEntry } from "@/features/audit/types";
 import { departmentByCode } from "@/features/purchase-requests/types";
-import { CommentThread } from "@/features/shared/comment-thread";
 import { HistoryFeed, type HistoryEntry } from "@/features/shared/history-feed";
 import { reportLoadFailure } from "@/features/shared/load-guard";
-import { useAuth } from "@/features/auth/auth-context";
 
 const fmt = (iso: string) => format(new Date(iso), "d MMM yyyy · h:mm:ss a");
 
@@ -96,7 +89,6 @@ export function AuditDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { user } = useAuth();
   const [entry, setEntry] = React.useState<AuditEntry | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [related, setRelated] = React.useState<AuditEntry[]>([]);
@@ -243,17 +235,14 @@ export function AuditDrawer({
                 </div>
               </section>
 
-              {/* Tabs */}
+              {/* The record's activity and the session's; reviewer comments are not shown. */}
               <Tabs defaultValue="timeline">
-                <TabsList className="w-full justify-start bg-neutral-100">
-                  <TabsTrigger value="timeline" className="text-[12.5px]">
-                    Timeline
+                <TabsList className="bg-neutral-100 group-data-[orientation=horizontal]/tabs:h-auto">
+                  <TabsTrigger value="timeline" className="min-h-11 px-3.5 text-[12.5px]">
+                    Record timeline
                   </TabsTrigger>
-                  <TabsTrigger value="comments" className="text-[12.5px]">
-                    Comments ({entry.comments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="history" className="text-[12.5px]">
-                    Session History
+                  <TabsTrigger value="history" className="min-h-11 px-3.5 text-[12.5px]">
+                    Session history
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="timeline" className="pt-3">
@@ -270,20 +259,6 @@ export function AuditDrawer({
                     </p>
                   )}
                 </TabsContent>
-                <TabsContent value="comments" className="pt-3">
-                  <CommentThread
-                    comments={entry.comments}
-                    onSubmit={async (text) => {
-                      setEntry(
-                        await addAuditComment(entry.id, {
-                          author: user?.name ?? "Staff",
-                          office: user?.office ?? "General Services Office",
-                          text,
-                        }),
-                      );
-                    }}
-                  />
-                </TabsContent>
                 <TabsContent value="history" className="pt-3">
                   <Caption as="p" className="mb-3">
                     Activity within session {entry.sessionId}.
@@ -297,13 +272,6 @@ export function AuditDrawer({
             <DrawerActions>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 Close
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => toast.success(`Exporting ${entry.id} as PDF`)}
-              >
-                <FileDown />
-                Export
               </Button>
               <Button
                 variant="secondary"

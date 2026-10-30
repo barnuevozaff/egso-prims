@@ -23,6 +23,7 @@ export { voidReleasedRis } from "./documents/void-ris.js";
 export { approveRisRequest } from "./documents/approve-ris.js";
 export { saveRecordsDocument, voidRecordsDocument } from "./records/documents.js";
 export { createRecordShelf, deleteRecordShelf, moveRecordBox } from "./records/room.js";
+export { placeRecordDocument, renameRecordLocation } from "./records/placement.js";
 export { approvePurchaseRequest } from "./documents/approve-pr.js";
 export { voidPurchaseRequest } from "./documents/void-pr.js";
 export { deleteDemoPurchaseRequests } from "./documents/demo-cleanup.js";

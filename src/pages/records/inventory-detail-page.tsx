@@ -99,7 +99,7 @@ export function InventoryDetailPage() {
           <AppraisalSheet appraisal={appraisal} />
         </PaperSheet>
 
-        <FiledLocation type="RIA" sourceId={appraisal.id} />
+        <FiledLocation type="RIA" sourceId={appraisal.id} status={appraisal.status} />
       </PageTransition>
 
       <AppraisalPrintForm appraisal={appraisal} />

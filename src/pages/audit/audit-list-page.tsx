@@ -32,7 +32,6 @@ import {
   TableCard,
   toast,
 } from "@/components";
-import { exportAuditCsv } from "@/features/audit/api";
 import { useAuditEntries } from "@/features/audit/hooks";
 import {
   AUDIT_ACTIONS,
@@ -113,17 +112,6 @@ export function AuditListPage() {
   const openEntry = (id: string) => {
     setActiveId(id);
     setDrawerOpen(true);
-  };
-
-  const downloadCsv = (rows: AuditEntry[], suffix: string) => {
-    const blob = new Blob([exportAuditCsv(rows)], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `audit-trail-${suffix}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${rows.length} log entr${rows.length === 1 ? "y" : "ies"}`);
   };
 
   /** Columns shared by the Excel and print exports. */
@@ -435,7 +423,6 @@ export function AuditListPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => downloadCsv(selectedRows, "selection")}
         onPrint={() => exportPrintable(selectedRows)}
         onClear={() => setRowSelection({})}
       />

@@ -1,13 +1,17 @@
 /**
  * The Records Room: one room, its shelves, and the boxes on them.
  *
- * Every shelf has exactly five levels, A to E, and every level exactly three
- * box positions, so a shelf holds fifteen boxes (migration 048). A box holds one kind of Records
- * Management document for one year — "Records Disposition Schedule — 2026 —
- * Box 01" — and the documents inside it are the approved documents
- * themselves, referenced, not copied. Filing is done by the database when a
- * document is approved (migration 047); nothing here places a document by
- * hand.
+ * Since 30 Oct 2026 every shelf has five levels, A to E, and two box
+ * positions on each: ten boxes a shelf. An approved document is placed in a
+ * box by hand (placeRecordDocument); until then it waits among the Unplaced
+ * records. Shelves, levels and boxes carry names the office gives them, but
+ * are stored by IDs that never change, so renaming moves nothing.
+ *
+ * Before, a level had three positions and approval filed each document in a
+ * box for its kind and year ("Records Disposition Schedule — 2026 — Box 01").
+ * Those boxes and what is in them stay where they are; a box still standing
+ * in a third position shows until its records are moved, and nothing new is
+ * placed there.
  */
 
 /** The three kinds of document the room keeps, by the codes their numbers use. */
@@ -35,18 +39,23 @@ export const DOC_TYPES: Record<
 };
 
 export const LEVEL_LABELS = ["A", "B", "C", "D", "E"] as const;
+/** Every position a box has ever stood in: the third only on shelves from before 30 Oct 2026. */
 export const SLOTS = [1, 2, 3] as const;
 export type Slot = (typeof SLOTS)[number];
+/** Where a record is placed now: two boxes a level. */
+export const PLACE_SLOTS = [1, 2] as const;
 
-/** How many boxes one shelf holds: five levels of three positions. */
-export const POSITIONS_PER_SHELF = LEVEL_LABELS.length * SLOTS.length;
+/** How many boxes one shelf holds: five levels of two positions. */
+export const POSITIONS_PER_SHELF = LEVEL_LABELS.length * PLACE_SLOTS.length;
 
 /** One lettered floor of a shelf. */
 export interface ShelfLevel {
   id: string;
   shelfId: string;
-  /** A to E. */
+  /** A to E: the level's fixed coordinate. */
   label: string;
+  /** What the office calls it, e.g. "Administrative Records". */
+  name?: string;
   position: number;
 }
 
@@ -72,14 +81,23 @@ export interface ShelfInput {
 /** A physical box standing in one position on one level. */
 export interface RecordBox {
   id: string;
-  documentType: DocType;
-  year: number;
-  /** Box 01, Box 02 … within one kind and year. */
-  sequence: number;
+  /** Boxes filed by kind and year before 30 Oct 2026; a box made by placing has none. */
+  documentType?: DocType;
+  year?: number;
+  /** Box 01, Box 02 … within one kind and year (boxes from before only). */
+  sequence?: number;
   shelfLevelId: string;
   slot: Slot;
-  /** A correction to the generated name, when the physical label differs. */
+  /** The box's name, as the office labels it. */
   labelOverride?: string;
+}
+
+/** One move of a placed record, from one box to another. */
+export interface BoxMove {
+  fromBoxId: string;
+  toBoxId: string;
+  at: string;
+  by?: string;
 }
 
 /** One approved document in a box, with what identifies it on its own form. */
@@ -96,6 +114,10 @@ export interface BoxContent {
   /** yyyy-MM-dd: date prepared, or the request date. */
   date: string;
   filedAt: string;
+  /** Who placed it, when placed by hand. */
+  filedBy?: string;
+  /** Every move since, oldest first. */
+  moves: BoxMove[];
 }
 
 /** Where a box is, and the words for it. */
@@ -109,15 +131,26 @@ export interface BoxLocation {
   text: string;
 }
 
-/** "Records Disposition Schedule — 2026 — Box 01", unless corrected by hand. */
-export function boxName(box: RecordBox): string {
+/**
+ * A box's name: the office's own, or "Records Disposition Schedule — 2026 —
+ * Box 01" for a box filed by kind and year before, or "Box 1" by position.
+ */
+export function boxName(box: Pick<RecordBox, "labelOverride" | "documentType" | "year" | "sequence" | "slot">): string {
   if (box.labelOverride?.trim()) return box.labelOverride.trim();
-  return `${DOC_TYPES[box.documentType].name} — ${box.year} — Box ${String(box.sequence).padStart(2, "0")}`;
+  if (box.documentType && box.year && box.sequence) {
+    return `${DOC_TYPES[box.documentType].name} — ${box.year} — Box ${String(box.sequence).padStart(2, "0")}`;
+  }
+  return `Box ${box.slot}`;
 }
 
-/** "2026 · Box 01" — the second line of a box's label. */
+/** "2026 · Box 01" — the second line of a box from before; empty for a box made by placing. */
 export function boxYearLine(box: RecordBox): string {
-  return `${box.year} · Box ${String(box.sequence).padStart(2, "0")}`;
+  return box.year && box.sequence ? `${box.year} · Box ${String(box.sequence).padStart(2, "0")}` : "";
+}
+
+/** A level's name: the office's own, or "Level A". */
+export function levelTitle(level: Pick<ShelfLevel, "label" | "name">): string {
+  return level.name?.trim() || `Level ${level.label}`;
 }
 
 export function locationOf(
@@ -134,7 +167,7 @@ export function locationOf(
       levelId: level.id,
       levelLabel: level.label,
       slot: box.slot,
-      text: `${shelf.name} → Level ${level.label} → Box ${box.slot}`,
+      text: `${shelf.name} → ${levelTitle(level)} → Box ${box.slot}`,
     };
   }
   return null;
@@ -160,3 +193,9 @@ export function levelName(types: DocType[]): string {
   if (kinds.size > 1) return "Mixed Records";
   return LEVEL_NAMES[[...kinds][0]];
 }
+
+/** What can be renamed: a shelf, a level, or the box in one position. */
+export type RenameTarget =
+  | { kind: "shelf"; id: string }
+  | { kind: "level"; id: string }
+  | { kind: "box"; levelId: string; slot: number };

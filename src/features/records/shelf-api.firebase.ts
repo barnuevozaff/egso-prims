@@ -6,6 +6,7 @@ import type {
   RecordBox,
   ShelfInput,
   ShelfLevel,
+  RenameTarget,
   ShelfWithLevels,
   Slot,
 } from "@/features/records/shelf-types";
@@ -62,6 +63,15 @@ export async function listContents(): Promise<BoxContent[]> {
     agency: String(r.agency ?? ""),
     date: String(r.date ?? ""),
     filedAt: String(r.filed_at),
+    filedBy: r.filed_by ? String(r.filed_by) : undefined,
+    moves: Array.isArray(r.moves)
+      ? (r.moves as Record<string, unknown>[]).map((m) => ({
+          fromBoxId: String(m.from_box_id ?? ""),
+          toBoxId: String(m.to_box_id ?? ""),
+          at: String(m.at ?? ""),
+          by: m.by ? String(m.by) : undefined,
+        }))
+      : [],
   }));
 }
 
@@ -103,4 +113,20 @@ export async function relabelBox(boxId: string, label: string): Promise<void> {
     label_override: label.trim() || null,
     updated_at: nowIso(),
   }));
+}
+
+/* ---------------- placing and naming (30 Oct 2026) ---------------- */
+
+/**
+ * Places an approved document in the box at one position, or moves it there
+ * from another box. The function checks it is approved, makes the box on the
+ * position's first record, and keeps the move in the record's history.
+ */
+export async function placeDocument(type: DocType, sourceId: string, levelId: string, slot: number, by?: string): Promise<void> {
+  await callFunction("placeRecordDocument", { type, sourceId, levelId, slot, by });
+}
+
+/** Names a shelf, a level, or the box in one position; an empty name gives a level or box back its plain name. */
+export async function renameLocation(target: RenameTarget, name: string): Promise<void> {
+  await callFunction("renameRecordLocation", { ...target, name: name.trim() });
 }

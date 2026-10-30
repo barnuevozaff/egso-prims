@@ -2,65 +2,41 @@ import { format } from "date-fns";
 
 import type { ApprovalTimelineStep } from "@/components";
 import type { POStatus, PurchaseOrder } from "@/features/purchase-orders/types";
+import { workflowSteps } from "@/features/shared/workflow-steps";
 
 export const formatDateTime = (iso: string) => format(new Date(iso), "d MMM yyyy · h:mm a");
 export const formatDate = (iso: string) => format(new Date(iso), "d MMM yyyy");
 
 /**
- * The ordinary chain since 21 Oct 2026 ends at Approved. An order released
- * under the old workflow shows its Released and Completed steps as well.
+ * An order authorized with its request (21 Oct 2026) is created already
+ * approved: it has no submission of its own. Orders of the earlier workflow
+ * were submitted for approval, and one released shows its Released and
+ * Completed steps as well.
  */
+const AUTHORIZED_CHAIN = ["Created", "Approved"] as const;
 const WORKFLOW_CHAIN = ["Created", "Pending Approval", "Approved"] as const;
 const LEGACY_CHAIN = [...WORKFLOW_CHAIN, "Released", "Completed"] as const;
 
-/** Index of the current step in the chain per status. */
-const STATUS_PROGRESS: Record<POStatus, number> = {
-  Draft: 1,
-  "Pending Approval": 1,
-  Approved: 3,
-  Released: 4,
-  Completed: 5,
-  Cancelled: -1,
+/** The last chain step each open status has passed. */
+const REACHED: Record<POStatus, string> = {
+  Draft: "Created",
+  "Pending Approval": "Pending Approval",
+  Approved: "Approved",
+  Released: "Released",
+  Completed: "Completed",
+  Cancelled: "",
 };
 
-/** Approval timeline from workflow position + recorded approvals. */
+/** The order's approval steps as recorded, then the steps still ahead (shared/workflow-steps). */
 export function buildPOTimeline(po: PurchaseOrder): ApprovalTimelineStep[] {
-  // The latest record of each step: an order returned and resubmitted has more than one.
-  const record = (step: string) => [...po.approvals].reverse().find((a) => a.step === step);
-  const legacy = po.status === "Released" || po.status === "Completed" || !!record("Released");
-  const chain: readonly string[] = legacy ? LEGACY_CHAIN : WORKFLOW_CHAIN;
-
-  if (po.status === "Cancelled") {
-    const steps: ApprovalTimelineStep[] = [];
-    for (const name of chain) {
-      const rec = record(name);
-      if (!rec) break;
-      steps.push(toStep(name, "approved", rec));
-    }
-    steps.push(toStep("Cancelled", "rejected", record("Cancelled") ?? { step: "Cancelled" }));
-    return steps;
-  }
-
-  const progress = STATUS_PROGRESS[po.status];
-  return chain.map((name, i) => {
-    const state: ApprovalTimelineStep["status"] =
-      i < progress ? "approved" : i === progress ? "current" : "pending";
-    return toStep(name, state, record(name));
+  const legacy =
+    po.status === "Released" || po.status === "Completed" || po.approvals.some((a) => a.step === "Released");
+  return workflowSteps(po.approvals, {
+    chain: po.authorization === "pr-approval" ? AUTHORIZED_CHAIN : legacy ? LEGACY_CHAIN : WORKFLOW_CHAIN,
+    reached: REACHED[po.status] ?? "",
+    closed: po.status === "Cancelled",
+    labels: { "Pending Approval": "Submitted" },
   });
-}
-
-function toStep(
-  label: string,
-  status: ApprovalTimelineStep["status"],
-  rec?: { by?: string; office?: string; at?: string; remarks?: string },
-): ApprovalTimelineStep {
-  return {
-    label,
-    status,
-    time: rec?.at ? formatDateTime(rec.at) : undefined,
-    person: rec?.by ? { name: rec.by, office: rec.office } : undefined,
-    remarks: rec?.remarks,
-  };
 }
 
 /** Next workflow stage the Approve action advances to, if any. */

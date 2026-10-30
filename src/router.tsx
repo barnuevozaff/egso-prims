@@ -6,6 +6,7 @@ import { PermissionRoute, ProtectedRoute } from "@/features/auth/components/guar
 import { RouteError } from "@/components/feedback/route-error";
 import { lazyPage } from "@/lib/lazy-page";
 import { portalRoutes } from "@/portal-routes";
+import { ShelvesRedirect } from "@/pages/records/shelves-redirect";
 
 /**
  * Routes are code-split.
@@ -33,18 +34,14 @@ const PRCreatePage = lazyPage(
   () => import("@/pages/purchase-requests/pr-create-page"),
   "PRCreatePage",
 );
-const PRDetailPage = lazyPage(
-  () => import("@/pages/purchase-requests/pr-detail-page"),
-  "PRDetailPage",
-);
-const PREditPage = lazyPage(() => import("@/pages/purchase-requests/pr-edit-page"), "PREditPage");
+const PRPage = lazyPage(() => import("@/pages/purchase-requests/pr-page"), "PRPage");
 const POListPage = lazyPage(() => import("@/pages/purchase-orders/po-list-page"), "POListPage");
 // One page per order (21 Oct 2026): orders are created when their request is
 // approved, so there is no "new order" form; details are completed here.
 const POPage = lazyPage(() => import("@/pages/purchase-orders/po-page"), "POPage");
 const RISListPage = lazyPage(() => import("@/pages/ris/ris-list-page"), "RISListPage");
 const RISCreatePage = lazyPage(() => import("@/pages/ris/ris-create-page"), "RISCreatePage");
-const RISEditPage = lazyPage(() => import("@/pages/ris/ris-edit-page"), "RISEditPage");
+const RISPage = lazyPage(() => import("@/pages/ris/ris-page"), "RISPage");
 const InventoryListPage = lazyPage(
   () => import("@/pages/inventory/inventory-list-page"),
   "InventoryListPage",
@@ -66,7 +63,7 @@ const ResCreatePage = lazyPage(
   () => import("@/pages/reservations/res-create-page"),
   "ResCreatePage",
 );
-const ResEditPage = lazyPage(() => import("@/pages/reservations/res-edit-page"), "ResEditPage");
+const ResPage = lazyPage(() => import("@/pages/reservations/res-page"), "ResPage");
 const ViolationListPage = lazyPage(
   () => import("@/pages/violations/violation-list-page"),
   "ViolationListPage",
@@ -148,7 +145,7 @@ const DisposalEditPage = lazyPage(
   () => import("@/pages/records/disposal-edit-page"),
   "DisposalEditPage",
 );
-const ShelfMapPage = lazyPage(() => import("@/pages/records/shelf-map-page"), "ShelfMapPage");
+const RecordsRoomPage = lazyPage(() => import("@/pages/records/records-room-page"), "RecordsRoomPage");
 
 export const router = createBrowserRouter([
   { path: "login", element: <LoginPage />, errorElement: <RouteError /> },
@@ -169,22 +166,27 @@ export const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: "purchase-requests", element: <PRListPage /> },
           { path: "purchase-requests/new", element: <PermissionRoute permission="manage:purchase-requests"><PRCreatePage /></PermissionRoute> },
-          { path: "purchase-requests/:id", element: <PRDetailPage /> },
-          { path: "purchase-requests/:id/edit", element: <PermissionRoute permission="manage:purchase-requests"><PREditPage /></PermissionRoute> },
+          // A request opens on its own page, ready to edit while it can be (30 Oct 2026).
+          { path: "purchase-requests/:id", element: <PRPage /> },
+          { path: "purchase-requests/:id/edit", element: <PRPage /> },
           { path: "purchase-orders", element: <POListPage /> },
           { path: "purchase-orders/new", element: <Navigate to="/purchase-orders" replace /> },
           { path: "purchase-orders/:id", element: <POPage /> },
           { path: "purchase-orders/:id/edit", element: <POPage /> },
           { path: "ris", element: <RISListPage /> },
           { path: "ris/new", element: <PermissionRoute permission="manage:ris"><RISCreatePage /></PermissionRoute> },
-          { path: "ris/:id/edit", element: <PermissionRoute permission="manage:ris"><RISEditPage /></PermissionRoute> },
+          // A slip opens on its own page, ready to edit while it can be (30 Oct 2026).
+          { path: "ris/:id", element: <RISPage /> },
+          { path: "ris/:id/edit", element: <RISPage /> },
           { path: "inventory", element: <InventoryListPage /> },
           { path: "inventory/new", element: <PermissionRoute permission="manage:inventory"><InventoryCreatePage /></PermissionRoute> },
           { path: "inventory/import", element: <PermissionRoute permission="manage:inventory"><InventoryImportPage /></PermissionRoute> },
           { path: "inventory/:id/edit", element: <PermissionRoute permission="manage:inventory"><InventoryEditPage /></PermissionRoute> },
           { path: "reservations", element: <ResListPage /> },
           { path: "reservations/new", element: <PermissionRoute permission="manage:reservations"><ResCreatePage /></PermissionRoute> },
-          { path: "reservations/:id/edit", element: <PermissionRoute permission="manage:reservations"><ResEditPage /></PermissionRoute> },
+          // A reservation opens on its own page, ready to edit while it can be (30 Oct 2026).
+          { path: "reservations/:id", element: <ResPage /> },
+          { path: "reservations/:id/edit", element: <ResPage /> },
           { path: "violations", element: <ViolationListPage /> },
           { path: "energy", element: <EnergyDashboardPage /> },
           { path: "energy/summary", element: <EnergySummaryPage /> },
@@ -194,11 +196,13 @@ export const router = createBrowserRouter([
           { path: "water/summary", element: <WaterSummaryPage /> },
           { path: "fuel", element: <FuelDashboardPage /> },
           { path: "fuel/summary", element: <FuelSummaryPage /> },
-          { path: "records", element: <RecordsListPage /> },
+          // One Records Room for the three forms (30 Oct 2026); each register is a view of it.
+          { path: "records", element: <RecordsRoomPage /> },
+          { path: "records/schedules", element: <RecordsListPage /> },
           { path: "records/new", element: <PermissionRoute permission="manage:records"><RecordsCreatePage /></PermissionRoute> },
           // Declared before "records/:id" so the static segment is unmistakable:
           // an inventory route must never be read as a schedule id.
-          { path: "records/shelves", element: <ShelfMapPage /> },
+          { path: "records/shelves", element: <ShelvesRedirect /> },
           { path: "records/inventory", element: <RecordsInventoryListPage /> },
           { path: "records/inventory/new", element: <PermissionRoute permission="manage:records"><RecordsInventoryCreatePage /></PermissionRoute> },
           { path: "records/inventory/:id", element: <RecordsInventoryDetailPage /> },

@@ -45,7 +45,6 @@ import {
 } from "@/features/purchase-requests/types";
 import { useOfficeOptions } from "@/features/offices/use-offices";
 import { PRBulkBar } from "@/features/purchase-requests/components/pr-bulk-bar";
-import { PRDrawer } from "@/features/purchase-requests/components/pr-drawer";
 import { usePRPrint } from "@/features/purchase-requests/components/use-pr-print";
 import { DEMO_CLEANUP, deleteDemoPurchaseRequests } from "@/features/purchase-requests/demo-cleanup";
 
@@ -97,14 +96,10 @@ export function PRListPage() {
   const [deleteConfirmed, setDeleteConfirmed] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
 
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const { options: officeOptions } = useOfficeOptions();
-  const [activeId, setActiveId] = React.useState<string | null>(null);
 
-  const openDrawer = (pr: PurchaseRequest) => {
-    setActiveId(pr.id);
-    setDrawerOpen(true);
-  };
+  // A request opens on its own page, ready to edit while it can be (30 Oct 2026).
+  const openRequest = (pr: PurchaseRequest) => navigate(`/purchase-requests/${encodeURIComponent(pr.id)}`);
 
   // Prints the official Purchase Request documents, never this screen.
   const { print, sheet } = usePRPrint();
@@ -327,7 +322,7 @@ export function PRListPage() {
             onRowSelectionChange={setRowSelection}
             onSelectedRowsChange={setSelectedRows}
             getRowId={(pr) => pr.id}
-            onRowClick={openDrawer}
+            onRowClick={openRequest}
             emptyState={{
               icon: FileText,
               title: "No purchase requests found",
@@ -418,13 +413,6 @@ export function PRListPage() {
         </DeleteModal>
       )}
 
-      <PRDrawer
-        prId={activeId}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        onChanged={() => void refresh()}
-        onEdit={(id) => navigate(`/purchase-requests/${id}/edit`)}
-      />
     </PageTransition>
   );
 }

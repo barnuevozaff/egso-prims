@@ -6,7 +6,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { allocateDocumentNumber, manilaYear, readNumberingSettings } from "../numbering.js";
 import { callerOf, requireRole } from "../documents/caller.js";
 import { isoDate, list, record, requiredText, text } from "../documents/validate.js";
-import { fileDocument, readForFiling, unfileDocument, type DocType, type FilingReads } from "./room.js";
+import { contentId, type DocType } from "./room.js";
 
 /**
  * The three National Archives forms of Records Management — Records
@@ -19,8 +19,11 @@ import { fileDocument, readForFiling, unfileDocument, type DocType, type FilingR
  *     never saved without them (the browser used to delete a header whose
  *     lines failed);
  *   - the number is spent only on a form that is saved;
- *   - becoming Approved files the form in the current box for its kind and
- *     year, and leaving Approved takes it out (record_file_on_approval, 047).
+ *   - a form placed in the Records Room keeps its box line in step with its
+ *     number, agency and date, and leaving Approved takes it out of its box.
+ *     Since 30 Oct 2026 approving no longer files it: an approved form waits
+ *     among the Unplaced records until it is placed in a box by hand
+ *     (placeRecordDocument, records/placement.ts).
  *
  * Lines are renumbered 1, 2, 3 … on every save, as before: a form that
  * printed 1, 2, 4 would read as a missing item. A schedule's record series
@@ -173,8 +176,6 @@ const numberClaim = (spec: Spec, number: string) =>
 
 const isDocType = (t: unknown): t is DocType => t === "RDS" || t === "RIA" || t === "RAD";
 
-/** The year a form is filed under: the year of its own date, as 047 took it. */
-const yearOf = (iso: string) => Number(iso.slice(0, 4));
 
 export const saveRecordsDocument = onCall(async (request) => {
   const caller = await callerOf(request);
@@ -212,9 +213,9 @@ export const saveRecordsDocument = onCall(async (request) => {
       const wasApproved = current?.get("status") === "Approved";
       const approved = header.status === "Approved";
       const docDate = String(header[spec.dateField]);
-      const year = yearOf(docDate);
-      const filing: FilingReads | null =
-        approved || wasApproved ? await readForFiling(tx, type, id, year) : null;
+      // Where the form is placed, if it is: only an approved form stands in a box.
+      const placed =
+        approved || wasApproved ? await tx.get(db.collection("record_box_contents").doc(contentId(type, id))) : null;
 
       // Last read: the number (its counter, and whether it is already held).
       const number = existingId
@@ -266,17 +267,20 @@ export const saveRecordsDocument = onCall(async (request) => {
       });
       oldLines.filter((d) => !written.has(d.id)).forEach((d) => tx.delete(d.ref));
 
-      if (approved && filing) {
-        fileDocument(
-          tx,
-          { type, sourceId: id, documentNo: number, agency: String(header[spec.agencyField] ?? ""), date: docDate },
-          year,
-          filing,
-          uid,
-          at,
-        );
-      } else if (wasApproved && filing) {
-        unfileDocument(tx, filing);
+      if (placed?.exists) {
+        if (approved) {
+          // Its box line says what the form says.
+          tx.update(placed.ref, {
+            document_no: number,
+            agency: String(header[spec.agencyField] ?? ""),
+            date: docDate,
+            updated_at: at,
+            updated_by_uid: uid,
+          });
+        } else {
+          // No longer approved: out of its box, and back among the forms to approve.
+          tx.delete(placed.ref);
+        }
       }
       return { ...row, lines: lines.length };
     },

@@ -1,7 +1,6 @@
-import { AlertTriangle, CheckCircle2, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { ApprovalTimeline, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components";
 import { buildApprovalTimeline, formatDate } from "@/features/purchase-requests/lib";
 import {
   departmentByCode,
@@ -10,7 +9,7 @@ import {
   type PurchaseRequest,
 } from "@/features/purchase-requests/types";
 import { useCurrentSignatories } from "@/features/purchase-requests/components/use-current-signatories";
-import { HistoryFeed } from "@/features/shared/history-feed";
+import { ClosedNotice, RecordHistory } from "@/features/shared/record-history";
 import { formatPHP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -116,18 +115,7 @@ export function PRDetailPanels({ pr }: { pr: PurchaseRequest }) {
         {pr.fpp && <Fact label="FPP">{pr.fpp}</Fact>}
       </dl>
 
-      {/* A closed request says why, without opening the history. */}
-      {(pr.status === "Cancelled" || pr.status === "Rejected") && (() => {
-        const step = [...pr.approvals].reverse().find((a) => a.step === pr.status);
-        return (
-          <p role="status" className="rounded-[12px] border border-[#ececea] bg-[#fafaf9] px-4 py-3 text-[13.5px] text-neutral-900">
-            {pr.status === "Cancelled" ? "Voided" : "Rejected"}
-            {step?.at ? ` on ${formatDate(step.at)}` : ""}
-            {step?.by ? ` by ${step.by}` : ""}
-            {step?.remarks ? <>: <span className="text-[#4a4f59]">{step.remarks}</span></> : "."}
-          </p>
-        );
-      })()}
+      <ClosedNotice status={pr.status} approvals={pr.approvals} />
 
       {pr.status === "Submitted" && !checking && (
         <div
@@ -203,34 +191,7 @@ export function PRDetailPanels({ pr }: { pr: PurchaseRequest }) {
       )}
 
       {/* Kept for accountability, folded away from the review. */}
-      <details className="group rounded-[12px] border border-[#ececea]">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-[13.5px] font-medium text-neutral-900 marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#a6323b]">
-          <ChevronRight aria-hidden="true" className="h-4 w-4 text-[#7c818b] transition-transform group-open:rotate-90" />
-          History
-          <span className="font-normal text-[#5b606b]">
-            · {pr.history.length} {pr.history.length === 1 ? "entry" : "entries"}
-            {pr.updatedAt ? ` · last ${formatDate(pr.updatedAt)}` : ""}
-          </span>
-        </summary>
-        <div className="border-t border-[#f0f0ee] px-4 pb-4 pt-3">
-          <Tabs defaultValue="changes">
-            <TabsList className="bg-neutral-100">
-              <TabsTrigger value="changes" className="text-[12.5px]">
-                Changes
-              </TabsTrigger>
-              <TabsTrigger value="steps" className="text-[12.5px]">
-                Approval steps
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="changes" className="pt-3">
-              <HistoryFeed entries={pr.history} />
-            </TabsContent>
-            <TabsContent value="steps" className="pt-3">
-              <ApprovalTimeline steps={buildApprovalTimeline(pr)} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </details>
+      <RecordHistory steps={buildApprovalTimeline(pr)} changes={pr.history} updatedAt={pr.updatedAt} />
     </div>
   );
 }

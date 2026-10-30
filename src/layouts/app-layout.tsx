@@ -5,17 +5,15 @@ import {
   BarChart3,
   Building2,
   CalendarDays,
-  ClipboardCheck,
   ClipboardList,
   Droplets,
-  FileCheck2,
   FileText,
   Fuel,
   History,
   LayoutDashboard,
   LogOut,
   Package,
-  ScrollText,
+  Archive,
   Settings,
   ShieldAlert,
   ShoppingCart,
@@ -120,13 +118,9 @@ const utilitiesChildren: ModuleNavItem[] = [
   { icon: Droplets, label: "Water", to: "/water" },
   { icon: Fuel, label: "Fuel", to: "/fuel" },
 ];
-// The two National Archives forms the office files. Each is named for what it
-// is rather than standing in for the whole module.
-const recordsChildren: ModuleNavItem[] = [
-  { icon: ScrollText, label: "Disposition schedule", to: "/records" },
-  { icon: ClipboardCheck, label: "Inventory and appraisal", to: "/records/inventory" },
-  { icon: FileCheck2, label: "Authority to dispose", to: "/records/disposal" },
-];
+// One entry for Records Management (30 Oct 2026): the Records Room, which
+// holds the three National Archives forms and leads to each register.
+const recordsChildren: ModuleNavItem[] = [{ icon: Archive, label: "Records", to: "/records" }];
 
 /* ---- Rail width (icon-only or full), persisted on this computer ---- */
 
@@ -325,7 +319,9 @@ function useBreadcrumbs(): BreadcrumbItem[] {
       label: "Authority to Dispose of Records",
       newLabel: "New Request",
     },
-    { prefix: "/records", label: "Records Disposition Schedule", newLabel: "New Schedule" },
+    { prefix: "/records/schedules", label: "Records Disposition Schedule", newLabel: "New Schedule" },
+    // The Records Room; a schedule's own pages sit under it (/records/:id).
+    { prefix: "/records", label: "Records", newLabel: "New Schedule" },
     { prefix: "/reports", label: "Reports & Analytics", newLabel: "" },
     { prefix: "/audit", label: "Audit Trail", newLabel: "" },
     { prefix: "/settings", label: "Settings", newLabel: "" },

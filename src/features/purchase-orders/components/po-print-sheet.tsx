@@ -1,4 +1,14 @@
-import { amountInWords, PrintSheet, printAmount, printDate } from "@/features/shared/procurement-print-form";
+import * as React from "react";
+import { createPortal } from "react-dom";
+
+import {
+  amountInWords,
+  MunicipalLetterhead,
+  PrintSheet,
+  printAmount,
+  printDate,
+} from "@/features/shared/procurement-print-form";
+import { fitBlankLines } from "@/features/shared/print-fit";
 import {
   supplierById,
   poTotal,
@@ -13,8 +23,9 @@ import {
 /**
  * The official Municipality of Alaminos Purchase Order (21 Oct 2026), laid
  * out after the office's workbook "P.O AND ACCEPTANCE (3).xlsx", sheet
- * PURCHASE ORDER: Times New Roman; the title, "Municipality of Alaminos,
- * Laguna" underlined and "LGU"; the boxed supplier and order block (Supplier,
+ * PURCHASE ORDER: Times New Roman; the title (under the shared municipal
+ * letterhead since 30 Oct 2026, which replaces the workbook's "Municipality
+ * of Alaminos, Laguna" / "LGU" lines); the boxed supplier and order block (Supplier,
  * Address, TIN, Contact Number | P.O. No., Date, Mode of Procurement, PR
  * No./s); "Gentlemen:"; delivery and payment terms; the six-column table
  * (Stock/Property No., Unit, Description, Quantity, Unit Cost, Amount) ruled
@@ -25,7 +36,8 @@ import {
  * Column widths follow the workbook's (9.1, 10, 42.4, 10.3, 11.4, 18.1).
  * The template has no item-number column, so none is added; lines print in
  * the order's order. Long orders run onto further sheets with the column heads
- * repeated, and the total, clauses and signatures follow the last line.
+ * repeated; blank ruled lines then fill the last sheet so the total, clauses
+ * and signatures sit at its foot (30 Oct 2026, FittedPODocument).
  *
  * Provisional: the A4 page (the workbook sets no paper size).
  *
@@ -42,21 +54,19 @@ const COLS = ["9%", "9.9%", "41.8%", "10.1%", "11.3%", "17.9%"];
 const qty = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 2 });
 
 /**
- * "Label :" with its value, or a ruled line to the edge of the cell for
- * handwriting. The line takes the room that is left rather than a fixed
- * width, and a long value wraps, so nothing runs past the paper's edge.
+ * "Label :" and its writing line to the edge of the cell (30 Oct 2026): the
+ * value is printed on the line, and a blank keeps the line for handwriting.
+ * The line takes the room that is left rather than a fixed width, and a long
+ * value wraps, so nothing runs past the paper's edge.
  */
 function Labelled({ label, value, small }: { label: string; value?: string; small?: boolean }) {
-  const text = value?.trim();
   return (
-    // Baseline: the label sits on the first line of a long value, and a blank line sits on the text's baseline.
+    // Baseline: the label sits on the first line of a long value.
     <div className="flex min-w-0 items-baseline gap-1 font-bold">
       <span className={small ? "shrink-0 text-[10.5px]" : "shrink-0"}>{label}</span>
-      {text ? (
-        <span className={small ? "min-w-0 break-words text-[12.5px]" : "min-w-0 break-words"}>{text}</span>
-      ) : (
-        <span aria-hidden="true" className="h-[1em] min-w-[48px] flex-1 border-b border-black" />
-      )}
+      <span className={small ? "min-w-[48px] flex-1 break-words border-b border-black text-[12.5px]" : "min-w-[48px] flex-1 break-words border-b border-black"}>
+        {value?.trim() || " "}
+      </span>
     </div>
   );
 }
@@ -99,9 +109,18 @@ function orderDate(po: PurchaseOrder): string | undefined {
   return undefined;
 }
 
-export function PODocument({ po, current }: { po: PurchaseOrder; current: CurrentPOSignatories }) {
+export function PODocument({
+  po,
+  current,
+  blankLines,
+}: {
+  po: PurchaseOrder;
+  current: CurrentPOSignatories;
+  /** Blank ruled lines after the items; by default the template's seventeen-line minimum. */
+  blankLines?: number;
+}) {
   const total = poTotal(po);
-  const blanks = Math.max(0, MIN_LINES - po.items.length);
+  const blanks = blankLines ?? Math.max(0, MIN_LINES - po.items.length);
   const signers = signatoriesOf(po, current);
   const date = orderDate(po);
   const voided = po.status === "Cancelled";
@@ -109,10 +128,11 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
 
   return (
     <div className="w-full max-w-full font-['Times_New_Roman',Times,serif] text-[12.5px] leading-[1.22] text-black [overflow-wrap:break-word]">
-      <div className="text-center">
+      {/* The municipal letterhead shared with the PR and the RIS names the LGU, so the
+          workbook's "Municipality of Alaminos, Laguna" / "LGU" lines are not repeated (30 Oct 2026). */}
+      <MunicipalLetterhead />
+      <div className="mt-1.5 text-center">
         <div className="text-[16px] font-bold">PURCHASE ORDER</div>
-        <div className="text-[20px] leading-[1.2] underline underline-offset-[3px]">Municipality of Alaminos, Laguna</div>
-        <div className="text-[13px] font-bold">LGU</div>
         {voided && <div className="mt-0.5 text-[14px] font-bold tracking-[0.08em]">VOIDED</div>}
       </div>
 
@@ -195,7 +215,7 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
             <col key={i} style={{ width: w }} />
           ))}
         </colgroup>
-        <thead>
+        <thead data-fit="head">
           <tr>
             {["Stock/ Property No.", "Unit", "Description", "Quantity", "Unit Cost", "Amount"].map((h) => (
               <th key={h} className={`${cell} py-1 text-center align-middle font-bold leading-[1.15]`}>
@@ -206,7 +226,7 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
         </thead>
         <tbody>
           {po.items.map((it, i) => (
-            <tr key={it.id || i} className="break-inside-avoid">
+            <tr key={it.id || i} data-fit="line" className="break-inside-avoid">
               <td className={`${cell} text-center`}>{it.stockNo ?? ""}</td>
               <td className={`${cell} text-center`}>{it.unit}</td>
               <td className={`${cell} break-words`}>{it.description}</td>
@@ -216,7 +236,7 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
             </tr>
           ))}
           {Array.from({ length: blanks }).map((_, i) => (
-            <tr key={`b-${i}`}>
+            <tr key={`b-${i}`} data-fit="blank">
               {COLS.map((__, c) => (
                 <td key={c} className={cell}>
                   &nbsp;
@@ -224,7 +244,7 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
               ))}
             </tr>
           ))}
-          <tr className="break-inside-avoid">
+          <tr data-fit="total" className="break-inside-avoid">
             <td colSpan={2} className={`${cell} align-middle text-[9.5px] font-bold`}>
               (Total Amount in Words)
             </td>
@@ -237,7 +257,7 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
       </table>
 
       {/* Clauses, signatures and the reference line stay together after the last line. */}
-      <div className="break-inside-avoid">
+      <div data-fit="end" className="break-inside-avoid">
         <div className="border-b border-l border-r border-black px-2 pb-2">
           <p className="pt-2 indent-10 text-justify">
             In case of failure to make the full delivery within the time specified above, a penalty of one-tenth (1/10)
@@ -321,12 +341,69 @@ export function PODocument({ po, current }: { po: PurchaseOrder; current: Curren
   );
 }
 
+/**
+ * The order with its blank lines fitted to the sheets (30 Oct 2026; see
+ * shared/print-fit). An invisible copy at the printed width (A4 less the 14mm
+ * margins) is measured, so long descriptions that wrap are counted as they
+ * will print. The copy sits outside the print sheet and never prints.
+ */
+function FittedPODocument({ po, current }: { po: PurchaseOrder; current: CurrentPOSignatories }) {
+  const min = Math.max(0, MIN_LINES - po.items.length);
+  const [blankLines, setBlankLines] = React.useState(min);
+  const [probe, setProbe] = React.useState<HTMLDivElement | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (!probe) return;
+    const all = (k: string) => Array.from(probe.querySelectorAll<HTMLElement>(`[data-fit="${k}"]`));
+    const height = (el?: HTMLElement) => el?.getBoundingClientRect().height ?? 0;
+    const measure = () => {
+      const firstRow = all("line")[0] ?? all("blank")[0];
+      setBlankLines(
+        fitBlankLines(
+          {
+            first: firstRow ? firstRow.getBoundingClientRect().top - probe.getBoundingClientRect().top : 0,
+            head: height(all("head")[0]),
+            lines: all("line").map((el) => height(el)),
+            blank: height(all("blank")[0]),
+            end: height(all("total")[0]) + height(all("end")[0]),
+          },
+          min,
+        ),
+      );
+    };
+    measure();
+    // A web font can arrive after the first layout; measure again once it has.
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+    };
+  }, [probe, po, current, min]);
+
+  return (
+    <>
+      <PODocument po={po} current={current} blankLines={blankLines} />
+      {createPortal(
+        <div
+          ref={setProbe}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute left-[-10000px] top-0 bg-white"
+          style={{ width: "182mm" }}
+        >
+          <PODocument po={po} current={current} blankLines={1} />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 /** One printed Purchase Order. */
 export function POPrintSheet({ po }: { po: PurchaseOrder }) {
   const current = useCurrentPOSignatories();
   return (
     <PrintSheet>
-      <PODocument po={po} current={current} />
+      <FittedPODocument po={po} current={current} />
     </PrintSheet>
   );
 }
@@ -341,7 +418,7 @@ export function POPrintSheets({ pos, current }: { pos: PurchaseOrder[]; current:
           data-po-document={po.poNumber}
           style={i > 0 ? { breakBefore: "page", pageBreakBefore: "always" } : undefined}
         >
-          <PODocument po={po} current={current} />
+          <FittedPODocument po={po} current={current} />
         </div>
       ))}
     </PrintSheet>

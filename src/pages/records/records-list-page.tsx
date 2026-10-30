@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, Layers, Plus } from "lucide-react";
+import { Archive, Plus } from "lucide-react";
 
 import {
   Button,
@@ -15,6 +15,7 @@ import {
   TableCard,
   type DocumentStatus,
 } from "@/components";
+import { RecordsNav } from "@/features/records/room/records-nav";
 import { useAuth } from "@/features/auth/auth-context";
 import { can } from "@/features/auth/types";
 import { useSchedules } from "@/features/records/hooks";
@@ -86,16 +87,10 @@ export function RecordsListPage() {
   return (
     <PageTransition className="space-y-6">
       <PageHeader
-        title="Records Management"
+        title="Records Disposition Schedules"
         description="Records disposition schedules filed with the National Archives of the Philippines."
         actions={
           <div className="flex items-center gap-2">
-            {/* A schedule says how long a series is kept; the room says where
-                it is. The two belong to each other, so each opens the other. */}
-            <Button variant="outline" onClick={() => navigate("/records/shelves")}>
-              <Layers className="mr-2 h-4 w-4" />
-              Records Room
-            </Button>
             {can(user, "manage:records") && (
               <Button onClick={() => navigate("/records/new")}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -105,6 +100,7 @@ export function RecordsListPage() {
           </div>
         }
       />
+      <RecordsNav />
 
       <TableCard
         toolbar={

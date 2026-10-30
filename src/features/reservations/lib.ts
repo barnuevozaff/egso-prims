@@ -2,55 +2,33 @@ import { format } from "date-fns";
 
 import type { ApprovalTimelineStep } from "@/components";
 import type { Reservation, ReservationStatus } from "@/features/reservations/types";
+import { workflowSteps } from "@/features/shared/workflow-steps";
 
 export const formatDateTime = (iso: string) => format(new Date(iso), "d MMM yyyy · h:mm a");
 export const formatDate = (iso: string) => format(new Date(iso), "d MMM yyyy");
 
-const WORKFLOW_CHAIN = ["Created", "Reviewed", "Approved", "Completed"] as const;
+/** A reservation is filed, then approved or rejected, then completed. */
+const WORKFLOW_CHAIN = ["Created", "Approved", "Completed"] as const;
 
-/** Index of the current step in the standard chain per status. */
-const STATUS_PROGRESS: Record<ReservationStatus, number> = {
-  Draft: 1,
-  Pending: 1,
-  Approved: 3,
-  Completed: 4,
-  Rejected: -1,
-  Cancelled: -1,
+/** The last chain step each open status has passed. */
+const REACHED: Record<ReservationStatus, string> = {
+  Draft: "Created",
+  Pending: "Created",
+  Approved: "Approved",
+  Completed: "Completed",
+  Rejected: "",
+  Cancelled: "",
 };
 
-/** Approval timeline from workflow position + recorded approvals. */
+/** The reservation's approval steps as recorded, then the steps still ahead (shared/workflow-steps). */
 export function buildReservationTimeline(r: Reservation): ApprovalTimelineStep[] {
-  const record = (step: string) => r.approvals.find((a) => a.step === step);
-
-  if (r.status === "Rejected" || r.status === "Cancelled") {
-    const steps: ApprovalTimelineStep[] = [];
-    for (const name of WORKFLOW_CHAIN) {
-      const rec = record(name);
-      if (!rec) break;
-      steps.push(toStep(name, "approved", rec));
-    }
-    steps.push(toStep(r.status, "rejected", record(r.status) ?? { step: r.status }));
-    return steps;
-  }
-
-  const progress = STATUS_PROGRESS[r.status];
-  return WORKFLOW_CHAIN.map((name, i) => {
-    const state: ApprovalTimelineStep["status"] =
-      i < progress ? "approved" : i === progress ? "current" : "pending";
-    return toStep(name, state, record(name));
+  return workflowSteps(r.approvals, {
+    chain: WORKFLOW_CHAIN,
+    reached: REACHED[r.status] ?? "",
+    closed: r.status === "Rejected" || r.status === "Cancelled",
+    // Reservations filed before 30 Oct 2026 hold a "Reviewed" step that filing
+    // wrote under a fixed name; no one reviewed them, and no action records a
+    // review. The records are kept as they are; the step is not shown.
+    ignore: ["Reviewed"],
   });
-}
-
-function toStep(
-  label: string,
-  status: ApprovalTimelineStep["status"],
-  rec?: { by?: string; office?: string; at?: string; remarks?: string },
-): ApprovalTimelineStep {
-  return {
-    label,
-    status,
-    time: rec?.at ? formatDateTime(rec.at) : undefined,
-    person: rec?.by ? { name: rec.by, office: rec.office } : undefined,
-    remarks: rec?.remarks,
-  };
 }

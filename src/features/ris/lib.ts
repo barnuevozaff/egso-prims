@@ -2,6 +2,7 @@ import { format } from "date-fns";
 
 import type { ApprovalTimelineStep } from "@/components";
 import type { RISStatus, RequestForIssuance } from "@/features/ris/types";
+import { workflowSteps } from "@/features/shared/workflow-steps";
 
 export const formatDateTime = (iso: string) => format(new Date(iso), "d MMM yyyy · h:mm a");
 export const formatDate = (iso: string) => format(new Date(iso), "d MMM yyyy");
@@ -14,55 +15,31 @@ export const formatDate = (iso: string) => format(new Date(iso), "d MMM yyyy");
 const WORKFLOW_CHAIN = ["Created", "Pending Approval", "Approved"] as const;
 const LEGACY_CHAIN = ["Created", "Pending Approval", "Approved", "Released", "Completed"] as const;
 
-/** Index of the current step in the chain per status. */
-const STATUS_PROGRESS: Record<RISStatus, number> = {
-  Draft: 1,
-  "Pending Approval": 1,
-  Approved: 3,
-  Rejected: -1,
-  Released: 4,
-  Completed: 5,
-  Cancelled: -1,
+/** The last chain step each open status has passed. */
+const REACHED: Record<RISStatus, string> = {
+  Draft: "Created",
+  "Pending Approval": "Pending Approval",
+  Approved: "Approved",
+  Released: "Released",
+  Completed: "Completed",
+  Rejected: "",
+  Cancelled: "",
 };
 
-/** Approval timeline from workflow position + recorded approvals. */
+/** The slip's approval steps as recorded, then the steps still ahead (shared/workflow-steps). */
 export function buildRISTimeline(ris: RequestForIssuance): ApprovalTimelineStep[] {
-  const record = (step: string) => ris.approvals.find((a) => a.step === step);
-  const legacy = ris.status === "Released" || ris.status === "Completed" || !!record("Released");
-  const chain: readonly string[] = legacy ? LEGACY_CHAIN : WORKFLOW_CHAIN;
-
-  if (ris.status === "Cancelled" || ris.status === "Rejected") {
-    const steps: ApprovalTimelineStep[] = [];
-    for (const name of chain) {
-      const rec = record(name);
-      if (!rec) break;
-      steps.push(toStep(name, "approved", rec));
-    }
-    steps.push(toStep(ris.status, "rejected", record(ris.status) ?? { step: ris.status }));
-    return steps;
-  }
-
-  const progress = STATUS_PROGRESS[ris.status] ?? 0;
-  return chain.map((name, i) => {
-    // An approved slip under the current workflow is finished.
-    const state: ApprovalTimelineStep["status"] =
-      i < progress || (!legacy && ris.status === "Approved") ? "approved" : i === progress ? "current" : "pending";
-    return toStep(name, state, record(name));
+  const legacy =
+    ris.status === "Released" || ris.status === "Completed" || ris.approvals.some((a) => a.step === "Released");
+  return workflowSteps(ris.approvals, {
+    chain: legacy ? LEGACY_CHAIN : WORKFLOW_CHAIN,
+    reached: REACHED[ris.status] ?? "",
+    closed: ris.status === "Rejected" || ris.status === "Cancelled",
+    labels: {
+      "Pending Approval": "Submitted",
+      // Since 22 Oct 2026 approval issues the stock, recorded as stockIssuedAt.
+      ...(!legacy && ris.stockIssuedAt ? { Approved: "Approved · stock issued" } : {}),
+    },
   });
-}
-
-function toStep(
-  label: string,
-  status: ApprovalTimelineStep["status"],
-  rec?: { by?: string; office?: string; at?: string; remarks?: string },
-): ApprovalTimelineStep {
-  return {
-    label,
-    status,
-    time: rec?.at ? formatDateTime(rec.at) : undefined,
-    person: rec?.by ? { name: rec.by, office: rec.office } : undefined,
-    remarks: rec?.remarks,
-  };
 }
 
 /**

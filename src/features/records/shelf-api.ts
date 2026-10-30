@@ -28,3 +28,5 @@ export const updateShelf = pick("updateShelf");
 export const deleteShelf = pick("deleteShelf");
 export const moveBox = pick("moveBox");
 export const relabelBox = pick("relabelBox");
+export const placeDocument = pick("placeDocument");
+export const renameLocation = pick("renameLocation");

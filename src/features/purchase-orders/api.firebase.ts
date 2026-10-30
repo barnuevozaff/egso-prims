@@ -288,9 +288,10 @@ export async function removePurchaseOrderAttachment(
 
 /**
  * Completes or corrects an order's details (21 Oct 2026). Filling in a blank
- * is a completion; changing a recorded value or the items is a correction,
- * which on an approved order needs a reason. The server records every change
- * with its before and after values (updatePurchaseOrderDetails).
+ * is a completion; changing a recorded value or the items is a correction.
+ * No reason is needed since 30 Oct 2026 (one given is still kept). The server
+ * records every change with its before and after values, and the lines the
+ * history shows: items added, removed or changed (updatePurchaseOrderDetails).
  */
 export async function updatePurchaseOrderDetails(
   id: string,

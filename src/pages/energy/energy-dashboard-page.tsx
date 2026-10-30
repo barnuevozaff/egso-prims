@@ -607,7 +607,6 @@ export function EnergyDashboardPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() => exportCsv(selectedRows)}
         onPrint={() => navigate("/energy/summary")}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}

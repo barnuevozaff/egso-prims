@@ -100,7 +100,7 @@ export function DisposalDetailPage() {
           <DisposalRequestSheet request={request} />
         </PaperSheet>
 
-        <FiledLocation type="RAD" sourceId={request.id} />
+        <FiledLocation type="RAD" sourceId={request.id} status={request.status} />
       </PageTransition>
 
       <DisposalPrintForm request={request} />

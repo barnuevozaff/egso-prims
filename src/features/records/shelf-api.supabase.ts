@@ -8,6 +8,7 @@ import type {
   ShelfWithLevels,
   Slot,
 } from "@/features/records/shelf-types";
+import type { RenameTarget } from "@/features/records/shelf-types";
 
 /**
  * The Records Room's furniture and what stands on it. Shelves are added and
@@ -31,7 +32,7 @@ function one<T>(v: T | T[] | null | undefined): T | undefined {
 }
 
 export function rowToLevel(r: any): ShelfLevel {
-  return { id: r.id, shelfId: r.shelf_id, label: r.label, position: r.position };
+  return { id: r.id, shelfId: r.shelf_id, label: r.label, name: r.name ?? undefined, position: r.position };
 }
 
 export function rowToBox(r: any): RecordBox {
@@ -47,7 +48,7 @@ export function rowToBox(r: any): RecordBox {
 }
 
 function rowToContent(r: any): BoxContent | null {
-  const base = { id: r.id, boxId: r.box_id, filedAt: r.filed_at };
+  const base = { id: r.id, boxId: r.box_id, filedAt: r.filed_at, moves: [] };
   const rds = one<any>(r.disposition_schedules);
   if (r.schedule_id && rds)
     return {
@@ -231,4 +232,19 @@ export async function relabelBox(boxId: string, label: string): Promise<void> {
       .eq("id", boxId)
       .select(),
   );
+}
+
+/*
+ * Placing by hand and naming levels and boxes (30 Oct 2026) exist only on
+ * Firebase, where the Records Room now lives; the Supabase database filed on
+ * approval and had no such operations.
+ */
+const FIREBASE_ONLY = "Placing records and naming shelves, levels and boxes needs the Firebase Records Room.";
+
+export async function placeDocument(_type: DocType, _sourceId: string, _levelId: string, _slot: number, _by?: string): Promise<void> {
+  throw new Error(FIREBASE_ONLY);
+}
+
+export async function renameLocation(_target: RenameTarget, _name: string): Promise<void> {
+  throw new Error(FIREBASE_ONLY);
 }

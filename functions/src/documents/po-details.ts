@@ -13,11 +13,12 @@ import { amount, list, record, requiredText, text } from "./validate.js";
  * procurement, place and date of delivery, terms, BAC references, stock
  * numbers — is optional: an order may be printed with blanks and completed by
  * hand. Filling in a blank is a completion. Changing or clearing a value
- * already recorded, or changing the items' descriptions, quantities, units or
- * costs, is a correction: on an approved order it needs a reason, and every
- * change is recorded with its before and after values. The authorization (the
- * approval steps, the items as authorized, the signatory copy and the PO
- * date) is never changed here.
+ * already recorded, or changing the items, is a correction. Every change is
+ * recorded in the order's history with its before and after values, and as a
+ * line a person reads: items added, items removed, what changed on an item.
+ * Since 30 Oct 2026 no reason is asked for; one given is still kept. The
+ * authorization (the approval steps, the items as authorized, the signatory
+ * copy and the PO date) is never changed here.
  *
  * Administrators only; not for a voided order, a Released or Completed order
  * from the earlier workflow, or one already issued to the supplier.
@@ -47,6 +48,68 @@ interface Change {
   from: string;
   to: string;
   kind: "completed" | "corrected";
+  /** The line shown in the order's history. */
+  line: string;
+}
+
+interface ItemLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  stockNo: string;
+}
+
+const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const itemText = (it: ItemLine) => `${it.description} · ${it.quantity} ${it.unit} at ${peso(it.unitCost)}`;
+
+/**
+ * The items' changes, matched by each line's id, so removing one line does
+ * not read as every later line changed: lines added, lines removed, and for a
+ * line kept, what changed on it. Lines stored without an id (none should be)
+ * are matched by position.
+ */
+export function itemChanges(old: ItemLine[], next: ItemLine[]): Change[] {
+  const out: Change[] = [];
+  const byId = new Map(old.filter((o) => o.id).map((o) => [o.id, o]));
+  const kept = new Set<ItemLine>();
+  next.forEach((it, i) => {
+    const was = it.id ? byId.get(it.id) : old[i] && !old[i].id ? old[i] : undefined;
+    if (!was) {
+      out.push({ field: "Added", from: "", to: itemText(it), kind: "corrected", line: `Added: ${itemText(it)}` });
+      return;
+    }
+    kept.add(was);
+    const diffs = [
+      was.description !== it.description && `description "${was.description}" → "${it.description}"`,
+      was.quantity !== it.quantity && `quantity ${was.quantity} → ${it.quantity}`,
+      was.unit !== it.unit && `unit ${was.unit} → ${it.unit}`,
+      was.unitCost !== it.unitCost && `unit cost ${peso(was.unitCost)} → ${peso(it.unitCost)}`,
+    ].filter(Boolean);
+    if (diffs.length) {
+      out.push({
+        field: was.description,
+        from: itemText(was),
+        to: itemText(it),
+        kind: "corrected",
+        line: `${was.description}: ${diffs.join(", ")}`,
+      });
+    }
+    if (was.stockNo !== it.stockNo) {
+      out.push({
+        field: `${it.description} stock/property no.`,
+        from: was.stockNo,
+        to: it.stockNo,
+        kind: was.stockNo ? "corrected" : "completed",
+        line: `${it.description} stock/property no.: ${was.stockNo || "blank"} → ${it.stockNo || "blank"}`,
+      });
+    }
+  });
+  for (const o of old) {
+    if (!kept.has(o)) out.push({ field: "Removed", from: itemText(o), to: "", kind: "corrected", line: `Removed: ${itemText(o)}` });
+  }
+  return out;
 }
 
 export const updatePurchaseOrderDetails = onCall(async (request) => {
@@ -104,14 +167,20 @@ export const updatePurchaseOrderDetails = onCall(async (request) => {
       const before = str(po[f.key]);
       const after = values[f.key];
       if (before === after) continue;
-      changes.push({ field: f.label, from: before, to: after, kind: before ? "corrected" : "completed" });
+      changes.push({
+        field: f.label,
+        from: before,
+        to: after,
+        kind: before ? "corrected" : "completed",
+        line: `${f.label}: ${before || "blank"} → ${after || "blank"}`,
+      });
       patch[f.key] = after || null;
     }
     // The supplier is stored as text, blank when not yet known.
     if ("supplier_name" in patch) patch.supplier_name = values.supplier_name;
 
     if (items) {
-      const old = ((po.items as Row[]) ?? []).map((it) => ({
+      const old: ItemLine[] = ((po.items as Row[]) ?? []).map((it) => ({
         id: str(it.id),
         description: str(it.description),
         quantity: Number(it.quantity),
@@ -119,65 +188,30 @@ export const updatePurchaseOrderDetails = onCall(async (request) => {
         unitCost: Number(it.unitCost),
         stockNo: str(it.stockNo),
       }));
-      const essential = (it: { description: string; quantity: number; unit: string; unitCost: number }) =>
-        `${it.description}|${it.quantity}|${it.unit}|${it.unitCost}`;
-      if (old.length !== items.length) {
-        changes.push({ field: "Items", from: `${old.length} lines`, to: `${items.length} lines`, kind: "corrected" });
-      }
-      items.forEach((it, i) => {
-        const was = old[i];
-        if (!was) {
-          changes.push({ field: `Item ${i + 1}`, from: "", to: `${it.quantity} ${it.unit} ${it.description} at ${it.unitCost}`, kind: "corrected" });
-          return;
-        }
-        if (essential(was) !== essential(it)) {
-          changes.push({
-            field: `Item ${i + 1}`,
-            from: `${was.quantity} ${was.unit} ${was.description} at ${was.unitCost}`,
-            to: `${it.quantity} ${it.unit} ${it.description} at ${it.unitCost}`,
-            kind: "corrected",
-          });
-        }
-        if (was.stockNo !== str(it.stockNo)) {
-          changes.push({
-            field: `Item ${i + 1} stock/property no.`,
-            from: was.stockNo,
-            to: str(it.stockNo),
-            kind: was.stockNo ? "corrected" : "completed",
-          });
-        }
-      });
-      for (let i = items.length; i < old.length; i++) {
-        changes.push({ field: `Item ${i + 1}`, from: `${old[i].quantity} ${old[i].unit} ${old[i].description}`, to: "", kind: "corrected" });
-      }
-      if (changes.some((c) => c.field.startsWith("Item"))) {
-        patch.items = items.map((it, i) => ({ ...it, id: it.id || old[i]?.id || randomUUID() }));
+      const next: ItemLine[] = items.map((it) => ({ ...it, stockNo: str(it.stockNo) }));
+      const lines = itemChanges(old, next);
+      changes.push(...lines);
+      if (lines.length) {
+        // A line keeps its id; a new line gets one of its own.
+        patch.items = items.map((it) => ({ ...it, id: it.id || randomUUID() }));
       }
     }
 
     if (changes.length === 0) return po;
     const corrections = changes.filter((c) => c.kind === "corrected");
-    if (po.status === "Approved" && corrections.length > 0 && reason.length < 5) {
-      throw new HttpsError(
-        "failed-precondition",
-        `Give the reason for correcting ${number} (${corrections.map((c) => c.field).join(", ")}). It is kept in the order's history.`,
-      );
-    }
 
     const at = new Date().toISOString();
-    const summary = changes.map((c) => `${c.field}: ${c.from || "blank"} → ${c.to || "blank"}`).join("; ");
     patch.history = [
       ...((po.history as unknown[]) ?? []),
       {
         id: randomUUID(),
         kind: corrections.length ? "correction" : "update",
-        text: (corrections.length
-          ? `Corrected by ${by}${reason ? ` (${reason})` : ""}: ${summary}`
-          : `Details completed by ${by}: ${summary}`
-        ).slice(0, 2000),
+        text: `${corrections.length ? "Changed" : "Details completed"} by ${by}${reason ? ` (${reason})` : ""}`.slice(0, 2000),
+        // What was added, removed or changed, one line each, as the order's history shows it.
+        lines: changes.map((c) => c.line.slice(0, 500)).slice(0, 200),
         at,
         by,
-        changes,
+        changes: changes.map(({ line: _line, ...c }) => c),
         ...(reason ? { reason } : {}),
       },
     ];

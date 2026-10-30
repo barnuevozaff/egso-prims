@@ -406,7 +406,7 @@ describe("purchase requests in the browser, on Firebase", () => {
     });
   });
 
-  it("the bell shows the submission, and an audit comment carries the reviewer's name", async () => {
+  it("the bell shows the submission, and an audit entry shows its record's timeline without comments", async () => {
     await filePortalRequest("Notification check (test data)");
     await session("bell-audit", async (page) => {
       await signIn(page, "admin@alaminos.gov.ph");
@@ -417,12 +417,12 @@ describe("purchase requests in the browser, on Firebase", () => {
 
       await page.goto(`${APP_URL}/audit`);
       await page.getByText("Record Created").first().click({ timeout: 30_000 });
-      await page.getByRole("tab", { name: /Comments/ }).click();
-      await page.getByPlaceholder("Write a comment…").fill("Checked against the paper form.");
-      await page.getByRole("button", { name: "Comment" }).click();
-      await page.getByRole("tab", { name: "Comments (1)" }).waitFor({ timeout: 30_000 });
-      expect(await page.getByRole("dialog").getByText("Ana Reyes").count()).toBeGreaterThan(0);
-      await shot(page, "41-audit-comment");
+      const drawer = page.getByRole("dialog");
+      await drawer.getByRole("tab", { name: "Record timeline" }).waitFor({ timeout: 30_000 });
+      expect(await drawer.getByRole("tab", { name: "Session history" }).count()).toBe(1);
+      // Reviewer comments are not shown on audit entries (30 Oct 2026); stored ones stay.
+      expect(await drawer.getByRole("tab", { name: /Comments/ }).count()).toBe(0);
+      await shot(page, "41-audit-entry");
     });
   });
 

@@ -411,14 +411,6 @@ export function ViolationListPage() {
 
       <BulkActionBar
         count={selectedRows.length}
-        onExport={() =>
-          download(
-            exportViolatorsCsv(selectedRows),
-            "violator-profiles-selection.csv",
-            `Exported ${selectedRows.length} violator profile${selectedRows.length === 1 ? "" : "s"}`,
-          )
-        }
-        onPrint={() => window.print()}
         onDelete={() => setConfirmBulkDelete(true)}
         onClear={() => setRowSelection({})}
       />
