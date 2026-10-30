@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader, PageTransition, toast } from "@/components";
+import { savedMessage } from "@/features/records/workflow";
 import { createAppraisal } from "@/features/records/inventory-api";
 import { AppraisalForm } from "@/features/records/components/appraisal-form";
 import type { AppraisalInput } from "@/features/records/inventory-types";
@@ -14,7 +15,7 @@ export function InventoryCreatePage() {
     setSubmitting(true);
     try {
       const appraisal = await createAppraisal(input);
-      toast.success(`${appraisal.inventoryNo} created`);
+      toast.success(savedMessage(appraisal.inventoryNo, null, input.status));
       navigate(`/records/inventory/${appraisal.id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to create the records inventory");
@@ -30,7 +31,6 @@ export function InventoryCreatePage() {
       />
       <AppraisalForm
         submitting={submitting}
-        submitLabel="Create Inventory"
         onSubmit={submit}
         onCancel={() => navigate("/records/inventory")}
       />

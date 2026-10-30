@@ -36,20 +36,10 @@ export function useRecordsRoom() {
     void load();
   }, [load]);
 
-  // Documents are filed when they are approved on their own pages, so the
-  // three document tables are watched as well as the room's own.
-  useRealtimeRefresh(
-    [
-      "record_shelves",
-      "record_shelf_levels",
-      "record_boxes",
-      "record_box_contents",
-      "disposition_schedules",
-      "inventory_appraisals",
-      "disposal_requests",
-    ],
-    load,
-  );
+  // Only the room's own collections (30 Oct 2026). Approving no longer files a
+  // document, and what a save does to its box line is written to
+  // record_box_contents, which is watched; the registers have their own watch.
+  useRealtimeRefresh(["record_shelves", "record_shelf_levels", "record_boxes", "record_box_contents"], load);
 
   return { shelves, boxes, contents, loading, failed, refresh: load };
 }

@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader, PageTransition, toast } from "@/components";
+import { savedMessage } from "@/features/records/workflow";
 import { createSchedule } from "@/features/records/api";
 import { ScheduleForm } from "@/features/records/components/schedule-form";
 import type { ScheduleInput } from "@/features/records/types";
@@ -14,7 +15,7 @@ export function RecordsCreatePage() {
     setSubmitting(true);
     try {
       const schedule = await createSchedule(input);
-      toast.success(`${schedule.scheduleNo} created`);
+      toast.success(savedMessage(schedule.scheduleNo, null, input.status));
       navigate(`/records/${schedule.id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to create the disposition schedule");
@@ -30,7 +31,6 @@ export function RecordsCreatePage() {
       />
       <ScheduleForm
         submitting={submitting}
-        submitLabel="Create Schedule"
         onSubmit={submit}
         onCancel={() => navigate("/records")}
       />

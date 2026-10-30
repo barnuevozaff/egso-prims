@@ -1,9 +1,10 @@
 import * as React from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRightLeft, FileText, Plus } from "lucide-react";
 
 import { Button } from "@/components";
 import { docTone, formatDate } from "@/features/records/components/room/room-format";
+import { useCalmMotion } from "@/features/records/room/calm-motion";
 import { DocThumbnail } from "@/features/records/room/doc-thumbnail";
 import { InlineName } from "@/features/records/room/inline-name";
 import { docKey, type CatalogDoc, type RoomLevel, type RoomModel, type RoomPosition, type RoomShelf } from "@/features/records/room/room-model";
@@ -15,8 +16,11 @@ import { cn } from "@/lib/utils";
  * side, to browse with the wheel or a trackpad, by dragging, by swiping, or
  * with the arrow keys. The folder in focus rises and its first page and
  * details float above the row; opening it leads to the document's own page,
- * where it is printed and worked on. The box grows out of its place on the
- * shelf (a shared layout id) and its lid lifts as it opens.
+ * where it is printed and worked on. Its lid lifts as it opens.
+ *
+ * Kept light for the office PCs (30 Oct 2026): the folders rise with a CSS
+ * transform rather than a spring each, only the record just placed drops in
+ * with motion, and on a low-power computer the lid and the drop are left out.
  */
 export function BoxView({
   model,
@@ -48,7 +52,7 @@ export function BoxView({
   onRenameBox: (name: string) => Promise<void>;
   onPlaceHere: () => void;
 }) {
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useCalmMotion();
   const items = position.items;
   const keys = items.map((c) => docKey(c.documentType, c.sourceId));
   const [hoverKey, setHoverKey] = React.useState<string | null>(null);
@@ -125,10 +129,7 @@ export function BoxView({
         </p>
       </div>
 
-      <motion.div
-        layoutId={`box-${position.key}`}
-        className="relative rounded-[16px] border border-[#cdbb9a] bg-[#e9dcc4] p-2.5 [perspective:1400px] sm:p-3.5"
-      >
+      <div className="relative rounded-[16px] border border-[#cdbb9a] bg-[#e9dcc4] p-2.5 [perspective:1400px] sm:p-3.5">
         {/* The lid lifts as the box opens. */}
         {!reduce && (
           <motion.div
@@ -198,12 +199,9 @@ export function BoxView({
                   const active = key === shownKey;
                   return (
                     <div key={key} role="listitem" className="snap-center">
-                      <motion.button
+                      <button
                         type="button"
                         data-doc={key}
-                        initial={key === justPlacedKey && !reduce ? { y: -90, opacity: 0, rotate: -3 } : false}
-                        animate={{ y: active ? -14 : 0, opacity: 1, rotate: 0 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 30 }}
                         onPointerEnter={(e) => e.pointerType === "mouse" && hover(key)}
                         onFocus={() => setHoverKey(key)}
                         onClick={(e) => {
@@ -226,12 +224,23 @@ export function BoxView({
                         }}
                         aria-label={`${c.documentNo}, ${DOC_TYPES[c.documentType].short}, ${c.agency}. Open document.`}
                         className={cn(
-                          "relative block h-[152px] w-[118px] text-left focus-visible:outline-none",
-                          active ? "z-10" : "",
+                          "relative block h-[152px] w-[118px] text-left transition-transform duration-200 ease-out focus-visible:outline-none motion-reduce:transition-none",
+                          active && "z-10 -translate-y-3.5",
                         )}
                       >
-                        <Folder content={c} active={active} />
-                      </motion.button>
+                        {key === justPlacedKey && !reduce ? (
+                          <motion.span
+                            className="absolute inset-0"
+                            initial={{ y: -90, opacity: 0, rotate: -3 }}
+                            animate={{ y: 0, opacity: 1, rotate: 0 }}
+                            transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                          >
+                            <Folder content={c} active={active} />
+                          </motion.span>
+                        ) : (
+                          <Folder content={c} active={active} />
+                        )}
+                      </button>
                     </div>
                   );
                 })}
@@ -242,7 +251,7 @@ export function BoxView({
             </>
           )}
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -252,8 +261,8 @@ function Folder({ content, active }: { content: BoxContent; active: boolean }) {
   return (
     <span
       className={cn(
-        "absolute inset-0 rounded-[3px] rounded-tl-none border bg-[#f6e8c3] transition-[box-shadow,border-color] duration-150",
-        active ? "border-[#b8964f] shadow-[0_14px_24px_-14px_rgba(60,40,10,0.55)] ring-2 ring-[#a6323b] ring-offset-2 ring-offset-[#f3eadb]" : "border-[#dcc58e]",
+        "absolute inset-0 rounded-[3px] rounded-tl-none border bg-[#f6e8c3]",
+        active ? "border-[#b8964f] ring-2 ring-[#a6323b] ring-offset-2 ring-offset-[#f3eadb]" : "border-[#dcc58e]",
       )}
     >
       {/* The tab, with the document's number. */}
@@ -288,7 +297,7 @@ function Preview({
 }) {
   const landscape = content.documentType === "RIA";
   return (
-    <div className="flex flex-col gap-4 rounded-[12px] border border-[#e6e6e3] bg-white p-3.5 shadow-[0_18px_40px_-28px_rgba(22,24,29,0.45)] sm:flex-row">
+    <div className="flex flex-col gap-4 rounded-[12px] border border-[#e6e6e3] bg-white p-3.5 sm:flex-row">
       <div className="shrink-0 self-center sm:self-start">
         <DocThumbnail type={content.documentType} id={content.sourceId} width={landscape ? 232 : 164} />
       </div>
@@ -334,13 +343,19 @@ function Preview({
             <FileText />
             Open document
           </Button>
-          {canManage && (
+          {/* Only an approved record is moved, as only an approved one is placed (placeRecordDocument). */}
+          {canManage && (!doc || doc.status === "Approved") && (
             <Button variant="secondary" onClick={onMove}>
               <ArrowRightLeft />
               Move to another box
             </Button>
           )}
         </div>
+        {doc && doc.status !== "Approved" && (
+          <p className="mt-2 text-[12.5px] text-[#5b606b]">
+            {doc.status === "Cancelled" ? "Voided: it stays here, marked voided, and is not moved." : `${doc.status}: it is moved only while it is approved.`}
+          </p>
+        )}
       </div>
     </div>
   );

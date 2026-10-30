@@ -17,19 +17,19 @@ import * as React from "react";
  * which is what escapes the app's fixed-height frame; this copy carries
  * data-print-hide so a page holding both puts only one of them on paper.
  */
-/**
- * The sheet's own width, so what sits above and below it on the page — a
- * status field, the Save and Cancel buttons — lines up with its edges instead
- * of running the width of the window.
- */
-export const SHEET_WIDTH = { portrait: "210mm", landscape: "297mm" } as const;
-
 export function PaperSheet({
   orientation = "portrait",
+  fit = false,
   children,
 }: {
   /** Landscape for the twenty-column Records Inventory and Appraisal. */
   orientation?: "portrait" | "landscape";
+  /**
+   * For a form being filled in (30 Oct 2026): the sheet is as tall as what is
+   * on it, not a whole blank page, and sits at the start of its column so the
+   * panel beside it stays close. The printed copy is unaffected.
+   */
+  fit?: boolean;
   children: React.ReactNode;
 }) {
   const landscape = orientation === "landscape";
@@ -39,10 +39,10 @@ export function PaperSheet({
     <div className="overflow-x-auto pb-1">
       <div
         data-print-hide=""
-        className="mx-auto bg-white text-black shadow-sm ring-1 ring-neutral-300"
+        className={`${fit ? "" : "mx-auto "}bg-white text-black shadow-sm ring-1 ring-neutral-300`}
         style={{
           width: landscape ? "297mm" : "210mm",
-          minHeight: landscape ? "210mm" : "297mm",
+          minHeight: fit ? undefined : landscape ? "210mm" : "297mm",
           padding: landscape ? "10mm" : "14mm",
         }}
       >

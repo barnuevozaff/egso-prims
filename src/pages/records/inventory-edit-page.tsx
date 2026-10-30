@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button, PageHeader, PageTransition, Spinner, toast } from "@/components";
+import { savedMessage } from "@/features/records/workflow";
 import { updateAppraisal } from "@/features/records/inventory-api";
 import { useAppraisal } from "@/features/records/inventory-hooks";
 import { AppraisalForm } from "@/features/records/components/appraisal-form";
@@ -18,7 +19,7 @@ export function InventoryEditPage() {
     setSubmitting(true);
     try {
       await updateAppraisal(id, input);
-      toast.success("Records inventory updated");
+      if (appraisal) toast.success(savedMessage(appraisal.inventoryNo, appraisal.status === "Cancelled" ? null : appraisal.status, input.status));
       navigate(`/records/inventory/${id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to update the inventory");
@@ -68,7 +69,6 @@ export function InventoryEditPage() {
       <AppraisalForm
         initial={appraisal}
         submitting={submitting}
-        submitLabel="Save Changes"
         onSubmit={submit}
         onCancel={() => navigate(`/records/inventory/${appraisal.id}`)}
       />

@@ -1,5 +1,4 @@
 import * as React from "react";
-import { motion } from "motion/react";
 import { Plus } from "lucide-react";
 
 import { kindsIn, type RoomShelf } from "@/features/records/room/room-model";
@@ -83,8 +82,8 @@ function ShelfCard({
       }}
       aria-label={`${shelf.shelf.name}: ${shelf.records} ${shelf.records === 1 ? "record" : "records"}, ${shelf.boxesInUse} of ${positions} boxes in use. Open shelf.`}
       className={cn(
-        "group block w-full rounded-[14px] border bg-white p-4 text-left transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-18px_rgba(22,24,29,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a6323b]",
-        over ? "border-[#a6323b] shadow-[0_0_0_3px_rgba(166,50,59,0.12)]" : dragging ? "border-[#cfc9bd]" : "border-[#e6e6e3]",
+        "group block w-full rounded-[14px] border bg-white p-4 text-left transition-[transform,border-color] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a6323b] motion-reduce:transition-none",
+        over ? "border-[#a6323b] shadow-[0_0_0_3px_rgba(166,50,59,0.12)]" : dragging ? "border-[#cfc9bd]" : "border-[#e6e6e3] hover:border-[#d6d3cc]",
       )}
     >
       <div className="flex items-baseline justify-between gap-3">
@@ -97,8 +96,7 @@ function ShelfCard({
         {shelf.boxesInUse} of {positions} boxes in use
       </div>
       {/* The shelf itself, small: five levels of two boxes. */}
-      <motion.div
-        layoutId={`rack-${shelf.shelf.id}`}
+      <div
         className="mt-3 space-y-[5px] rounded-[8px] border border-[#e0dcd3] bg-[#f3f1ec] p-2.5"
       >
         {shelf.levels.map((l) => (
@@ -111,7 +109,7 @@ function ShelfCard({
             <div aria-hidden="true" className="mt-[3px] h-[3px] rounded-[1px] bg-[#d8d2c6]" />
           </div>
         ))}
-      </motion.div>
+      </div>
     </button>
   );
 }

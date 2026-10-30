@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button, PageHeader, PageTransition, Spinner, toast } from "@/components";
+import { savedMessage } from "@/features/records/workflow";
 import { updateSchedule } from "@/features/records/api";
 import { useSchedule } from "@/features/records/hooks";
 import { ScheduleForm } from "@/features/records/components/schedule-form";
@@ -18,7 +19,7 @@ export function RecordsEditPage() {
     setSubmitting(true);
     try {
       await updateSchedule(id, input);
-      toast.success("Disposition schedule updated");
+      if (schedule) toast.success(savedMessage(schedule.scheduleNo, schedule.status === "Cancelled" ? null : schedule.status, input.status));
       navigate(`/records/${id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to update the schedule");
@@ -68,7 +69,6 @@ export function RecordsEditPage() {
       <ScheduleForm
         initial={schedule}
         submitting={submitting}
-        submitLabel="Save Changes"
         onSubmit={submit}
         onCancel={() => navigate(`/records/${schedule.id}`)}
       />

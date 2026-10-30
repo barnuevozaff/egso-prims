@@ -1,5 +1,4 @@
 import * as React from "react";
-import { motion } from "motion/react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 
 import { Button } from "@/components";
@@ -70,8 +69,7 @@ export function ShelfView({
         </div>
       </div>
 
-      <motion.div
-        layoutId={`rack-${shelf.shelf.id}`}
+      <div
         className="relative mx-auto max-w-[920px] rounded-[14px] border border-[#e0dcd3] bg-[#f3f1ec] px-3 pb-4 pt-3 sm:px-5"
       >
         {/* The uprights, so the levels read as one standing shelf. */}
@@ -122,7 +120,7 @@ export function ShelfView({
             );
           })}
         </ol>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -146,9 +144,10 @@ function PositionButton({
   const count = position.items.length;
   const label = `${position.name}, ${levelTitle}: ${count === 0 ? "empty" : `${count} ${count === 1 ? "record" : "records"}`}${position.legacy ? ", old third position" : ""}. ${placing ? "Place the record here." : "Open box."}`;
   return (
-    <motion.button
+    // A CSS lift, not a spring: ten of these stand on a shelf, and measuring
+    // them for shared layout on every refresh was what made the room drag.
+    <button
       type="button"
-      layoutId={`box-${position.key}`}
       onClick={onOpen}
       onDragOver={(e) => {
         if (!onDropRecord || !e.dataTransfer.types.includes("application/x-record")) return;
@@ -161,13 +160,11 @@ function PositionButton({
         const key = e.dataTransfer.getData("application/x-record");
         if (key && onDropRecord) onDropRecord(key);
       }}
-      whileHover={{ y: -3 }}
-      animate={highlighted ? { y: -6, scale: 1.02 } : { y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 380, damping: 28 }}
       aria-label={label}
       className={cn(
-        "block w-full rounded-[8px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a6323b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f3f1ec]",
+        "block w-full rounded-[8px] text-left transition-transform duration-200 ease-out hover:-translate-y-[3px] focus-visible:outline-none motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-[#a6323b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f3f1ec]",
         (highlighted || over) && "ring-2 ring-[#a6323b] ring-offset-2 ring-offset-[#f3f1ec]",
+        highlighted && "-translate-y-1.5 scale-[1.02] hover:-translate-y-1.5",
       )}
     >
       {count === 0 && !position.box ? (
@@ -181,6 +178,6 @@ function PositionButton({
           className={placing || over ? "border-[#a6323b]" : undefined}
         />
       )}
-    </motion.button>
+    </button>
   );
 }

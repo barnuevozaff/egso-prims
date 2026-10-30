@@ -7,6 +7,7 @@ import { allocateDocumentNumber, manilaYear, readNumberingSettings } from "../nu
 import { callerOf, requireRole } from "../documents/caller.js";
 import { isoDate, list, record, requiredText, text } from "../documents/validate.js";
 import { contentId, type DocType } from "./room.js";
+import { assertStatusMove } from "./workflow.js";
 
 /**
  * The three National Archives forms of Records Management — Records
@@ -176,6 +177,34 @@ const numberClaim = (spec: Spec, number: string) =>
 
 const isDocType = (t: unknown): t is DocType => t === "RDS" || t === "RIA" || t === "RAD";
 
+/**
+ * Moves a saved form one step without touching its lines (30 Oct 2026): the
+ * record page approves, returns or submits it as it stands. The same moves as
+ * a full save, and the same rule that leaving Approved takes it out of its box.
+ */
+async function moveStatus(type: DocType, id: string, to: string, uid: string | null) {
+  if (!STATUSES.includes(to)) throw invalid("Status must be Draft, Submitted, Approved or Returned.");
+  const spec = SPECS[type];
+  const db = getFirestore();
+  return db.runTransaction(async (tx) => {
+    const ref = db.collection(spec.collection).doc(id);
+    const current = await tx.get(ref);
+    if (!current.exists) throw new HttpsError("not-found", "That document no longer exists.");
+    const number = String(current.get(spec.numberField));
+    const from = String(current.get("status"));
+    if (from === "Cancelled") throw new HttpsError("failed-precondition", `${number} is voided and can no longer be changed.`);
+    if (from === to) throw new HttpsError("failed-precondition", `${number} is already ${to}.`);
+    assertStatusMove(from, to, number);
+    const placed = from === "Approved" ? await tx.get(db.collection("record_box_contents").doc(contentId(type, id))) : null;
+
+    const at = new Date().toISOString();
+    tx.update(ref, { status: to, updated_at: at, updated_by_uid: uid });
+    // No longer approved: out of its box, and back among the forms to approve.
+    if (placed?.exists) tx.delete(placed.ref);
+    return { ...current.data(), id, status: to, updated_at: at };
+  });
+}
+
 
 export const saveRecordsDocument = onCall(async (request) => {
   const caller = await callerOf(request);
@@ -186,6 +215,11 @@ export const saveRecordsDocument = onCall(async (request) => {
   const type = input.type;
   const spec = SPECS[type];
   const existingId = input.id === undefined || input.id === null ? null : requiredText(input.id, "Document", 100);
+  // A step taken from the record page (Submit, Approve, Return): the status alone.
+  if (input.move !== undefined) {
+    if (!existingId) throw invalid("Choose the document to move.");
+    return moveStatus(type, existingId, String(input.move), uid);
+  }
   const header = checkFields(input.header, spec.header);
   if (!Array.isArray(input.lines) || input.lines.length === 0) {
     throw invalid(`${spec.label} needs at least one record series.`);
@@ -206,6 +240,12 @@ export const saveRecordsDocument = onCall(async (request) => {
       if (current?.get("status") === "Cancelled") {
         throw new HttpsError("failed-precondition", `${String(current.get(spec.numberField))} is voided and can no longer be changed.`);
       }
+      // Only the moves the form offers: no draft saved straight as Approved.
+      assertStatusMove(
+        current ? String(current.get("status")) : "New",
+        String(header.status),
+        current ? String(current.get(spec.numberField)) : spec.label,
+      );
       const oldLines = existingId
         ? (await tx.get(db.collection(spec.lines).where(spec.parentField, "==", id))).docs
         : [];

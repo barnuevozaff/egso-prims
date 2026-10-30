@@ -1,17 +1,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Printer } from "lucide-react";
 
-import {
-  Button,
-  PageHeader,
-  PageTransition,
-  Spinner,
-  StatusBadge,
-  type DocumentStatus,
-} from "@/components";
-import { useAuth } from "@/features/auth/auth-context";
-import { can } from "@/features/auth/types";
+import { Button, PageHeader, PageTransition, Spinner, type DocumentStatus } from "@/components";
 import { voidSchedule } from "@/features/records/api";
 import { useSchedule } from "@/features/records/hooks";
 import {
@@ -19,8 +9,11 @@ import {
   RecordsScheduleSheet,
 } from "@/features/records/components/records-print-form";
 import { PaperSheet } from "@/features/shared/paper-sheet";
-import { FiledLocation } from "@/features/records/components/room/filed-location";
-import { VoidButton, VoidedNotice, VoidRecordDialog } from "@/features/shared/void-record";
+import { VoidedNotice, VoidRecordDialog } from "@/features/shared/void-record";
+import { RecordPageHeader } from "@/features/shared/record-page";
+import { RecordDetailPanel } from "@/features/records/components/record-detail-panel";
+import { RecordLayout } from "@/features/records/components/record-layout";
+import { formatDate, formatDay } from "@/features/records/components/room/room-format";
 
 /**
  * One disposition schedule, shown as the schedule.
@@ -35,11 +28,11 @@ import { VoidButton, VoidedNotice, VoidRecordDialog } from "@/features/shared/vo
 export function RecordsDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { data: schedule, loading, refresh } = useSchedule(id);
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
-  if (loading) {
+  // Only the first read waits on a spinner; a refresh keeps the page in place.
+  if (loading && !schedule) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner />
@@ -64,42 +57,41 @@ export function RecordsDetailPage() {
   return (
     <>
       <PageTransition className="space-y-5">
-        <PageHeader
-          title={schedule.scheduleNo}
+        <RecordPageHeader
+          back={{ to: "/records/schedules", label: "Disposition schedules" }}
+          number={schedule.scheduleNo}
+          status={schedule.status as DocumentStatus}
           description="Records Disposition Schedule"
-          actions={
-            <div className="flex items-center gap-2">
-              <StatusBadge status={schedule.status as DocumentStatus} />
-              <Button variant="ghost" onClick={() => navigate("/records")}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
-              <Button variant="outline" onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print
-              </Button>
-              {can(user, "manage:records") && schedule.status !== "Cancelled" && (
-                <>
-                  <Button variant="outline" onClick={() => navigate(`/records/${schedule.id}/edit`)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <VoidButton onClick={() => setConfirmVoid(true)} />
-                </>
-              )}
-            </div>
-          }
         />
 
-        {schedule.status === "Cancelled" && (
-          <VoidedNotice voidedAt={schedule.voidedAt} voidedBy={schedule.voidedBy} voidReason={schedule.voidReason} />
-        )}
-
-        <PaperSheet>
-          <RecordsScheduleSheet schedule={schedule} />
-        </PaperSheet>
-
-        <FiledLocation type="RDS" sourceId={schedule.id} status={schedule.status} />
+        {/* Every action of the record beside it, in one place (30 Oct 2026). */}
+        <RecordLayout
+          panel={
+            <RecordDetailPanel
+              kind="RDS"
+              id={schedule.id}
+              number={schedule.scheduleNo}
+              status={schedule.status}
+              facts={[
+                { label: "Date prepared", value: formatDate(schedule.datePrepared) },
+                { label: "Record series", value: schedule.series.length },
+                { label: "Created", value: formatDay(schedule.createdAt) },
+                { label: "Last changed", value: formatDay(schedule.updatedAt) },
+              ]}
+              editTo={`/records/${schedule.id}/edit`}
+              onPrint={() => window.print()}
+              onVoid={() => setConfirmVoid(true)}
+              onMoved={() => void refresh()}
+            />
+          }
+        >
+          {schedule.status === "Cancelled" && (
+            <VoidedNotice voidedAt={schedule.voidedAt} voidedBy={schedule.voidedBy} voidReason={schedule.voidReason} />
+          )}
+          <PaperSheet fit>
+            <RecordsScheduleSheet schedule={schedule} />
+          </PaperSheet>
+        </RecordLayout>
       </PageTransition>
 
       <RecordsPrintForm schedule={schedule} />

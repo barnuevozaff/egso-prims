@@ -6,10 +6,13 @@ import type {
   RecordBox,
   ShelfInput,
   ShelfLevel,
+  DocumentLocation,
   RenameTarget,
   ShelfWithLevels,
   Slot,
 } from "@/features/records/shelf-types";
+import { boxName, levelTitle } from "@/features/records/shelf-types";
+import type { ScheduleStatus } from "@/features/records/types";
 
 /**
  * The Records Room on Firestore. Same signatures as shelf-api.supabase.ts.
@@ -129,4 +132,37 @@ export async function placeDocument(type: DocType, sourceId: string, levelId: st
 /** Names a shelf, a level, or the box in one position; an empty name gives a level or box back its plain name. */
 export async function renameLocation(target: RenameTarget, name: string): Promise<void> {
   await callFunction("renameRecordLocation", { ...target, name: name.trim() });
+}
+
+/**
+ * Where one document is filed, in four reads — its box line, the box, the
+ * level and the shelf — rather than the whole room (a record's own page,
+ * 30 Oct 2026). Null while it is in no box.
+ */
+export async function locateDocument(type: DocType, sourceId: string): Promise<DocumentLocation | null> {
+  const line = await getRow(CONTENTS, `${type}-${sourceId}`);
+  if (!line) return null;
+  const box = await getRow(BOXES, String(line.box_id));
+  if (!box) return null;
+  const level = await getRow(LEVELS, String(box.shelf_level_id));
+  if (!level) return null;
+  const shelf = await getRow(SHELVES, String(level.shelf_id));
+  if (!shelf) return null;
+  return {
+    shelfId: shelf.id,
+    shelfName: String(shelf.name),
+    levelTitle: levelTitle({ label: String(level.label), name: (level.name as string | null) ?? undefined }),
+    boxName: boxName(rowToBox(box)),
+    positionKey: `${String(box.shelf_level_id)}~${Number(box.slot)}`,
+    voided: line.voided === true,
+  };
+}
+
+/**
+ * Takes a saved form one step from its own page — submit, approve, return for
+ * revision — without sending its lines again. The function allows only the
+ * workflow's moves and takes a form that leaves Approved out of its box.
+ */
+export async function moveRecordStatus(type: DocType, id: string, to: ScheduleStatus): Promise<void> {
+  await callFunction("saveRecordsDocument", { type, id, move: to });
 }

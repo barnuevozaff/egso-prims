@@ -1,8 +1,11 @@
 import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-import { Button, DatePicker, IconButton, SelectField } from "@/components";
-import { PaperSheet, SHEET_WIDTH } from "@/features/shared/paper-sheet";
+import { Button, DatePicker, IconButton } from "@/components";
+import { PaperSheet } from "@/features/shared/paper-sheet";
+import { RecordFormFrame, RecordFormPanel } from "@/features/records/components/record-form-panel";
+import { formatDate } from "@/features/records/components/room/room-format";
+import { useRecordForm } from "@/features/records/use-record-form";
 import {
   CELL,
   EDITABLE_CELL,
@@ -11,7 +14,7 @@ import {
   INPUT,
   toDateOnly,
 } from "@/features/records/components/nap-form-chrome";
-import { SCHEDULE_STATUSES, type ScheduleStatus } from "@/features/records/types";
+import type { ScheduleStatus } from "@/features/records/types";
 import {
   DEFAULT_OFFICE,
   SIGNATORY_CAPTIONS,
@@ -155,13 +158,11 @@ function SignatureBlock({
 export function AppraisalForm({
   initial,
   submitting,
-  submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial?: InventoryAppraisalWithRecords;
   submitting: boolean;
-  submitLabel: string;
   onSubmit: (input: AppraisalInput) => void;
   onCancel: () => void;
 }) {
@@ -181,9 +182,9 @@ export function AppraisalForm({
   const [datePrepared, setDatePrepared] = React.useState<Date | undefined>(
     initial ? new Date(`${initial.datePrepared}T00:00:00`) : new Date(),
   );
-  const [status, setStatus] = React.useState<ScheduleStatus>(
-    initial?.status && initial.status !== "Cancelled" ? initial.status : "Draft",
-  );
+  // Status is moved by the panel's actions, never typed (30 Oct 2026).
+  const current: ScheduleStatus | null = initial && initial.status !== "Cancelled" ? initial.status : null;
+  const { formRef, act, take, savingTo, focusLine } = useRecordForm(current);
   const [records, setRecords] = React.useState<InventoryRecordDraft[]>(
     initial?.records.map((r) => ({
       itemNumber: r.itemNumber,
@@ -209,7 +210,10 @@ export function AppraisalForm({
   const patch = (index: number, changes: Partial<InventoryRecordDraft>) =>
     setRecords((rows) => rows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 
-  const addRow = () => setRecords((rows) => [...rows, blankRecord()]);
+  const addRow = () => {
+    setRecords((rows) => [...rows, blankRecord()]);
+    focusLine(records.length);
+  };
 
   // The last row is never removable: an inventory with no records is not a
   // document the office can file.
@@ -219,7 +223,7 @@ export function AppraisalForm({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!datePrepared) return;
-    onSubmit({ ...header, datePrepared: toDateOnly(datePrepared), status, records });
+    onSubmit({ ...header, datePrepared: toDateOnly(datePrepared), status: take(), records });
   };
 
   /**
@@ -252,29 +256,33 @@ export function AppraisalForm({
   );
 
   return (
-    // The form is the sheet it becomes, so everything on the page — the
-    // status field above it, the buttons below — lines up with its edges.
-    <form
+    // Status is the system's own, not the Archives': it lives in the panel,
+    // so the sheet on screen stays the sheet on paper.
+    <RecordFormFrame
+      ref={formRef}
+      orientation="landscape"
       onSubmit={submit}
-      className="mx-auto w-full space-y-4"
-      style={{ maxWidth: SHEET_WIDTH.landscape }}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <label htmlFor="appraisal-status" className="text-xs font-medium text-neutral-700">
-          Status
-        </label>
-        <SelectField
-          id="appraisal-status"
-          value={status}
-          onChange={(v) => setStatus(v as ScheduleStatus)}
-          options={SCHEDULE_STATUSES.map((s) => ({ value: s, label: s }))}
-          className="w-40"
+      panel={
+        <RecordFormPanel
+          kind="RIA"
+          number={initial?.inventoryNo}
+          docId={initial?.id}
+          current={current}
+          facts={[
+            { label: "Record series", value: records.length },
+            { label: "Date prepared", value: datePrepared ? formatDate(toDateOnly(datePrepared)) : "—" },
+          ]}
+          addLabel="Add record series"
+          onAdd={addRow}
+          submitting={submitting}
+          savingTo={savingTo}
+          validate={() => formRef.current?.reportValidity() ?? true}
+          onAction={act}
+          onCancel={onCancel}
         />
-        <span className="text-xs text-neutral-500">
-          Tracked by this system — it is not part of the National Archives form.
-        </span>
-        <FillLegend />
-      </div>
+      }
+    >
+      <FillLegend />
 
       {/*
        * Fourteen columns do not fit a laptop, so the sheet scrolls sideways
@@ -283,7 +291,7 @@ export function AppraisalForm({
        */}
       {/* Twenty columns need the long edge, so this one is the landscape
           sheet — the orientation it is viewed and printed in. */}
-      <PaperSheet orientation="landscape">
+      <PaperSheet orientation="landscape" fit>
         {/*
          * The row controls hang in the sheet's own right margin, so the ruled
          * columns keep exactly the width they have on the printed sheet and the
@@ -384,7 +392,7 @@ export function AppraisalForm({
 
               {/* ---- The record lines ---- */}
               {records.map((row, i) => (
-                <tr key={i}>
+                <tr key={i} data-line={i}>
                   <td className={EDITABLE_CELL}>
                     <textarea
                       aria-label={`Item ${i + 1} records series title and description`}
@@ -558,19 +566,11 @@ export function AppraisalForm({
         </div>
       </PaperSheet>
 
-      <Button type="button" variant="outline" onClick={addRow}>
-        <Plus className="mr-2 h-4 w-4" />
-        Add Record Series
+      {/* Where the panel has scrolled away (a narrow screen), Add is under the lines too. */}
+      <Button variant="secondary" className="h-11 text-[13px] @min-[900px]:hidden" onClick={addRow} disabled={submitting}>
+        <Plus />
+        Add record series
       </Button>
-
-      <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving…" : submitLabel}
-        </Button>
-      </div>
-    </form>
+    </RecordFormFrame>
   );
 }

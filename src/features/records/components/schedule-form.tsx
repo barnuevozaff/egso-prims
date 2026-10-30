@@ -1,8 +1,11 @@
 import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-import { Button, DatePicker, IconButton, SelectField } from "@/components";
-import { PaperSheet, SHEET_WIDTH } from "@/features/shared/paper-sheet";
+import { Button, DatePicker, IconButton } from "@/components";
+import { PaperSheet } from "@/features/shared/paper-sheet";
+import { RecordFormFrame, RecordFormPanel } from "@/features/records/components/record-form-panel";
+import { formatDate } from "@/features/records/components/room/room-format";
+import { useRecordForm } from "@/features/records/use-record-form";
 import {
   CELL,
   EDITABLE_CELL,
@@ -13,7 +16,6 @@ import {
 } from "@/features/records/components/nap-form-chrome";
 import {
   DEFAULT_AGENCY,
-  SCHEDULE_STATUSES,
   type DispositionScheduleWithSeries,
   type RecordSeriesDraft,
   type ScheduleInput,
@@ -73,13 +75,11 @@ function YearsCell({
 export function ScheduleForm({
   initial,
   submitting,
-  submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial?: DispositionScheduleWithSeries;
   submitting: boolean;
-  submitLabel: string;
   onSubmit: (input: ScheduleInput) => void;
   onCancel: () => void;
 }) {
@@ -90,9 +90,9 @@ export function ScheduleForm({
   const [datePrepared, setDatePrepared] = React.useState<Date | undefined>(
     initial ? new Date(`${initial.datePrepared}T00:00:00`) : new Date(),
   );
-  const [status, setStatus] = React.useState<ScheduleStatus>(
-    initial?.status && initial.status !== "Cancelled" ? initial.status : "Draft",
-  );
+  // Status is moved by the panel's actions, never typed (30 Oct 2026).
+  const current: ScheduleStatus | null = initial && initial.status !== "Cancelled" ? initial.status : null;
+  const { formRef, act, take, savingTo, focusLine } = useRecordForm(current);
   const [series, setSeries] = React.useState<RecordSeriesDraft[]>(
     initial?.series.map((s) => ({
       // Kept so the save updates these lines rather than replacing them.
@@ -108,7 +108,10 @@ export function ScheduleForm({
   const patch = (index: number, changes: Partial<RecordSeriesDraft>) =>
     setSeries((rows) => rows.map((r, i) => (i === index ? { ...r, ...changes } : r)));
 
-  const addRow = () => setSeries((rows) => [...rows, blankSeries()]);
+  const addRow = () => {
+    setSeries((rows) => [...rows, blankSeries()]);
+    focusLine(series.length);
+  };
 
   // The last row is never removable: a schedule with no record series is not a
   // document the office can file.
@@ -118,39 +121,38 @@ export function ScheduleForm({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!datePrepared) return;
-    onSubmit({ agencyName, agencyAddress, datePrepared: toDateOnly(datePrepared), status, series });
+    onSubmit({ agencyName, agencyAddress, datePrepared: toDateOnly(datePrepared), status: take(), series });
   };
 
   return (
-    // The form is the sheet it becomes, so everything on the page — the
-    // status field above it, the buttons below — lines up with its edges.
-    <form
+    // Status is the system's own, not the Archives': it lives in the panel,
+    // so the sheet on screen stays the sheet on paper.
+    <RecordFormFrame
+      ref={formRef}
       onSubmit={submit}
-      className="mx-auto w-full space-y-4"
-      style={{ maxWidth: SHEET_WIDTH.portrait }}
-    >
-      {/*
-       * Status is the system's own field, not the Archives'. It sits outside
-       * the form so the sheet on screen stays the sheet on paper.
-       */}
-      <div className="flex flex-wrap items-center gap-3">
-        <label htmlFor="schedule-status" className="text-xs font-medium text-neutral-700">
-          Status
-        </label>
-        <SelectField
-          id="schedule-status"
-          value={status}
-          onChange={(v) => setStatus(v as ScheduleStatus)}
-          options={SCHEDULE_STATUSES.map((s) => ({ value: s, label: s }))}
-          className="w-40"
+      panel={
+        <RecordFormPanel
+          kind="RDS"
+          number={initial?.scheduleNo}
+          docId={initial?.id}
+          current={current}
+          facts={[
+            { label: "Record series", value: series.length },
+            { label: "Date prepared", value: datePrepared ? formatDate(toDateOnly(datePrepared)) : "—" },
+          ]}
+          addLabel="Add series"
+          onAdd={addRow}
+          submitting={submitting}
+          savingTo={savingTo}
+          validate={() => formRef.current?.reportValidity() ?? true}
+          onAction={act}
+          onCancel={onCancel}
         />
-        <span className="text-xs text-neutral-500">
-          Tracked by this system — it is not part of the National Archives form.
-        </span>
-        <FillLegend />
-      </div>
+      }
+    >
+      <FillLegend />
 
-      <PaperSheet>
+      <PaperSheet fit>
         {/*
          * The row controls hang in the sheet's own right margin, so the ruled
          * columns keep exactly the width they have on the printed sheet and the
@@ -266,7 +268,7 @@ export function ScheduleForm({
 
               {/* ---- The record series ---- */}
               {series.map((row, i) => (
-                <tr key={i}>
+                <tr key={i} data-line={i}>
                   <td className={`${CELL} px-1 py-1 text-center text-[12.5px] tabular-nums`}>
                     {i + 1}
                   </td>
@@ -337,19 +339,11 @@ export function ScheduleForm({
         </div>
       </PaperSheet>
 
-      <Button type="button" variant="outline" onClick={addRow}>
-        <Plus className="mr-2 h-4 w-4" />
-        Add Series
+      {/* Where the panel has scrolled away (a narrow screen), Add is under the lines too. */}
+      <Button variant="secondary" className="h-11 text-[13px] @min-[900px]:hidden" onClick={addRow} disabled={submitting}>
+        <Plus />
+        Add series
       </Button>
-
-      <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving…" : submitLabel}
-        </Button>
-      </div>
-    </form>
+    </RecordFormFrame>
   );
 }

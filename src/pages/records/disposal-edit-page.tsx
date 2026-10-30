@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button, PageHeader, PageTransition, Spinner, toast } from "@/components";
+import { savedMessage } from "@/features/records/workflow";
 import { updateRequest } from "@/features/records/disposal-api";
 import { useDisposalRequest } from "@/features/records/disposal-hooks";
 import { DisposalForm } from "@/features/records/components/disposal-form";
@@ -18,7 +19,7 @@ export function DisposalEditPage() {
     setSubmitting(true);
     try {
       await updateRequest(id, input);
-      toast.success("Disposal request updated");
+      if (request) toast.success(savedMessage(request.requestNo, request.status === "Cancelled" ? null : request.status, input.status));
       navigate(`/records/disposal/${id}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to update the request");
@@ -68,7 +69,6 @@ export function DisposalEditPage() {
       <DisposalForm
         initial={request}
         submitting={submitting}
-        submitLabel="Save Changes"
         onSubmit={submit}
         onCancel={() => navigate(`/records/disposal/${request.id}`)}
       />

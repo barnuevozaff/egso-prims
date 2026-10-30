@@ -39,8 +39,9 @@ function load(type: DocType, id: string): Promise<FullDoc | null> {
           : getRequest(id).then((doc) => (doc ? ({ type, doc } as FullDoc) : null))
     ).then(
       (full) => {
-        loaded.set(key, full);
-        return full;
+        const page = full && firstPage(full);
+        loaded.set(key, page);
+        return page;
       },
       () => {
         // A failed read is not remembered: the next look tries again.
@@ -60,7 +61,25 @@ const PAGE = {
   landscape: { w: 297 * MM, h: 210 * MM, pad: "10mm" },
 };
 
-export function DocThumbnail({ type, id, width }: { type: DocType; id: string; width: number }) {
+/**
+ * More lines than an A4 page can hold, so a long form draws its first page
+ * and not every line below the fold, which the frame would clip anyway.
+ */
+const FIRST_PAGE_LINES = 30;
+
+function firstPage(full: FullDoc): FullDoc {
+  switch (full.type) {
+    case "RDS":
+      return { type: "RDS", doc: { ...full.doc, series: full.doc.series.slice(0, FIRST_PAGE_LINES) } };
+    case "RIA":
+      return { type: "RIA", doc: { ...full.doc, records: full.doc.records.slice(0, FIRST_PAGE_LINES) } };
+    default:
+      return { type: "RAD", doc: { ...full.doc, items: full.doc.items.slice(0, FIRST_PAGE_LINES) } };
+  }
+}
+
+/** Kept from re-drawing while the box around it changes: same document, same picture. */
+export const DocThumbnail = React.memo(function DocThumbnail({ type, id, width }: { type: DocType; id: string; width: number }) {
   const key = `${type}-${id}`;
   const [full, setFull] = React.useState<FullDoc | null | undefined>(() => loaded.get(key));
 
@@ -109,4 +128,4 @@ export function DocThumbnail({ type, id, width }: { type: DocType; id: string; w
       </div>
     </div>
   );
-}
+});

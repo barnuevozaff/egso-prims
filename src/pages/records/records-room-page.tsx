@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { FilePlus2, Inbox, PanelRightOpen, Plus } from "lucide-react";
 
 import { Button, ConfirmationModal, EmptyState, ErrorState, PageTransition, Skeleton, toast } from "@/components";
@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/features/auth/auth-context";
 import { can } from "@/features/auth/types";
 import { BoxView } from "@/features/records/room/box-view";
+import { LOW_POWER, useCalmMotion } from "@/features/records/room/calm-motion";
 import { PlaceDialog } from "@/features/records/room/place-dialog";
 import { RecordsNav } from "@/features/records/room/records-nav";
 import { AddShelfDialog, CreateRecordDialog } from "@/features/records/room/room-dialogs";
@@ -38,7 +39,7 @@ export function RecordsRoomPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canManage = can(user, "manage:records");
-  const reduce = useReducedMotion() ?? false;
+  const reduce = useCalmMotion();
   const { model, loading, failed, refresh } = useRoom();
   const [params, setParams] = useSearchParams();
 
@@ -121,6 +122,11 @@ export function RecordsRoomPage() {
 
   /** Place record: the record chosen, and where the eye already is. */
   const startPlacing = (doc: CatalogDoc, at?: { shelfId?: string | null; positionKey?: string | null }) => {
+    // Every way in — Unplaced, search, a drop, a record's page — passes here: only an approved record is placed.
+    if (doc.status !== "Approved") {
+      toast.error(`${doc.number} is ${doc.status}. Only an approved record is placed in the Records Room.`);
+      return;
+    }
     setSheetOpen(false);
     setPlacingRun((n) => n + 1);
     setPlacing({ doc, shelfId: at?.shelfId ?? shelfId, positionKey: at?.positionKey ?? null });
@@ -128,7 +134,8 @@ export function RecordsRoomPage() {
   const startMoving = (content: BoxContent) => {
     const key = docKey(content.documentType, content.sourceId);
     const doc = model.catalog.get(key);
-    if (!doc) return;
+    // Only an approved record is moved; the function refuses the rest as well.
+    if (!doc || doc.status !== "Approved") return;
     setPlacingRun((n) => n + 1);
     setPlacing({ doc, current: model.placed.get(key) ?? null, shelfId: shelfId });
   };
@@ -148,7 +155,8 @@ export function RecordsRoomPage() {
   const dropOn = (key: string, at: { shelfId: string; positionKey?: string }) => {
     setDragging(false);
     const doc = model.catalog.get(key);
-    if (!doc || !model.unplaced.some((d) => docKey(d.type, d.id) === key)) return;
+    // Unplaced holds only approved records in no box: nothing else is dropped into one.
+    if (!doc || doc.status !== "Approved" || !model.unplaced.some((d) => docKey(d.type, d.id) === key)) return;
     startPlacing(doc, at);
   };
 
@@ -246,9 +254,9 @@ export function RecordsRoomPage() {
               action={canManage ? { label: "Add shelf", onClick: () => setAddShelfOpen(true) } : undefined}
             />
           ) : (
-            <MotionConfig reducedMotion="user" transition={{ type: "spring", stiffness: 210, damping: 30, mass: 0.9 }}>
-              <LayoutGroup>
-                <AnimatePresence mode="popLayout" initial={false}>
+            // Views cross-fade; nothing is measured for shared layout (30 Oct 2026).
+            <MotionConfig reducedMotion={LOW_POWER ? "always" : "user"} transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}>
+                <AnimatePresence mode="wait" initial={false}>
                   {view === "overview" && (
                     <motion.div key="overview" {...fade}>
                       <ShelfOverview
@@ -318,7 +326,6 @@ export function RecordsRoomPage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </LayoutGroup>
             </MotionConfig>
           )}
         </section>

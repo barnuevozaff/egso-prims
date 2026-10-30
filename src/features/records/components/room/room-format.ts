@@ -27,6 +27,14 @@ export function formatDate(iso: string): string {
   return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** A moment (ISO) as the day it was in the Philippines: "Oct 30, 2026". */
+export function formatDay(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" });
+}
+
 export function recordCount(n: number): string {
   return `${n} ${n === 1 ? "record" : "records"}`;
 }

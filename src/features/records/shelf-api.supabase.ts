@@ -8,7 +8,9 @@ import type {
   ShelfWithLevels,
   Slot,
 } from "@/features/records/shelf-types";
-import type { RenameTarget } from "@/features/records/shelf-types";
+import type { DocumentLocation, RenameTarget } from "@/features/records/shelf-types";
+import { boxName, levelTitle } from "@/features/records/shelf-types";
+import type { ScheduleStatus } from "@/features/records/types";
 
 /**
  * The Records Room's furniture and what stands on it. Shelves are added and
@@ -247,4 +249,28 @@ export async function placeDocument(_type: DocType, _sourceId: string, _levelId:
 
 export async function renameLocation(_target: RenameTarget, _name: string): Promise<void> {
   throw new Error(FIREBASE_ONLY);
+}
+
+export async function moveRecordStatus(_type: DocType, _id: string, _to: ScheduleStatus): Promise<void> {
+  throw new Error(FIREBASE_ONLY);
+}
+
+/** Where one document is filed (Supabase): read from the whole room, as before. */
+export async function locateDocument(type: DocType, sourceId: string): Promise<DocumentLocation | null> {
+  const [shelves, boxes, contents] = await Promise.all([listShelves(), listBoxes(), listContents()]);
+  const line = contents.find((c) => c.documentType === type && c.sourceId === sourceId);
+  const box = line ? boxes.find((b) => b.id === line.boxId) : undefined;
+  for (const shelf of shelves) {
+    const level = box ? shelf.levels.find((l) => l.id === box.shelfLevelId) : undefined;
+    if (box && level) {
+      return {
+        shelfId: shelf.id,
+        shelfName: shelf.name,
+        levelTitle: levelTitle(level),
+        boxName: boxName(box),
+        positionKey: `${box.shelfLevelId}~${box.slot}`,
+      };
+    }
+  }
+  return null;
 }

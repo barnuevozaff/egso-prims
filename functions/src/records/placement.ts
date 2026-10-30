@@ -7,6 +7,7 @@ import { callerOf, requireRole } from "../documents/caller.js";
 import { record, requiredText, text } from "../documents/validate.js";
 import { SPECS } from "./documents.js";
 import { contentId, positionId, type DocType } from "./room.js";
+import { assertPlaceable } from "./workflow.js";
 
 /**
  * Placing records in the Records Room by hand (30 Oct 2026).
@@ -67,13 +68,8 @@ export const placeRecordDocument = onCall(async (request) => {
     ]);
     if (!doc.exists) throw new HttpsError("not-found", "That document no longer exists.");
     const number = String(doc.get(spec.numberField) ?? sourceId);
-    // Only an approved form is filed; a voided one stays where it was, marked voided.
-    if (doc.get("status") !== "Approved") {
-      throw new HttpsError(
-        "failed-precondition",
-        `${number} is ${String(doc.get("status") ?? "not approved")}. Only an approved document is filed in the Records Room.`,
-      );
-    }
+    // Only an approved form is filed or moved; a voided one stays where it was, marked voided.
+    assertPlaceable(String(doc.get("status") ?? ""), number);
     if (!level.exists) throw new HttpsError("failed-precondition", "That shelf level no longer exists. Choose another box.");
 
     let boxId = position.exists ? String(position.get("box_id")) : null;

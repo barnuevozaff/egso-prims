@@ -1,17 +1,7 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Printer } from "lucide-react";
 
-import {
-  Button,
-  PageHeader,
-  PageTransition,
-  Spinner,
-  StatusBadge,
-  type DocumentStatus,
-} from "@/components";
-import { useAuth } from "@/features/auth/auth-context";
-import { can } from "@/features/auth/types";
+import { Button, PageHeader, PageTransition, Spinner, type DocumentStatus } from "@/components";
 import { voidRequest } from "@/features/records/disposal-api";
 import { useDisposalRequest } from "@/features/records/disposal-hooks";
 import {
@@ -19,8 +9,11 @@ import {
   DisposalRequestSheet,
 } from "@/features/records/components/disposal-print-form";
 import { PaperSheet } from "@/features/shared/paper-sheet";
-import { FiledLocation } from "@/features/records/components/room/filed-location";
-import { VoidButton, VoidedNotice, VoidRecordDialog } from "@/features/shared/void-record";
+import { VoidedNotice, VoidRecordDialog } from "@/features/shared/void-record";
+import { RecordPageHeader } from "@/features/shared/record-page";
+import { RecordDetailPanel } from "@/features/records/components/record-detail-panel";
+import { RecordLayout } from "@/features/records/components/record-layout";
+import { formatDate, formatDay } from "@/features/records/components/room/room-format";
 
 /**
  * One request for authority to dispose, shown as NAP Form No. 3.
@@ -33,11 +26,11 @@ import { VoidButton, VoidedNotice, VoidRecordDialog } from "@/features/shared/vo
 export function DisposalDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { data: request, loading, refresh } = useDisposalRequest(id);
   const [confirmVoid, setConfirmVoid] = React.useState(false);
 
-  if (loading) {
+  // Only the first read waits on a spinner; a refresh keeps the page in place.
+  if (loading && !request) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner />
@@ -62,45 +55,41 @@ export function DisposalDetailPage() {
   return (
     <>
       <PageTransition className="space-y-5">
-        <PageHeader
-          title={request.requestNo}
-          description="Request for Authority to Dispose of Records — NAP Form No. 3"
-          actions={
-            <div className="flex items-center gap-2">
-              <StatusBadge status={request.status as DocumentStatus} />
-              <Button variant="ghost" onClick={() => navigate("/records/disposal")}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
-              <Button variant="outline" onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print
-              </Button>
-              {can(user, "manage:records") && request.status !== "Cancelled" && (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate(`/records/disposal/${request.id}/edit`)}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <VoidButton onClick={() => setConfirmVoid(true)} />
-                </>
-              )}
-            </div>
-          }
+        <RecordPageHeader
+          back={{ to: "/records/disposal", label: "Authority to dispose" }}
+          number={request.requestNo}
+          status={request.status as DocumentStatus}
+          description="Request for Authority to Dispose of Records"
         />
 
-        {request.status === "Cancelled" && (
-          <VoidedNotice voidedAt={request.voidedAt} voidedBy={request.voidedBy} voidReason={request.voidReason} />
-        )}
-
-        <PaperSheet>
-          <DisposalRequestSheet request={request} />
-        </PaperSheet>
-
-        <FiledLocation type="RAD" sourceId={request.id} status={request.status} />
+        {/* Every action of the record beside it, in one place (30 Oct 2026). */}
+        <RecordLayout
+          panel={
+            <RecordDetailPanel
+              kind="RAD"
+              id={request.id}
+              number={request.requestNo}
+              status={request.status}
+              facts={[
+                { label: "Request date", value: formatDate(request.requestDate) },
+                { label: "Items", value: request.items.length },
+                { label: "Created", value: formatDay(request.createdAt) },
+                { label: "Last changed", value: formatDay(request.updatedAt) },
+              ]}
+              editTo={`/records/disposal/${request.id}/edit`}
+              onPrint={() => window.print()}
+              onVoid={() => setConfirmVoid(true)}
+              onMoved={() => void refresh()}
+            />
+          }
+        >
+          {request.status === "Cancelled" && (
+            <VoidedNotice voidedAt={request.voidedAt} voidedBy={request.voidedBy} voidReason={request.voidReason} />
+          )}
+          <PaperSheet fit>
+            <DisposalRequestSheet request={request} />
+          </PaperSheet>
+        </RecordLayout>
       </PageTransition>
 
       <DisposalPrintForm request={request} />

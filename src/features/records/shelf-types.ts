@@ -199,3 +199,15 @@ export type RenameTarget =
   | { kind: "shelf"; id: string }
   | { kind: "level"; id: string }
   | { kind: "box"; levelId: string; slot: number };
+
+/** Where one document is filed, read for its own page. */
+export interface DocumentLocation {
+  shelfId: string;
+  shelfName: string;
+  levelTitle: string;
+  boxName: string;
+  /** `{levelId}~{slot}`, as the Records Room addresses a box. */
+  positionKey: string;
+  /** Voided after it was placed: it stays in its box, marked voided. */
+  voided?: boolean;
+}

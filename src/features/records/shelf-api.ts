@@ -30,3 +30,5 @@ export const moveBox = pick("moveBox");
 export const relabelBox = pick("relabelBox");
 export const placeDocument = pick("placeDocument");
 export const renameLocation = pick("renameLocation");
+export const locateDocument = pick("locateDocument");
+export const moveRecordStatus = pick("moveRecordStatus");
