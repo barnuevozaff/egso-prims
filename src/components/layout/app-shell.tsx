@@ -36,10 +36,18 @@ export function AppShell({
       {sidebar}
       <div className="flex h-screen min-w-0 flex-1 flex-col bg-canvas">
         {topBar}
+        {/*
+         * `relative` makes <main> — the one scroller — the containing block of
+         * everything absolutely placed inside it (30 Oct 2026). Without it the
+         * visually hidden labels, the native <select> behind each dropdown and
+         * the charts' data tables were placed against <body>: <main> neither
+         * clipped nor scrolled them, so a long form made the whole page scroll
+         * a second time, header and sidebar with it, onto blank white.
+         */}
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 space-y-6 overflow-y-auto px-5 py-6 focus-visible:outline-none md:px-8"
+          className="relative flex-1 space-y-6 overflow-y-auto px-5 py-6 focus-visible:outline-none md:px-8"
         >
           {children}
         </main>

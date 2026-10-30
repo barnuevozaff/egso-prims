@@ -4,8 +4,10 @@ import { Bell, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Sticky application header: translucent white with backdrop blur, bottom
- * border, horizontal slot layout (Design Foundation top bar).
+ * Application header: the rail's tone, bottom border, horizontal slot layout
+ * (Design Foundation top bar). It sits above <main>, the page's only
+ * scroller, so nothing passes beneath it: the translucency and backdrop blur
+ * it had showed nothing and were dropped (30 Oct 2026).
  */
 export function TopBar({
   onToggleSidebar,
@@ -26,7 +28,7 @@ export function TopBar({
         // The rail's tone, not white: the bar and the rail are both chrome and
         // they meet at the top-left corner, so painting one lighter than the
         // canvas and the other darker split the frame into two materials.
-        "sticky top-0 z-10 flex items-center gap-3 border-b border-neutral-200 bg-sidebar/85 px-barpx py-barpy backdrop-blur md:px-8",
+        "sticky top-0 z-10 flex items-center gap-3 border-b border-neutral-200 bg-sidebar px-barpx py-barpy md:px-8",
         className,
       )}
     >
@@ -34,13 +36,14 @@ export function TopBar({
         <button
           aria-label="Toggle sidebar"
           onClick={onToggleSidebar}
-          className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
+          className="shrink-0 rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
       )}
       {children}
-      <div className="ml-auto flex items-center gap-2">{actions}</div>
+      {/* Never squeezed: on a phone the trail gives way, not the bell and the account. */}
+      <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>
     </header>
   );
 }

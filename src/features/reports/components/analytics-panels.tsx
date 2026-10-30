@@ -243,7 +243,8 @@ export function AnalyticsPanels({
 
   return (
     <Tabs defaultValue="overview">
-      <TabsList className="bg-neutral-100">
+      {/* Seven tabs are wider than a phone: the row scrolls sideways inside itself. */}
+      <TabsList className="max-w-full justify-start overflow-x-auto bg-neutral-100">
         <TabsTrigger value="overview" className="text-[12.5px]">
           Overview
         </TabsTrigger>

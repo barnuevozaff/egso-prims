@@ -99,7 +99,9 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate">{shownLabel ?? placeholder}</span>
+          {/* w-0 + flex-1: a long choice is cut short here instead of widening
+              the form around it (a phone's column, 30 Oct 2026). */}
+          <span className="w-0 flex-1 truncate text-left">{shownLabel ?? placeholder}</span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         </button>
       </PopoverTrigger>

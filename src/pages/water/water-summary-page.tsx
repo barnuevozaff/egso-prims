@@ -616,7 +616,8 @@ export function WaterSummaryPage() {
 
         {/* Submeter breakdown — main account → submeters → grand total */}
         {includeBreakdown && breakdown.length > 0 && effectiveBreakdownMonth !== null && (
-          <div className="mt-6">
+          // Scrolls sideways inside itself on a phone, as the monthly matrix does; never on paper.
+          <div className="mt-6 overflow-x-auto print:overflow-visible">
             <div className="rounded-t-lg bg-neutral-900 px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-white">
               Submeter Breakdown — {monthName(effectiveBreakdownMonth)} {year}
             </div>

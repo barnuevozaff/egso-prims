@@ -34,13 +34,15 @@ export function ProfileMenu({ name, detail, initials, items = [], className }: P
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
+          aria-label={`Account: ${name}`}
           className={cn(
             "flex items-center gap-2 rounded-lg border border-neutral-200 bg-white py-1 pl-1 pr-2 text-[12.5px] font-medium text-neutral-700 transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-ring)",
             className,
           )}
         >
           <Avatar size="sm" name={name} initials={initials} className="rounded-[7px] bg-none bg-neutral-900" />
-          {name}
+          {/* On a phone the avatar stands for the name, which is in the menu itself. */}
+          <span className="hidden max-w-[220px] truncate sm:inline">{name}</span>
           <ChevronDown className="h-3 w-3 text-neutral-400" />
         </button>
       </DropdownMenuTrigger>

@@ -256,7 +256,7 @@ export function AuditListPage() {
   );
 
   return (
-    <PageTransition className="flex h-full min-h-0 flex-col gap-4">
+    <PageTransition className="flex flex-col gap-4 2xl:h-full 2xl:min-h-0">
       <PageHeader
         title="Audit Trail"
         description="Complete, immutable log of every user action and system event across General Services Office."

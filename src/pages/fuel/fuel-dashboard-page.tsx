@@ -641,7 +641,8 @@ export function FuelDashboardPage() {
               fillContainer
               stickyHeader
               pageSize={12}
-              minWidth={1560}
+              // A floor, not a width: wider content still widens it. Its columns need about 1200px (measured 30 Oct 2026).
+              minWidth={1200}
               enableRowSelection
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}

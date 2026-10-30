@@ -621,7 +621,8 @@ export function FuelSummaryPage() {
 
         {/* Trip-based distance and efficiency, derived from recorded trips */}
         {tripRows.length > 0 && (
-          <div className="mt-6 break-inside-avoid">
+          // Scrolls sideways inside itself on a phone, as the monthly matrix does; never on paper.
+          <div className="mt-6 break-inside-avoid overflow-x-auto print:overflow-visible">
             <div className="rounded-t-lg bg-neutral-900 px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-white">
               Trip Summary — Distance &amp; Fuel Efficiency — {year}
             </div>
@@ -722,7 +723,7 @@ export function FuelSummaryPage() {
 
         {/* Optional trip detail for a single month — the Trip Summary sheet */}
         {includeTripDetail && (
-          <div className="mt-6 break-inside-avoid">
+          <div className="mt-6 break-inside-avoid overflow-x-auto print:overflow-visible">
             <div className="rounded-t-lg bg-neutral-900 px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-white">
               Trip Detail — {monthName(detailMonth)} {year}
             </div>

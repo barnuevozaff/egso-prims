@@ -579,7 +579,8 @@ export function EnergyDashboardPage() {
               fillContainer
               stickyHeader
               pageSize={12}
-              minWidth={1340}
+              // A floor, not a width: wider content still widens it. Measured 30 Oct 2026 so the list fits a 1440px screen.
+              minWidth={1100}
               enableRowSelection
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}

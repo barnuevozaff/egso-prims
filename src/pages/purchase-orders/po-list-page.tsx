@@ -196,7 +196,7 @@ export function POListPage() {
   );
 
   return (
-    <PageTransition className="flex h-full min-h-0 flex-col gap-4">
+    <PageTransition className="flex flex-col gap-4 lg:h-full lg:min-h-0">
       <PageHeader
         title="Purchase orders"
         description="Created when a purchase request is approved. Complete the details and print the official order."

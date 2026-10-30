@@ -99,12 +99,13 @@ export interface DepartmentChipProps {
 /** Small identity square + department code. */
 export function DepartmentChip({ code, name, color, className }: DepartmentChipProps) {
   return (
+    // One line in a table row: a long office name is cut short, whole in the title.
     <span
       title={name}
-      className={cn("inline-flex items-center gap-2 text-[12.5px] text-neutral-600", className)}
+      className={cn("inline-flex max-w-[220px] items-center gap-2 whitespace-nowrap text-[12.5px] text-neutral-600", className)}
     >
       {color && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", color)} />}
-      {code}
+      <span className="truncate">{code}</span>
     </span>
   );
 }
