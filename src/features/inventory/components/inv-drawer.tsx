@@ -173,7 +173,8 @@ export function InvDrawer({
                 ) : (
                   <table className="mt-2 w-full table-fixed border-collapse text-[13px]">
                     <colgroup>
-                      <col style={{ width: "22%" }} />
+                      {/* Room for "30/10/2026" itself: at 22% of a phone's drawer the date ran into the reference. */}
+                      <col style={{ width: "92px" }} />
                       <col style={{ width: "26%" }} />
                       <col />
                       <col style={{ width: "16%" }} />
@@ -191,7 +192,7 @@ export function InvDrawer({
                         const m = movement(e, e.office ?? offices[e.documentNumber]);
                         return (
                           <tr key={e.id} className="border-t border-[#f0f0ee] align-top">
-                            <td className="py-2 pr-2 tabular-nums text-neutral-700">{printDate(e.date)}</td>
+                            <td className="whitespace-nowrap py-2 pr-2 tabular-nums text-neutral-700">{printDate(e.date)}</td>
                             <td className="truncate py-2 pr-2 font-['Geist_Mono',ui-monospace,monospace] text-[12.5px] text-neutral-700">
                               {e.documentNumber || "—"}
                             </td>

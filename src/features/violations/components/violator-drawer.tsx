@@ -254,7 +254,8 @@ export function ViolatorDrawer({
                         <TableBody>
                           {profile.violations.map((v) => (
                             <TableRow key={v.id}>
-                              <TableCell first className="font-medium text-neutral-900">
+                              {/* A document number is one token: never broken across lines (the table scrolls instead). */}
+                              <TableCell first className="whitespace-nowrap font-medium text-neutral-900">
                                 {v.violationNo}
                                 {/* The paper serial identifies the same ticket,
                                     so it sits with the system's number. */}

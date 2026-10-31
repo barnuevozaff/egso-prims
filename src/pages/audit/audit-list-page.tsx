@@ -204,7 +204,8 @@ export function AuditListPage() {
         accessorKey: "departmentCode",
         cell: ({ getValue }) => {
           const dept = departmentByCode(getValue<string>());
-          return <DepartmentChip code={dept.code} name={dept.name} color={dept.color} />;
+          // One line per row: an entry may carry an office's full name, which wrapped to three lines.
+          return <DepartmentChip code={dept.code} name={dept.name} color={dept.color} className="whitespace-nowrap" />;
         },
       },
       {

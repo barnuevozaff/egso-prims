@@ -204,108 +204,113 @@ export function ResForm({ initial, submitLabel, submitting, onSubmit, onCancel, 
       ref={formRef}
       onSubmit={submit}
       noValidate
-      className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8"
+      className="@container w-full"
     >
-      <div className="flex min-w-0 flex-col gap-5">
-        <Section title="Who is asking">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <LabelledField id="res-office" label="Requesting office" error={err.departmentCode?.message}>
-              <Controller
-                control={form.control}
-                name="departmentCode"
-                render={({ field }) => (
-                  <OfficeField
-                    id="res-office"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    invalid={!!err.departmentCode}
-                    describedBy={err.departmentCode ? "res-office-error" : undefined}
-                  />
-                )}
-              />
-            </LabelledField>
-            <LabelledField id="res-borrower" label="Borrower" error={err.borrower?.message}>
-              <Input
-                id="res-borrower"
-                placeholder="e.g. Ms. Anna Lorenzo"
-                autoComplete="name"
-                invalid={!!err.borrower}
-                aria-describedby={err.borrower ? "res-borrower-error" : undefined}
-                className={FIELD}
-                {...form.register("borrower")}
-              />
-            </LabelledField>
-            <LabelledField id="res-contact" label="Contact number" error={err.contactNumber?.message}>
-              <Input
-                id="res-contact"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="e.g. 0917 220 4455"
-                invalid={!!err.contactNumber}
-                aria-describedby={err.contactNumber ? "res-contact-error" : undefined}
-                className={cn(FIELD, MONO, "text-[14px]", "placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif]")}
-                {...form.register("contactNumber")}
-              />
-            </LabelledField>
-          </div>
-        </Section>
-
-        <Section title="Where and when">
-          <LabelledField
-            id="res-facility"
-            label="Facility"
-            error={err.facilityId?.message}
-            helper="Type the facility's name and where it is. If it was booked before under the same name, its booked times show below."
-          >
-            <Input
-              id="res-facility"
-              placeholder="e.g. Session Hall, 2F Municipal Hall"
-              invalid={!!err.facilityId}
-              aria-describedby={err.facilityId ? "res-facility-error" : "res-facility-helper"}
-              className={FIELD}
-              {...form.register("facilityId")}
-            />
-          </LabelledField>
-
-          {/* Side by side only when this card is wide enough (30 Oct 2026). The
-              window's width misled: beside the admin sidebar the card is 240px
-              narrower, the slots fell into one column behind the Summary, and
-              a tall empty space opened under the calendar. */}
-          <div className="mt-5 @container">
-            <div className="grid gap-6 @min-[33rem]:grid-cols-[minmax(316px,340px)_minmax(0,1fr)]">
-              <DatePickerMonth
-                form={form}
-                month={month}
-                setMonth={setMonth}
-                bookings={facilityBookings}
-                initialDate={initial ? new Date(`${initial.date}T00:00:00`) : undefined}
-              />
-              <TimeSlots form={form} bookings={facilityBookings} loading={loadingBookings} />
+      {/* Side by side only when the form itself has the width (30 Oct 2026): beside the
+          admin sidebar a 1024px window left the fields under 400px. The portal, with no
+          sidebar, still lays out as before. */}
+      <div className="grid w-full items-start gap-6 @min-[940px]:grid-cols-[minmax(0,1fr)_340px] @min-[940px]:gap-8">
+        <div className="flex min-w-0 flex-col gap-5">
+          <Section title="Who is asking">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LabelledField id="res-office" label="Requesting office" error={err.departmentCode?.message}>
+                <Controller
+                  control={form.control}
+                  name="departmentCode"
+                  render={({ field }) => (
+                    <OfficeField
+                      id="res-office"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      invalid={!!err.departmentCode}
+                      describedBy={err.departmentCode ? "res-office-error" : undefined}
+                    />
+                  )}
+                />
+              </LabelledField>
+              <LabelledField id="res-borrower" label="Borrower" error={err.borrower?.message}>
+                <Input
+                  id="res-borrower"
+                  placeholder="e.g. Ms. Anna Lorenzo"
+                  autoComplete="name"
+                  invalid={!!err.borrower}
+                  aria-describedby={err.borrower ? "res-borrower-error" : undefined}
+                  className={FIELD}
+                  {...form.register("borrower")}
+                />
+              </LabelledField>
+              <LabelledField id="res-contact" label="Contact number" error={err.contactNumber?.message}>
+                <Input
+                  id="res-contact"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="e.g. 0917 220 4455"
+                  invalid={!!err.contactNumber}
+                  aria-describedby={err.contactNumber ? "res-contact-error" : undefined}
+                  className={cn(FIELD, MONO, "text-[14px]", "placeholder:font-['Geist',ui-sans-serif,system-ui,sans-serif]")}
+                  {...form.register("contactNumber")}
+                />
+              </LabelledField>
             </div>
-          </div>
-        </Section>
+          </Section>
 
-        <Section title="The activity">
-          <LabelledField id="res-purpose" label="Purpose or activity" error={err.purpose?.message}>
-            <Textarea
-              id="res-purpose"
-              rows={2}
-              placeholder="e.g. Sangguniang Bayan regular session"
-              invalid={!!err.purpose}
-              aria-describedby={err.purpose ? "res-purpose-error" : undefined}
-              className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
-              {...form.register("purpose")}
-            />
-          </LabelledField>
-        </Section>
+          <Section title="Where and when">
+            <LabelledField
+              id="res-facility"
+              label="Facility"
+              error={err.facilityId?.message}
+              helper="Type the facility's name and where it is. If it was booked before under the same name, its booked times show below."
+            >
+              <Input
+                id="res-facility"
+                placeholder="e.g. Session Hall, 2F Municipal Hall"
+                invalid={!!err.facilityId}
+                aria-describedby={err.facilityId ? "res-facility-error" : "res-facility-helper"}
+                className={FIELD}
+                {...form.register("facilityId")}
+              />
+            </LabelledField>
 
-        <EquipmentSection form={form} />
+            {/* Side by side only when this card is wide enough (30 Oct 2026). The
+                window's width misled: beside the admin sidebar the card is 240px
+                narrower, the slots fell into one column behind the Summary, and
+                a tall empty space opened under the calendar. */}
+            <div className="mt-5 @container">
+              <div className="grid gap-6 @min-[33rem]:grid-cols-[minmax(316px,340px)_minmax(0,1fr)]">
+                <DatePickerMonth
+                  form={form}
+                  month={month}
+                  setMonth={setMonth}
+                  bookings={facilityBookings}
+                  initialDate={initial ? new Date(`${initial.date}T00:00:00`) : undefined}
+                />
+                <TimeSlots form={form} bookings={facilityBookings} loading={loadingBookings} />
+              </div>
+            </div>
+          </Section>
+
+          <Section title="The activity">
+            <LabelledField id="res-purpose" label="Purpose or activity" error={err.purpose?.message}>
+              <Textarea
+                id="res-purpose"
+                rows={2}
+                placeholder="e.g. Sangguniang Bayan regular session"
+                invalid={!!err.purpose}
+                aria-describedby={err.purpose ? "res-purpose-error" : undefined}
+                className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
+                {...form.register("purpose")}
+              />
+            </LabelledField>
+          </Section>
+
+          <EquipmentSection form={form} />
+        </div>
+
+        <SummaryPanel form={form} submitLabel={submitLabel} submitting={submitting} onCancel={onCancel} />
+        <LeaveGuard active={form.formState.isDirty && !submitting} />
       </div>
-
-      <SummaryPanel form={form} submitLabel={submitLabel} submitting={submitting} onCancel={onCancel} />
-      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }
@@ -746,7 +751,7 @@ function SummaryPanel({
   return (
     <aside
       aria-label="Summary"
-      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 lg:sticky lg:top-6"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 @min-[940px]:sticky @min-[940px]:top-6"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>

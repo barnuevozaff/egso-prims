@@ -249,106 +249,111 @@ export function RISForm({
     <form
       onSubmit={submit}
       noValidate
-      className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8"
+      className="@container w-full"
     >
-      <div className="flex min-w-0 flex-col gap-5">
-        {admin && (
-          <Section title="Source">
-            <SourcePR form={form} approvedPRs={approvedPRs} onSelectPR={applyPR} />
+      {/* Side by side only when the form itself has the width (30 Oct 2026): beside the
+          admin sidebar a 1024px window left the fields under 400px. The portal, with no
+          sidebar, still lays out as before. */}
+      <div className="grid w-full items-start gap-6 @min-[940px]:grid-cols-[minmax(0,1fr)_340px] @min-[940px]:gap-8">
+        <div className="flex min-w-0 flex-col gap-5">
+          {admin && (
+            <Section title="Source">
+              <SourcePR form={form} approvedPRs={approvedPRs} onSelectPR={applyPR} />
+            </Section>
+          )}
+
+          <Section title="Who is asking">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LabelledField id="ris-office" label="Requesting office" error={err.departmentCode?.message}>
+                <Controller
+                  control={form.control}
+                  name="departmentCode"
+                  render={({ field }) => (
+                    <OfficeField
+                      // A source PR replaces the office, so the field remounts
+                      // and re-reads whether it is a listed one.
+                      key={prNumber || "none"}
+                      id="ris-office"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      invalid={!!err.departmentCode}
+                      describedBy={err.departmentCode ? "ris-office-error" : undefined}
+                    />
+                  )}
+                />
+              </LabelledField>
+              <LabelledField id="ris-requester" label="Requested by" error={err.requester?.message}>
+                <Input
+                  id="ris-requester"
+                  placeholder="e.g. Nurse Joel Aquino"
+                  autoComplete="name"
+                  invalid={!!err.requester}
+                  aria-describedby={err.requester ? "ris-requester-error" : undefined}
+                  className={FIELD}
+                  {...form.register("requester")}
+                />
+              </LabelledField>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <LabelledField id="ris-fund" label="Fund" optional>
+                <Input
+                  id="ris-fund"
+                  placeholder="e.g. General Fund"
+                  className={FIELD}
+                  {...form.register("fund")}
+                />
+              </LabelledField>
+              <LabelledField id="ris-division" label="Division" optional>
+                <Input
+                  id="ris-division"
+                  placeholder="e.g. Rural Health Unit"
+                  className={FIELD}
+                  {...form.register("division")}
+                />
+              </LabelledField>
+              <LabelledField id="ris-fpp" label="FPP Code" optional>
+                <Input
+                  id="ris-fpp"
+                  placeholder="e.g. 4410"
+                  className={FIELD}
+                  {...form.register("fppCode")}
+                />
+              </LabelledField>
+            </div>
           </Section>
-        )}
 
-        <Section title="Who is asking">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <LabelledField id="ris-office" label="Requesting office" error={err.departmentCode?.message}>
-              <Controller
-                control={form.control}
-                name="departmentCode"
-                render={({ field }) => (
-                  <OfficeField
-                    // A source PR replaces the office, so the field remounts
-                    // and re-reads whether it is a listed one.
-                    key={prNumber || "none"}
-                    id="ris-office"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    invalid={!!err.departmentCode}
-                    describedBy={err.departmentCode ? "ris-office-error" : undefined}
-                  />
-                )}
-              />
-            </LabelledField>
-            <LabelledField id="ris-requester" label="Requested by" error={err.requester?.message}>
-              <Input
-                id="ris-requester"
-                placeholder="e.g. Nurse Joel Aquino"
-                autoComplete="name"
-                invalid={!!err.requester}
-                aria-describedby={err.requester ? "ris-requester-error" : undefined}
-                className={FIELD}
-                {...form.register("requester")}
-              />
-            </LabelledField>
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <LabelledField id="ris-fund" label="Fund" optional>
-              <Input
-                id="ris-fund"
-                placeholder="e.g. General Fund"
-                className={FIELD}
-                {...form.register("fund")}
-              />
-            </LabelledField>
-            <LabelledField id="ris-division" label="Division" optional>
-              <Input
-                id="ris-division"
-                placeholder="e.g. Rural Health Unit"
-                className={FIELD}
-                {...form.register("division")}
-              />
-            </LabelledField>
-            <LabelledField id="ris-fpp" label="FPP Code" optional>
-              <Input
-                id="ris-fpp"
-                placeholder="e.g. 4410"
-                className={FIELD}
-                {...form.register("fppCode")}
-              />
-            </LabelledField>
-          </div>
-        </Section>
-
-        <Section title="What it is for">
-          <LabelledField
-            id="ris-purpose"
-            label="Purpose"
-            error={err.purpose?.message}
-            helper="Say what the supplies are for and where they will be used."
-          >
-            <Textarea
+          <Section title="What it is for">
+            <LabelledField
               id="ris-purpose"
-              rows={3}
-              placeholder="e.g. Ward supplies for the July immunisation drive"
-              invalid={!!err.purpose}
-              aria-describedby={err.purpose ? "ris-purpose-error" : "ris-purpose-helper"}
-              className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
-              {...form.register("purpose")}
-            />
-          </LabelledField>
-        </Section>
+              label="Purpose"
+              error={err.purpose?.message}
+              helper="Say what the supplies are for and where they will be used."
+            >
+              <Textarea
+                id="ris-purpose"
+                rows={3}
+                placeholder="e.g. Ward supplies for the July immunisation drive"
+                invalid={!!err.purpose}
+                aria-describedby={err.purpose ? "ris-purpose-error" : "ris-purpose-helper"}
+                className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
+                {...form.register("purpose")}
+              />
+            </LabelledField>
+          </Section>
 
-        <ItemsSection form={form} admin={admin} inventory={inventory} />
+          <ItemsSection form={form} admin={admin} inventory={inventory} />
+        </div>
+
+        <SummaryPanel
+          form={form}
+          admin={admin}
+          submitLabel={submitLabel}
+          submitting={submitting}
+          onCancel={onCancel}
+        />
+        <LeaveGuard active={form.formState.isDirty && !submitting} />
       </div>
-
-      <SummaryPanel
-        form={form}
-        admin={admin}
-        submitLabel={submitLabel}
-        submitting={submitting}
-        onCancel={onCancel}
-      />
-      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }
@@ -744,7 +749,7 @@ function SummaryPanel({
   return (
     <aside
       aria-label="Summary"
-      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 lg:sticky lg:top-6"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 @min-[940px]:sticky @min-[940px]:top-6"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>

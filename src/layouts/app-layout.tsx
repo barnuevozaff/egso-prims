@@ -283,7 +283,18 @@ function AppSidebar({
  * the office files by, so the trail ends at the section instead.
  */
 const isRecordId = (segment: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
+  // A UUID, bare or wrapped: an inventory item is `inv-<uuid>-<row>` (createInventoryItems).
+  /^([a-z]{2,5}-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-[A-Za-z0-9-]{1,40})?$/i.test(segment);
+
+/**
+ * The named pages under a section, as their headings call them. The trail
+ * used to print the path segment itself: "Energy Consumption › summary",
+ * "Inventory › import" (30 Oct 2026).
+ */
+const SUBPAGES: Record<string, string> = {
+  summary: "Summary report",
+  import: "Scan / import",
+};
 
 /** Derives the breadcrumb trail from the current route. */
 function useBreadcrumbs(): BreadcrumbItem[] {
@@ -337,6 +348,7 @@ function useBreadcrumbs(): BreadcrumbItem[] {
       if (rest[0] === "new") crumbs.push({ label: newLabel });
       else if (rest[0] === "shelves") crumbs.push({ label: "Records Room" });
       else if (rest[1] === "edit") crumbs.push({ label: isRecordId(rest[0]) ? "Edit" : `Edit ${rest[0]}` });
+      else if (SUBPAGES[rest[0]]) crumbs.push({ label: SUBPAGES[rest[0]] });
       else if (!isRecordId(rest[0])) crumbs.push({ label: rest[0] });
     }
     return crumbs;

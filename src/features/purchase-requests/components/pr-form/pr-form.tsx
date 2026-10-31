@@ -141,114 +141,119 @@ export function PRForm({ initial, audience = "staff", submitLabel, submitting, o
     <form
       onSubmit={submit}
       noValidate
-      className="grid w-full items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-8"
+      className="@container w-full"
     >
-      <div className="flex min-w-0 flex-col gap-5">
-        <Section title="Request details">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <LabelledField id="pr-office" label="Requesting office" error={err.departmentCode?.message}>
-              <Controller
-                control={form.control}
-                name="departmentCode"
-                render={({ field }) => (
-                  <OfficeField
-                    id="pr-office"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    invalid={!!err.departmentCode}
-                    describedBy={err.departmentCode ? "pr-office-error" : undefined}
-                  />
-                )}
-              />
-            </LabelledField>
-            <LabelledField id="pr-requester" label="Requested by" error={err.requester?.message}>
-              <Input
-                id="pr-requester"
-                placeholder="e.g. Juan Dela Cruz"
-                autoComplete="name"
-                invalid={!!err.requester}
-                aria-describedby={err.requester ? "pr-requester-error" : undefined}
-                className={FIELD}
-                {...form.register("requester")}
-              />
-            </LabelledField>
-          </div>
-
-          {/* The optional lines of the official form, in its order. */}
-          <div className={cn("mt-4 grid gap-4 border-t border-[#f0f0ee] pt-4", askFund ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-            {askFund && (
-              <LabelledField id="pr-fund" label="Fund" optional error={err.fundingSource?.message}>
+      {/* Side by side only when the form itself has the width (30 Oct 2026): beside the
+          admin sidebar a 1024px window left the fields under 400px. The portal, with no
+          sidebar, still lays out as before. */}
+      <div className="grid w-full items-start gap-6 @min-[900px]:grid-cols-[minmax(0,1fr)_300px] @min-[900px]:gap-8">
+        <div className="flex min-w-0 flex-col gap-5">
+          <Section title="Request details">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LabelledField id="pr-office" label="Requesting office" error={err.departmentCode?.message}>
                 <Controller
                   control={form.control}
-                  name="fundingSource"
+                  name="departmentCode"
                   render={({ field }) => (
-                    <SelectField
-                      id="pr-fund"
-                      aria-label="Fund"
-                      placeholder="Not specified"
-                      // Radix Select cannot hold "" as an option, so "Not
-                      // specified" travels as a sentinel and is stored blank.
-                      options={[
-                        { value: NO_FUND, label: "Not specified" },
-                        ...FUNDING_SOURCES.map((s) => ({ value: s, label: s })),
-                      ]}
-                      value={field.value || NO_FUND}
-                      onChange={(v) => field.onChange(v === NO_FUND ? "" : v)}
-                      size="lg"
-                      className="h-11 rounded-[10px] border-[#d4d5d2] px-3.5 text-[15px] text-neutral-900"
+                    <OfficeField
+                      id="pr-office"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      invalid={!!err.departmentCode}
+                      describedBy={err.departmentCode ? "pr-office-error" : undefined}
                     />
                   )}
                 />
               </LabelledField>
-            )}
-            <LabelledField id="pr-section" label="Section" optional error={err.section?.message}>
-              <Input id="pr-section" autoComplete="off" className={FIELD} {...form.register("section")} />
-            </LabelledField>
-            <LabelledField id="pr-fpp" label="FPP" optional error={err.fpp?.message}>
-              <Input id="pr-fpp" autoComplete="off" className={FIELD} {...form.register("fpp")} />
-            </LabelledField>
-          </div>
+              <LabelledField id="pr-requester" label="Requested by" error={err.requester?.message}>
+                <Input
+                  id="pr-requester"
+                  placeholder="e.g. Juan Dela Cruz"
+                  autoComplete="name"
+                  invalid={!!err.requester}
+                  aria-describedby={err.requester ? "pr-requester-error" : undefined}
+                  className={FIELD}
+                  {...form.register("requester")}
+                />
+              </LabelledField>
+            </div>
 
-          {/* Required on a new request (restored 21 Oct 2026); on an edit it
-              may still be blank, and the request is not approved without it. */}
-          <div className="mt-4 border-t border-[#f0f0ee] pt-4">
-            <LabelledField
-              id="pr-purpose"
-              label="Purpose"
-              optional={!!initial}
-              error={err.purpose?.message}
-              helper={
-                initial
-                  ? "Printed on the official request. Required before the request can be approved."
-                  : "Printed on the official request. Say what the items are for."
-              }
-            >
-              <Textarea
+            {/* The optional lines of the official form, in its order. */}
+            <div className={cn("mt-4 grid gap-4 border-t border-[#f0f0ee] pt-4", askFund ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+              {askFund && (
+                <LabelledField id="pr-fund" label="Fund" optional error={err.fundingSource?.message}>
+                  <Controller
+                    control={form.control}
+                    name="fundingSource"
+                    render={({ field }) => (
+                      <SelectField
+                        id="pr-fund"
+                        aria-label="Fund"
+                        placeholder="Not specified"
+                        // Radix Select cannot hold "" as an option, so "Not
+                        // specified" travels as a sentinel and is stored blank.
+                        options={[
+                          { value: NO_FUND, label: "Not specified" },
+                          ...FUNDING_SOURCES.map((s) => ({ value: s, label: s })),
+                        ]}
+                        value={field.value || NO_FUND}
+                        onChange={(v) => field.onChange(v === NO_FUND ? "" : v)}
+                        size="lg"
+                        className="h-11 rounded-[10px] border-[#d4d5d2] px-3.5 text-[15px] text-neutral-900"
+                      />
+                    )}
+                  />
+                </LabelledField>
+              )}
+              <LabelledField id="pr-section" label="Section" optional error={err.section?.message}>
+                <Input id="pr-section" autoComplete="off" className={FIELD} {...form.register("section")} />
+              </LabelledField>
+              <LabelledField id="pr-fpp" label="FPP" optional error={err.fpp?.message}>
+                <Input id="pr-fpp" autoComplete="off" className={FIELD} {...form.register("fpp")} />
+              </LabelledField>
+            </div>
+
+            {/* Required on a new request (restored 21 Oct 2026); on an edit it
+                may still be blank, and the request is not approved without it. */}
+            <div className="mt-4 border-t border-[#f0f0ee] pt-4">
+              <LabelledField
                 id="pr-purpose"
-                rows={2}
-                placeholder="e.g. Office supplies for daily administrative operations"
-                invalid={!!err.purpose}
-                aria-describedby={err.purpose ? "pr-purpose-error" : "pr-purpose-helper"}
-                className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
-                {...form.register("purpose")}
-              />
-            </LabelledField>
-          </div>
-        </Section>
+                label="Purpose"
+                optional={!!initial}
+                error={err.purpose?.message}
+                helper={
+                  initial
+                    ? "Printed on the official request. Required before the request can be approved."
+                    : "Printed on the official request. Say what the items are for."
+                }
+              >
+                <Textarea
+                  id="pr-purpose"
+                  rows={2}
+                  placeholder="e.g. Office supplies for daily administrative operations"
+                  invalid={!!err.purpose}
+                  aria-describedby={err.purpose ? "pr-purpose-error" : "pr-purpose-helper"}
+                  className="rounded-[10px] border-[#d4d5d2] px-3.5 py-3 text-[15px] text-neutral-900"
+                  {...form.register("purpose")}
+                />
+              </LabelledField>
+            </div>
+          </Section>
 
-        <ItemsSection form={form} />
+          <ItemsSection form={form} />
+        </div>
+
+        <SummaryPanel
+          form={form}
+          isNew={!initial}
+          reviewing={!isPublic && !!initial}
+          submitLabel={submitLabel}
+          submitting={submitting}
+          onCancel={onCancel}
+        />
+        <LeaveGuard active={form.formState.isDirty && !submitting} />
       </div>
-
-      <SummaryPanel
-        form={form}
-        isNew={!initial}
-        reviewing={!isPublic && !!initial}
-        submitLabel={submitLabel}
-        submitting={submitting}
-        onCancel={onCancel}
-      />
-      <LeaveGuard active={form.formState.isDirty && !submitting} />
     </form>
   );
 }
@@ -547,7 +552,7 @@ function SummaryPanel({
   return (
     <aside
       aria-label="Summary"
-      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 lg:sticky lg:top-6"
+      className="rounded-[14px] border border-[#e4e4e1] bg-white p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04),0_16px_40px_-24px_rgba(22,24,29,0.18)] sm:p-6 @min-[900px]:sticky @min-[900px]:top-6"
     >
       <h2 className="text-[15px] font-semibold text-neutral-900">Summary</h2>
       <dl className="mt-4 space-y-3 text-[14px]">

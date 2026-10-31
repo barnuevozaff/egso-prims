@@ -307,7 +307,7 @@ function POPageBody({
   const ro = !editable;
 
   return (
-    <PageTransition className="w-full max-w-[1400px] space-y-5 pb-10">
+    <PageTransition className="@container w-full max-w-[1400px] space-y-5 pb-10">
       {/* The official order, as saved, is what prints. */}
       <POPrintSheet po={po} />
 
@@ -337,7 +337,9 @@ function POPageBody({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      {/* Side by side only when the page has the width: beside the sidebar a 1024px window
+          squeezed the order's columns until the office ran into the requester (30 Oct 2026). */}
+      <div className="grid grid-cols-1 items-start gap-5 @min-[900px]:grid-cols-[minmax(0,1fr)_320px]">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -562,7 +564,7 @@ function POPageBody({
         </form>
 
         {/* One place to act: the total, what will print blank, and save or print. */}
-        <aside aria-label="Order summary" className="rounded-[14px] border border-[#e6e6e3] bg-white lg:sticky lg:top-4">
+        <aside aria-label="Order summary" className="rounded-[14px] border border-[#e6e6e3] bg-white @min-[900px]:sticky @min-[900px]:top-4">
           <div className="px-5 pb-4 pt-5">
             <div className="text-[12.5px] text-[#5b606b]">Order total</div>
             <div className="text-[28px] font-semibold tabular-nums tracking-[-0.02em] text-neutral-900">{peso(total)}</div>
